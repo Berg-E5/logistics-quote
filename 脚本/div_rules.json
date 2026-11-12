@@ -1,0 +1,1223 @@
+{
+ "云途全球专线挂号（特惠普货）": {
+  "default": 8000,
+  "byCountry": {
+   "加拿大": {
+    "div": 8000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "日本": {
+    "div": 9000,
+    "minKg": 0.5,
+    "src": "sheet"
+   },
+   "哥伦比亚": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "马来西亚": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "新加坡": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "泰国": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "越南": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "新西兰": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "巴西": {
+    "div": 6000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "阿拉伯联合酋长国": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "马达加斯加": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "坦桑尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "塞内加尔": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "尼日利亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "巴基斯坦": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "毛里求斯": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "乌干达": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卡塔尔": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卢旺达": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "塞舌尔": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "安哥拉": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "摩洛哥": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "留尼汪": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "科威特": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "肯尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "赞比亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "马约特": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "加纳": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "南非": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "巴林": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "约旦": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "阿塞拜疆": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": 0.03,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "云途全球专线挂号（特惠带电）": {
+  "default": 8000,
+  "byCountry": {
+   "加拿大": {
+    "div": 8000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "新西兰": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "马来西亚": {
+    "div": 5000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "新加坡": {
+    "div": 5000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "泰国": {
+    "div": 5000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "越南": {
+    "div": 5000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "哥伦比亚": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "智利": {
+    "div": 5000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "日本": {
+    "div": 9000,
+    "minKg": 0.5,
+    "src": "sheet"
+   },
+   "阿根廷": {
+    "div": 6000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "巴西": {
+    "div": 6000,
+    "minKg": 0.05,
+    "src": "sheet"
+   },
+   "阿拉伯联合酋长国": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "马达加斯加": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "坦桑尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "塞内加尔": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "尼日利亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "巴基斯坦": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "毛里求斯": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "乌干达": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卡塔尔": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卢旺达": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "塞舌尔": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "安哥拉": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "摩洛哥": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "留尼汪": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "科威特": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "肯尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "赞比亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "马约特": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "加纳": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "南非": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "巴林": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "约旦": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": 0.03,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "云途全球泡货专线挂号(特惠普货)": {
+  "default": 6000,
+  "byCountry": {
+   "丹麦": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "挪威": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "瑞典": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "美国": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "芬兰": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "墨西哥": {
+    "div": 18000,
+    "minKg": 0.02,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [],
+  "other": null,
+  "hasCatalog": false
+ },
+ "亚马逊义速宝全球快捷(带电)": {
+  "default": 8000,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "亚马逊义速宝全球快捷(普货)": {
+  "default": 8000,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "4PX全球专线特快-普货": {
+  "default": 8000,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "4PX全球专线特快-带电": {
+  "default": 8000,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "欧洲敏感专线-E": {
+  "default": 8000,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "义速宝全球特惠专线BS(普货)": {
+  "default": 8000,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 8000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "义速宝日本快捷": {
+  "default": null,
+  "byCountry": {},
+  "scopeCountries": [],
+  "other": {
+   "div": 6000,
+   "minKg": null,
+   "src": "sheet"
+  },
+  "hasCatalog": false
+ },
+ "三态重货-普货": {
+  "default": 6000,
+  "byCountry": {
+   "英国": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "德国": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "法国": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "西班牙": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "比利时": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卢森堡": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "荷兰": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "奥地利": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "捷克": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "斯洛伐克": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "匈牙利": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "波兰": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "意大利": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "爱尔兰": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "瑞典": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "丹麦": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "芬兰": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "保加利亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "爱沙尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "希腊": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "立陶宛": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "拉脱维亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "葡萄牙": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "罗马尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "斯洛文尼亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "克罗地亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "美国": {
+    "div": 8000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "加拿大": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "墨西哥": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "日本": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "澳大利亚": {
+    "div": 6000,
+    "minKg": null,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [
+   "丹麦",
+   "保加利亚",
+   "克罗地亚",
+   "加拿大",
+   "匈牙利",
+   "卢森堡",
+   "奥地利",
+   "希腊",
+   "德国",
+   "意大利",
+   "拉脱维亚",
+   "捷克",
+   "斯洛伐克",
+   "斯洛文尼亚",
+   "比利时",
+   "法国",
+   "波兰",
+   "爱尔兰",
+   "爱沙尼亚",
+   "瑞典",
+   "立陶宛",
+   "罗马尼亚",
+   "美国",
+   "芬兰",
+   "英国",
+   "荷兰",
+   "葡萄牙",
+   "西班牙"
+  ],
+  "other": null,
+  "hasCatalog": true
+ },
+ "三态中包-普货": {
+  "default": 6000,
+  "byCountry": {
+   "加拿大": {
+    "div": 12000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "英国": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "德国": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "法国": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "西班牙": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "比利时": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卢森堡": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "荷兰": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "奥地利": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "捷克": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "斯洛伐克": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "匈牙利": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "波兰": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "意大利": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "爱尔兰": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "瑞典": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "丹麦": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "芬兰": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "保加利亚": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "爱沙尼亚": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "希腊": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "立陶宛": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "拉脱维亚": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "葡萄牙": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "罗马尼亚": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "斯洛文尼亚": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "克罗地亚": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [
+   "丹麦",
+   "保加利亚",
+   "克罗地亚",
+   "加拿大",
+   "匈牙利",
+   "卢森堡",
+   "奥地利",
+   "希腊",
+   "德国",
+   "意大利",
+   "拉脱维亚",
+   "捷克",
+   "斯洛伐克",
+   "斯洛文尼亚",
+   "比利时",
+   "法国",
+   "波兰",
+   "爱尔兰",
+   "爱沙尼亚",
+   "瑞典",
+   "立陶宛",
+   "罗马尼亚",
+   "美国",
+   "芬兰",
+   "英国",
+   "荷兰",
+   "葡萄牙",
+   "西班牙"
+  ],
+  "other": null,
+  "hasCatalog": true
+ },
+ "三态免泡大货专线（带电）": {
+  "default": 6000,
+  "byCountry": {
+   "英国": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "德国": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "法国": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "西班牙": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "比利时": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "卢森堡": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "荷兰": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "奥地利": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "捷克": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "斯洛伐克": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "匈牙利": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "波兰": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "意大利": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "爱尔兰": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "瑞典": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "丹麦": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "芬兰": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "保加利亚": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "爱沙尼亚": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "希腊": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "立陶宛": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "拉脱维亚": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "葡萄牙": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "罗马尼亚": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "斯洛文尼亚": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "克罗地亚": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "墨西哥": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "美国": {
+    "div": 18000,
+    "minKg": null,
+    "src": "catalog"
+   }
+  },
+  "scopeCountries": [
+   "丹麦",
+   "保加利亚",
+   "克罗地亚",
+   "匈牙利",
+   "卢森堡",
+   "墨西哥",
+   "奥地利",
+   "希腊",
+   "德国",
+   "意大利",
+   "拉脱维亚",
+   "捷克",
+   "斯洛伐克",
+   "斯洛文尼亚",
+   "比利时",
+   "法国",
+   "波兰",
+   "爱尔兰",
+   "爱沙尼亚",
+   "瑞典",
+   "立陶宛",
+   "罗马尼亚",
+   "美国",
+   "芬兰",
+   "英国",
+   "荷兰",
+   "葡萄牙",
+   "西班牙"
+  ],
+  "other": null,
+  "hasCatalog": true
+ },
+ "三态特惠专线（普货）": {
+  "default": 6000,
+  "byCountry": {
+   "美国": {
+    "div": 8000,
+    "minKg": 0.05,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [
+   "美国"
+  ],
+  "other": null,
+  "hasCatalog": true
+ },
+ "三态免泡大货专线（普货）": {
+  "default": 6000,
+  "byCountry": {
+   "日本": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   },
+   "英国": {
+    "div": 18000,
+    "minKg": null,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [
+   "日本",
+   "英国"
+  ],
+  "other": null,
+  "hasCatalog": true
+ },
+ "三态美国中包（带电）": {
+  "default": 6000,
+  "byCountry": {
+   "美国": {
+    "div": 10000,
+    "minKg": null,
+    "src": "sheet"
+   }
+  },
+  "scopeCountries": [
+   "美国"
+  ],
+  "other": null,
+  "hasCatalog": true
+ },
+ "三态专选": {
+  "default": 6000,
+  "byCountry": {
+   "葡萄牙": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "爱沙尼亚": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "芬兰": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "拉脱维亚": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "捷克": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "保加利亚": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "比利时": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "波兰": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "丹麦": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "意大利": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "爱尔兰": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "法国": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "匈牙利": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "德国": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "荷兰": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "立陶宛": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "西班牙": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "克罗地亚": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "罗马尼亚": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "奥地利": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "希腊": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "斯洛文尼亚": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "瑞典": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "英国": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "斯洛伐克": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   },
+   "卢森堡": {
+    "div": 30000,
+    "minKg": null,
+    "src": "catalog"
+   }
+  },
+  "scopeCountries": [
+   "丹麦",
+   "保加利亚",
+   "克罗地亚",
+   "匈牙利",
+   "卢森堡",
+   "奥地利",
+   "希腊",
+   "德国",
+   "意大利",
+   "拉脱维亚",
+   "捷克",
+   "斯洛伐克",
+   "斯洛文尼亚",
+   "比利时",
+   "法国",
+   "波兰",
+   "爱尔兰",
+   "爱沙尼亚",
+   "瑞典",
+   "立陶宛",
+   "罗马尼亚",
+   "芬兰",
+   "英国",
+   "荷兰",
+   "葡萄牙",
+   "西班牙"
+  ],
+  "other": null,
+  "hasCatalog": true
+ }
+}

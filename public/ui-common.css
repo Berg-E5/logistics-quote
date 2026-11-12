@@ -1,0 +1,333 @@
+/* ============================================================
+   ui-common.css — 前台 + 后台共用的设计系统 (唯一来源)
+   前台 index.html 要支持 file:// 双击离线, 不能外链 CSS,
+   由 脚本/sync_ui_css.py 把本文件注入到 index.html 内联 <style>。
+
+   设计取向
+   --------
+   做成「行业工具」而不是「模板」:
+     · 冷灰底 + 单一冷蓝强调色, 语义色只有绿/琥珀/红三个
+     · 层次靠亮度差和 1px 发丝线, 不靠边框和阴影堆
+     · 圆角 <= 8px, 不做卡片堆叠
+     · 数字一律等宽 (tabular-nums), 元数据用等宽字体
+     · 科技感来自精确的排版和细节, 不来自渐变 / 发光 / 大圆角
+   ============================================================ */
+/* @ui-common:start */
+
+/* ---------------- 设计令牌 ---------------- */
+:root {
+  /* 底色阶: 不是纯黑 —— 纯黑显老派, 掺一点冷蓝调立刻现代。
+     相邻两级只差一点点, 越往上越亮。 */
+  --bg:      #0a0c11;
+  --panel:   #11141b;
+  --panel-2: #171b24;
+  --panel-3: #1e232e;
+  --panel-4: #262c39;
+
+  /* 发丝线 */
+  --line:   rgba(255,255,255,.062);
+  --line-2: rgba(255,255,255,.11);
+  --line-3: rgba(255,255,255,.19);
+
+  /* 文字 */
+  --fg:    #eef1f6;
+  --fg-2:  #b7becb;
+  --muted: #7e879a;
+  --dim:   #5b6478;
+
+  /* 强调色: 全站只有这一个彩色, 但要够亮够有能量 */
+  --accent:     #4f8cff;
+  --accent-hi:  #7fabff;
+  --accent-dim: rgba(79,140,255,.14);
+  --accent-glow: rgba(79,140,255,.30);
+
+  /* 语义色 */
+  --good:     #2fc47a;
+  --good-dim: rgba(47,196,122,.12);
+  --warn:     #e69a2f;
+  --warn-dim: rgba(230,154,47,.13);
+  --bad:      #f4585e;
+  --bad-dim:  rgba(244,88,94,.13);
+  --violet:     #9b8cff;
+  --violet-dim: rgba(155,140,255,.13);
+
+  /* 圆角: 收紧 */
+  --r-sm: 4px; --r: 6px; --r-lg: 8px;
+
+  /* 字体 */
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
+          "Roboto Mono", Consolas, "Liberation Mono", monospace;
+
+  /* 旧名兼容: 老页面里写成 --panel2 / --accenthi 的那些 */
+  --panel2: var(--panel-2); --panel3: var(--panel-3);
+  --line2: var(--line-2); --fg2: var(--fg-2);
+  --accenthi: var(--accent-hi); --accentdim: var(--accent-dim);
+  --gooddim: var(--good-dim); --warndim: var(--warn-dim); --baddim: var(--bad-dim);
+}
+
+/* ---------------- 基础 ---------------- */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 背景光: 左上一束冷光, 右上一束极淡的紫。
+   比全屏网格更有「有光源」的现代感, 网格看着像老式后台模板。 */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(1000px 520px at 16% -10%, rgba(79,140,255,.11), transparent 64%),
+    radial-gradient(760px 420px at 92% 2%, rgba(155,140,255,.055), transparent 62%);
+}
+/* 细网格叠在光上面, 只在有光的地方能看见 */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,.014) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,.014) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
+}
+body > * { position: relative; z-index: 1; }
+
+/* 数字一律等宽, 竖着看要能对齐 */
+.num, td.num, th.num, .stat-v, input[type=number], input[type=search] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* 焦点环: 全站统一, 键盘可见、鼠标不打扰 */
+:focus-visible {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-dim) !important;
+}
+
+/* ---------------- 面板材质 ----------------
+   关键在 inset 0 1px 0 那条高光: 面板顶部有一道亮边, 看起来是「浮起来」的。
+   纯色面板看着像贴纸, 有高光才像玻璃/金属。 */
+.panel {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.006) 42%, transparent 130px),
+    var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 22px 46px -32px rgba(0,0,0,.95);
+}
+
+/* ---------------- 统计卡片 ---------------- */
+/* 默认 = 独立圆角卡片 (后台用) */
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px; background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow: hidden; margin-bottom: 14px;
+}
+/* .flat = 嵌在面板内部 (前台结果区用): 圆角归容器, 自己只做发丝线分隔 */
+.stats.flat { border: 0; border-radius: 0; margin: 0; background: transparent; }
+/* .cols-5 = 前台五张结果卡固定五列 */
+.stats.cols-5 { grid-template-columns: 1.35fr 1.35fr 1fr 1fr 1fr; }
+/* 统计卡: 数字与说明左右排 —— 数字占主导, 说明退到右边当注解。
+   竖排 (数字在上、说明在下) 看着像老式报表。 */
+.stat {
+  background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 62%), var(--panel);
+  padding: 13px 16px 14px; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between;
+  min-height: 78px;
+}
+.stat .stat-body { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+/* 顶部那条线加粗到 3px, 远处也能看出哪张卡是什么色 */
+.stat::before { height: 3px; }
+/* 顶部一条 2px 强调线 —— 比彩色胶囊更像仪表, 也不抢戏 */
+.stat::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: var(--line-2);
+}
+.stat.k-best::before { background: var(--good); }
+.stat.k-sell::before { background: var(--accent); }
+/* 绿只留给「最便宜」, 其它卡用中性线, 盈亏靠数值本身的颜色表达 */
+.stat.k-local::before,
+.stat.k-profit::before { background: var(--line-2); }
+.stat.k-lock::before  { background: var(--warn); }
+.stat.k-chg::before   { background: var(--accent); }
+.stat.k-up::before    { background: var(--bad); }
+.stat.k-dn::before    { background: var(--good); }
+.stat.k-new::before   { background: var(--good); }
+.stat.k-del::before   { background: var(--bad); }
+
+.stat-k {
+  font-size: 10px; font-weight: 590; letter-spacing: .6px; color: var(--dim);
+  text-transform: uppercase; display: flex; align-items: center; gap: 6px;
+}
+.stat-v {
+  font-size: 25px; font-weight: 560; letter-spacing: -1px; margin-top: 6px;
+  font-variant-numeric: tabular-nums; color: var(--fg); line-height: 1.05;
+}
+.stat-s { font-size: 11.5px; color: var(--fg-2); margin-top: 5px; opacity: .78; }
+.stat .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+/* 语义色: 绿=最便宜/成功, 蓝=交互/动态, 橙=锁定/警告, 红=错误/涨价 */
+.stat.k-lock .stat-k, .stat.k-lock .stat-v { color: var(--warn); }
+.stat.k-chg  .stat-k, .stat.k-chg .stat-v  { color: var(--accent-hi); }
+.stat.k-up   .stat-k, .stat.k-up   .stat-v   { color: var(--bad); }
+.stat.k-dn   .stat-k, .stat.k-dn   .stat-v   { color: var(--good); }
+.stat.k-new  .stat-k, .stat.k-new  .stat-v  { color: var(--good); }
+.stat.k-del  .stat-k, .stat.k-del  .stat-v  { color: var(--bad); }
+.stat.k-best .stat-v { color: var(--good); }
+
+/* 统计卡里的迷你趋势条: 用一排细竖线表示近 N 段的分值分布,
+   让卡片不只是干巴巴一个数字 (没有数据时自动不显示) */
+.stat-spark {
+  display: flex; align-items: flex-end; gap: 3px; height: 13px; margin-top: 9px;
+  opacity: .9;
+}
+.stat-spark i {
+  flex: 1; background: var(--line-2); border-radius: 1px; min-height: 2px;
+  display: block;
+}
+.stat-spark i.on { background: var(--accent); }
+.stat-spark i.hot { background: var(--warn); }
+
+/* ---------------- sticky 工具栏 ---------------- */
+.toolbar {
+  position: sticky; top: 53px; z-index: 8;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 9px 11px; margin-bottom: 12px;
+  background: rgba(13,14,17,.88); backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+}
+.toolbar input[type=search] { min-width: 200px; }
+.tbsep { width: 1px; height: 18px; background: var(--line-2); margin: 0 1px; }
+
+/* ---------------- 筛选条件标签 ---------------- */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(77,132,255,.30);
+  background: rgba(77,132,255,.07); color: var(--accent-hi);
+  cursor: pointer; font-weight: 510; white-space: nowrap;
+}
+.chip:hover { background: rgba(77,132,255,.16); border-color: rgba(77,132,255,.5); }
+.chip b { font-weight: 590; }
+.chip .x { opacity: .6; font-size: 12px; line-height: 1; }
+.chip .x:hover { opacity: 1; }
+.chip.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
+.chip.ghost:hover { color: var(--fg-2); background: rgba(255,255,255,.05); }
+
+/* ---------------- 表格 ---------------- */
+.tablewrap {
+  border: 1px solid var(--line-2); border-radius: 10px;
+  overflow: auto; background: var(--panel);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+.tablewrap table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.tablewrap thead th {
+  position: sticky; top: 0; z-index: 3;
+  background: linear-gradient(180deg, var(--panel-3), var(--panel-2)); color: var(--muted);
+  font-size: 10.5px; font-weight: 590; letter-spacing: .5px; text-transform: uppercase;
+  text-align: left; padding: 9px 12px; white-space: nowrap;
+  border-bottom: 1px solid var(--line-3);
+  box-shadow: 0 1px 0 rgba(255,255,255,.04);
+}
+.tablewrap thead th.num { text-align: right; }
+.tablewrap tbody td {
+  padding: 7px 11px; border-bottom: 1px solid var(--line);
+  font-size: 12.5px; vertical-align: middle;
+}
+.tablewrap tbody td.num { text-align: right; }
+.tablewrap tbody tr:last-child td { border-bottom: 0; }
+.tablewrap tbody tr:hover td { background: rgba(255,255,255,.032); }
+.tablewrap tbody tr { transition: background .12s ease; }
+
+/* ---------------- 空状态 ---------------- */
+.blank { padding: 44px 20px; text-align: center; }
+.blank .bi { font-size: 24px; opacity: .3; margin-bottom: 10px; }
+.blank .bh { color: var(--fg); font-size: 14px; font-weight: 590; margin-bottom: 6px; }
+.blank p { margin: 0 0 4px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------------- 骨架屏 ---------------- */
+.skel {
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--panel-3) 37%, var(--panel-2) 63%);
+  background-size: 400% 100%;
+  animation: skel 1.3s ease-in-out infinite;
+  border-radius: var(--r-sm); height: 11px;
+}
+@keyframes skel { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+/* ---------------- 底部说明 ---------------- */
+.pagehint {
+  margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--muted); line-height: 1.85;
+}
+.pagehint b { color: var(--fg-2); font-weight: 590; }
+.pagehint code {
+  color: var(--fg-2); background: var(--panel-2); padding: 1px 5px;
+  border-radius: var(--r-sm); font-family: var(--mono); font-size: 11.5px;
+}
+
+/* ---------------- 保存状态位 ---------------- */
+.saved { width: 54px; flex: none; display: inline-block; text-align: left; }
+.saved.idle { color: var(--dim); }
+.saved.dirty { color: var(--warn); }
+
+/* ---------------- 可编辑列 ---------------- */
+td.editable { background: rgba(79,140,255,.075); }
+tbody tr:hover td.editable { background: rgba(79,140,255,.13); }
+th.editable { background: rgba(79,140,255,.17); color: var(--accent-hi); }
+th.editable .ed { font-size: 10px; opacity: .85; margin-left: 3px; }
+
+/* ---------------- toast ---------------- */
+.toasts {
+  position: fixed; right: 18px; bottom: 18px; z-index: 200;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+}
+.toast {
+  background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r);
+  padding: 9px 14px; font-size: 12.5px; color: var(--fg);
+  box-shadow: 0 12px 34px rgba(0,0,0,.6);
+  display: flex; align-items: center; gap: 8px;
+  animation: toastin .18s ease-out;
+}
+.toast.ok { border-color: rgba(47,196,122,.42); color: var(--good); }
+.toast.err { border-color: rgba(244,88,94,.42); color: var(--bad); }
+@keyframes toastin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---------------- 元数据 / 等宽小件 ---------------- */
+.mono { font-family: var(--mono); font-size: 11.5px; letter-spacing: -.2px; }
+.tag-mono {
+  font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 0 5px; white-space: nowrap;
+}
+kbd {
+  font-family: var(--mono); font-size: 10.5px; color: var(--fg-2);
+  background: var(--panel-3); border: 1px solid var(--line-2);
+  border-bottom-width: 2px; border-radius: var(--r-sm);
+  padding: 1px 5px; line-height: 1.4;
+}
+/* 状态点: 比彩色胶囊更克制 */
+.dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+  flex: none; display: inline-block; vertical-align: middle;
+}
+.dot.live { background: var(--good); box-shadow: 0 0 0 3px var(--good-dim); }
+.dot.off  { background: var(--dim); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-dim); }
+
+/* ---------------- 通用 ---------------- */
+th { color: var(--fg-2); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.09); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.17); }
+
+/* @ui-common:end */

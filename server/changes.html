@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>改动记录 · 报价后台</title>
+<link rel="stylesheet" href="/ui-common.css">
+  <link rel="stylesheet" href="/dash.css">
+<link rel="stylesheet" href="/admin-common.css">
+<style>
+  /* ---------------- 本页专属 ---------------- */
+  .kind {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 7px;
+    border-radius: 5px; border: 1px solid var(--line2); white-space: nowrap; font-weight: 590;
+  }
+  .kind .kico { font-size: 10px; opacity: .9; }
+  .kind.update { border-color: rgba(91,140,255,.4); color: var(--accenthi); background: var(--accentdim); }
+  .kind.add    { border-color: rgba(53,208,127,.4); color: var(--good); background: var(--gooddim); }
+  .kind.del, .kind.delete, .kind.remove { border-color: rgba(255,107,107,.4); color: var(--bad); background: var(--baddim); }
+  .kind.import { border-color: rgba(240,166,58,.4); color: var(--warn); background: var(--warndim); }
+  .kind.lock   { border-color: rgba(240,166,58,.45); color: var(--warn); background: var(--warndim); }
+  .kind.unlock { border-color: rgba(255,255,255,.14); color: #9aa1ac; background: rgba(255,255,255,.04); }
+
+  /* 价格变化: 旧价删除线 -> 新价 -> 涨红跌绿 */
+
+  .delta { display: inline-flex; align-items: baseline; gap: 7px; justify-content: flex-end; }
+  .delta .old { color: var(--dim); text-decoration: line-through; }
+  .delta .new { color: var(--fg); font-weight: 590; }
+  .delta .pct {
+    font-size: 10.5px; padding: 0 5px; border-radius: 4px;
+    background: var(--baddim); color: var(--bad); font-weight: 590;
+  }
+  .delta .pct.down { background: var(--gooddim); color: var(--good); }
+
+  /* 幅度大的改动单独标出来 */
+  .bigtag {
+    display: inline-block; font-size: 10px; font-weight: 590; padding: 1px 5px; border-radius: 4px;
+    margin-left: 5px; border: 1px solid rgba(240,166,58,.45); color: var(--warn);
+    background: var(--warndim); white-space: nowrap; vertical-align: 1px;
+  }
+  tr.big { box-shadow: inset 3px 0 0 var(--warn); }
+  tr.big td { background: rgba(240,166,58,.05); }
+  tr.big td:nth-child(1) { color: var(--muted); }
+
+  /* 时间范围分段控件 */
+  .seg2 {
+    display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r);
+    overflow: hidden; background: var(--panel-3); flex: none;
+  }
+  .seg2 button {
+    font: inherit; font-size: 12px; font-weight: 510; padding: 5px 11px;
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    transition: background .15s, color .15s; white-space: nowrap;
+  }
+  .seg2 button + button { border-left: 1px solid var(--line); }
+  .seg2 button:hover { color: var(--fg-2); background: rgba(255,255,255,.04); }
+  .seg2 button.on { background: var(--accent-dim); color: var(--accent-hi); font-weight: 590; }
+
+  .at { white-space: nowrap; color: var(--muted); }
+  /* 渠道色标: 跟改价页同一套算法 */
+  td.lbl { position: relative; padding-left: 14px; }
+  td.lbl .chcolor {
+    position: absolute; left: 5px; top: 6px;
+    width: 2px; height: 14px; border-radius: 1px; display: block; opacity: .85;
+  }
+  .lbl { color: var(--fg); min-width: 320px; word-break: break-word; line-height: 1.45; }
+  .tablewrap table { min-width: 1000px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="/vue.global.prod.js"></script>
+<script src="/admin-common.js"></script>
+<script>
+const A = window.QuoteAdmin;
+const { createApp, ref, computed, onMounted } = Vue;
+
+const KIND_CN  = { update: '改价', add: '新增', import: '整表导入', lock: '锁定', unlock: '解锁', del: '删除' };
+// 类型标记用几何符号, 不用 emoji —— emoji 在不同系统上渲染差异太大, 也不够克制
+const KIND_ICON = { update: '◆', add: '＋', import: '▲', lock: '●', unlock: '○', del: '－' };
+// 价格显示跟原来一致: 两位小数, 不带千分位
+const money = v => (v === null || v === undefined || v === '') ? '–' : Number(v).toFixed(2);
+
+createApp({
+  components: {
+    AppHeader: A.AppHeader, LoginGate: A.LoginGate,
+    Pager: A.Pager, PasswordModal: A.PasswordModal,
+  },
+  setup() {
+    const { logged, checking, me, afterLogin, reset: resetAuth } = A.useAuth(async () => {
+      await onAuthed();
+    });
+    const version = ref('读取中…');
+    const rows = ref([]);
+    const recent = ref([]);      // 最近 500 条, 只用来画迷你趋势条
+    const total = ref(0);
+    const kind = ref('');
+    const q = ref('');
+    const rang = ref('');        // '' = 全部, 'today' = 今天, 'week' = 近 7 天
+    const page = ref(1);
+    const size = ref(10);
+    const showPwd = ref(false);
+    const loading = ref(false);
+    const openIdx = ref(-1);      // 展开的明细行下标, -1 = 全收起
+    const loadErr = ref('');
+
+    const pages = computed(() => Math.max(1, Math.ceil(total.value / size.value)));
+    const offset = computed(() => (page.value - 1) * size.value);
+    const countText = computed(() => {
+      if (!total.value) return '没有匹配的改动记录';
+      const a = offset.value + 1, b = Math.min(offset.value + size.value, total.value);
+      return `共 ${total.value} 条，当前显示第 ${a}-${b} 条`;
+    });
+
+    function rowData(c) {
+      const b = c.before || {}, a = c.after || {};
+      let maxPct = 0;
+      const delta = (bv, av) => {
+        if (bv === undefined || av === undefined) return '<span class="muted">–</span>';
+        if (Number(bv) === Number(av)) return '<span>' + money(av) + '</span>';
+        const pct = bv ? (av - bv) / bv * 100 : 0;
+        if (Math.abs(pct) > Math.abs(maxPct)) maxPct = pct;
+        const cls = av > bv ? 'up' : 'down';
+        return '<span class="delta"><span class="old">' + money(bv) + '</span> → <span class="new">'
+             + money(av) + '</span><span class="pct ' + cls + '">'
+             + (pct > 0 ? '+' : '') + pct.toFixed(1) + '%</span></span>';
+      };
+      const priceHtml = delta(b.price, a.price);
+      const feeHtml = delta(b.fee, a.fee);
+      const isBig = Math.abs(maxPct) >= 20;
+      let label = c.label || '';
+      if ((c.kind || '') === 'import') label = '整表导入 · ' + (c.note || '');
+
+      // 整表导入: 这次到底改了哪些数据
+      const ch = c.changes || {};
+      const isImport = (c.kind || '') === 'import';
+      const kindNow = c.kind || '';
+      // 非整表导入: 用一句人话说清楚动了什么
+      let what = '';
+      if (kindNow === 'add') what = '新增这个档位';
+      else if (kindNow === 'lock') what = '锁定这个价 (整表推送时保留)';
+      else if (kindNow === 'unlock') what = '解锁 (恢复跟随整表推送)';
+      else if (kindNow === 'del' || kindNow === 'remove') what = '删除这个档位';
+      else if (kindNow === 'update') {
+        const ps = [];
+        if (a.price !== undefined && Number(b.price) !== Number(a.price)) ps.push('运费');
+        if (a.fee !== undefined && Number(b.fee) !== Number(a.fee)) ps.push('挂号费');
+        what = ps.length ? '改了' + ps.join(' 和 ') : '（值没变）';
+      }
+      const summary = isImport && (ch.added || ch.removed || ch.changed) ? {
+        added: ch.added || 0, removed: ch.removed || 0, changed: ch.changed || 0,
+        total: ch.total || 0,
+      } : null;
+      // 明细: 逐条列出 新增 / 价格变动 / 删除
+      const detail = (ch.items || []).map((it) => {
+        if (it.t === 'added') {
+          return { cls: 'add', tag: '新增', label: it.label,
+                   detail: '运费 ¥' + money(it.price) + ' · 挂号费 ¥' + money(it.fee) };
+        }
+        if (it.t === 'removed') {
+          return { cls: 'del', tag: '删除', label: it.label,
+                   detail: '原运费 ¥' + money(it.price) + ' · 挂号费 ¥' + money(it.fee) };
+        }
+        const pct = it.before ? ((it.after - it.before) / it.before * 100) : 0;
+        const up = it.after > it.before;
+        const arrow = up ? '↑' : (it.after < it.before ? '↓' : '→');
+        return { cls: 'chg', tag: (it.fname || '价格') + '变动', label: it.label,
+                 detail: arrow + ' ¥' + money(it.before) + ' → ¥' + money(it.after) +
+                         '  (' + (up ? '+' : '') + pct.toFixed(1) + '%)' };
+      });
+      return {
+        at: c.at ? new Date(c.at).toLocaleString('zh-CN') : '',
+        by: c.by || 'system',
+        kind: c.kind || '',
+        kindCn: KIND_CN[c.kind] || c.kind,
+        kindIcon: KIND_ICON[c.kind] || '•',
+        label,
+        priceHtml, feeHtml,
+        big: isBig,
+        bigTag: isBig ? '幅度 ' + (maxPct > 0 ? '+' : '') + maxPct.toFixed(0) + '%' : '',
+        summary, detail, isImport, what,
+      };
+    }
+
+    /** 时间范围 -> ISO 起始时间 (今天从 0 点算, 近 7 天往前推 7×24 小时) */
+    function sinceOf(r) {
+      if (r === 'today') {
+        const d = new Date(); d.setHours(0, 0, 0, 0);
+        return d.toISOString();
+      }
+      if (r === 'week') {
+        return new Date(Date.now() - 7 * 24 * 3600e3).toISOString();
+      }
+      return '';
+    }
+
+    async function load() {
+      loading.value = true;
+      try {
+        const p = new URLSearchParams();
+        p.set('limit', String(size.value));
+        p.set('offset', String(offset.value));
+        if (kind.value) p.set('kind', kind.value);
+        if (q.value.trim()) p.set('q', q.value.trim());
+        const sin = sinceOf(rang.value);
+        if (sin) p.set('since', sin);
+        const j = await A.api('/api/changes?' + p.toString());
+        loadErr.value = '';
+        total.value = j.total == null ? (j.changes || []).length : j.total;
+        rows.value = (j.changes || []).map(rowData);
+        if (page.value > pages.value) page.value = pages.value;
+        // 趋势条要跨页看, 单独拉一次最近 500 条 (只在第一页拉, 免得每翻页都打一次)
+        if (offset.value === 0) {
+          try {
+            const rj = await A.api('/api/changes?limit=500&offset=0');
+            recent.value = rj.changes || [];
+          } catch (e) { recent.value = []; }
+        }
+      } catch (e) {
+        loadErr.value = e.message;   // 不要用 alert: 会阻塞渲染
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    async function refreshVersion() {
+      try {
+        const v = await A.api('/api/version');
+        version.value = '数据版本 v' + v.rev
+          + (v.updatedAt ? ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN') : '');
+      } catch (e) { /* ignore */ }
+    }
+
+    /** 登录成功后加载本页数据 (由 useAuth 的回调触发) */
+    async function onAuthed() {
+      page.value = 1;
+      await refreshVersion();
+      await load();
+    }
+
+    async function logout() {
+      try { await A.api('/api/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+      resetAuth();
+      rows.value = [];
+      total.value = 0;
+    }
+
+    // 筛选变化 -> 回第 1 页重查 (搜索防抖 220ms)
+    let timer = null;
+    const kindName = computed(() => {
+      const m = { update: '改价', add: '新增', import: '整表导入', lock: '锁定', unlock: '解锁', del: '删除', remove: '删除' };
+      return m[kind.value] || kind.value;
+    });
+    /** 当前筛选下各类改动的条数 (只统计当前页, 够用) */
+    function kindCount(k) {
+      if (k === 'update') return rows.value.filter(r => (r.kind || '').includes('update')).length;
+      if (k === 'add') return rows.value.filter(r => (r.kind || '').includes('add')).length;
+      if (k === 'import') return rows.value.filter(r => (r.kind || '').includes('import')).length;
+      if (k === 'lock') return rows.value.filter(r => (r.kind || '').includes('lock')).length;
+      return 0;
+    }
+
+    /**
+     * 最近 12 小时的改动量分布, 画成卡片里的迷你趋势条。
+     * 没有数据就返回空数组, 模板里就不显示这条。
+     */
+    const spark = computed(() => {
+      const now = Date.now();
+      const HOUR = 3600e3;
+      const buckets = new Array(12).fill(0);
+      for (const c of recent.value) {
+        const ts = Date.parse(c.at || 0);
+        if (!isFinite(ts)) continue;
+        const back = Math.floor((now - ts) / HOUR);
+        if (back >= 0 && back < 12) buckets[11 - back]++;
+      }
+      const max = Math.max.apply(null, buckets.concat([1]));
+      return buckets.map(v => Math.round(28 + 72 * v / max));
+    });
+
+    /** 渠道名 -> 稳定颜色 (跟改价页同一套算法, 两页看起来才是一套) */
+    function chColor(sheet) {
+      const s = String(sheet || '').split(' / ')[0] || String(sheet || '');
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return 'hsl(' + (h % 360) + ' 46% 58%)';
+    }
+
+    function onFilter() {
+      page.value = 1;
+      clearTimeout(timer);
+      timer = setTimeout(load, 220);
+    }
+    function setPage(p) { page.value = p; load(); }
+    function setSize(n) { size.value = n; page.value = 1; load(); }
+    function onRefresh() { refreshVersion(); load(); }
+
+    onMounted(async () => {
+      try { await afterLogin(); }
+      catch (e) { logged.value = false; }
+    });
+
+    return {
+      logged, checking, me, version, rows, total, kind, q, page, size, pages, showPwd, loading, loadErr,
+      countText, kindName, kindCount, openIdx, spark, chColor, afterLogin, logout, onFilter, setPage, setSize, onRefresh,
+    };
+  },
+  template: `
+    <div>
+      <AppHeader
+        title="改动记录"
+        :version="version"
+        :user="me.user"
+        :role="me.role"
+        refresh
+        :links="[{href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
+        @logout="logout"
+        @password="showPwd = true"
+        @refresh="onRefresh"
+      />
+
+      <main>
+        <template v-if="checking">
+          <div class="gate"><p class="muted">正在检查登录状态…</p></div>
+        </template>
+
+        <template v-else-if="!logged">
+          <LoginGate msg="登录后可以查看改动记录。" @login="afterLogin" />
+        </template>
+
+
+        <template v-else>
+          <div class="dash">
+            <div class="dash-inner">
+              <div class="metrics">
+                <div class="metric">
+                  <span class="mk">改动总数</span><b class="mv">{{ total }}</b>
+                  <span class="ms">{{ countText }}</span>
+                </div>
+                <div class="metric k-chg">
+                  <span class="mk">改价</span><b class="mv">{{ kindCount('update') }}</b>
+                </div>
+                <div class="metric k-new">
+                  <span class="mk">新增</span><b class="mv">{{ kindCount('add') }}</b>
+                </div>
+                <div class="metric k-chg">
+                  <span class="mk">整表导入</span><b class="mv">{{ kindCount('import') }}</b>
+                </div>
+                <div class="metric">
+                  <span class="mk">锁定</span><b class="mv">{{ kindCount('lock') }}</b>
+                </div>
+              </div>
+              <div class="dash-spark" v-if="spark.length" title="近 12 小时的改动次数分布">
+                <i v-for="(v, i) in spark" :key="i" :style="{height: v + '%'}"
+                   :class="{on: v > 30, hot: v > 85}"></i>
+              </div>
+              <div class="grow"></div>
+              <span class="ov-keys"><kbd>/</kbd> 搜索 <kbd>Esc</kbd> 关闭面板</span>
+            </div>
+          </div>
+
+          <div class="bar">
+            <div class="seg2">
+              <button :class="{on: rang === ''}" @click="rang = ''; onFilter()">全部</button>
+              <button :class="{on: rang === 'today'}" @click="rang = 'today'; onFilter()">今天</button>
+              <button :class="{on: rang === 'week'}" @click="rang = 'week'; onFilter()">近 7 天</button>
+            </div>
+            <select v-model="kind" @change="onFilter">
+              <option value="">全部类型</option>
+              <option value="update">改价</option>
+              <option value="add">新增</option>
+              <option value="import">整表导入</option>
+              <option value="lock">锁定</option>
+              <option value="unlock">解锁</option>
+            </select>
+            <input type="search" v-model="q" placeholder="搜渠道 / 国家 / 重量段 / 操作人…" @input="onFilter">
+            <span class="tbsep"></span>
+            <span class="muted">{{ countText }}</span>
+            <span style="flex:1"></span>
+            <span class="chips" v-if="kind || q.trim() || rang">
+              <span class="muted" style="font-size:11.5px">当前筛选</span>
+              <span class="chip" v-if="kind" @click="kind = ''; onFilter()">
+                <b>类型</b> {{ kindName }} <span class="x">✕</span>
+              </span>
+              <span class="chip" v-if="q.trim()" @click="q = ''; onFilter()">
+                <b>搜索</b> {{ q.trim() }} <span class="x">✕</span>
+              </span>
+              <span class="chip" v-if="rang" @click="rang = ''; onFilter()">
+                <b>时间</b> {{ rang === 'today' ? '今天' : '近 7 天' }} <span class="x">✕</span>
+              </span>
+              <span class="chip ghost" @click="q = ''; kind = ''; onFilter()">清空筛选</span>
+            </span>
+            <span class="err" style="margin:0" v-if="loadErr">{{ loadErr }}</span>
+          </div>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:150px">时间</th>
+                  <th style="width:90px">操作人</th>
+                  <th style="width:110px">类型</th>
+                  <th>渠道 / 国家 / 分区 / 产品线 / 重量段</th>
+                  <th class="num" style="width:170px">运费</th>
+                  <th class="num" style="width:170px">挂号费</th>
+                  <th style="width:260px">改动了什么</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(r, i) in rows" :key="i" :class="{big: r.big, open: openIdx === i}">
+                  <td class="at">{{ r.at }}</td>
+                  <td class="muted">{{ r.by }}</td>
+                  <td>
+                    <span class="kind" :class="r.kind"><span class="kico">{{ r.kindIcon }}</span>{{ r.kindCn }}</span>
+                    <span class="bigtag" v-if="r.big">{{ r.bigTag }}</span>
+                  </td>
+                  <td class="lbl"><i class="chcolor" :style="{background: chColor(r.label)}"></i>{{ r.label }}</td>
+                  <td class="num" v-html="r.priceHtml"></td>
+                  <td class="num" v-html="r.feeHtml"></td>
+                  <td class="whatcell">
+                    <!-- 整表导入: 汇总 + 可展开明细 -->
+                    <template v-if="r.summary">
+                      <div class="sumchips">
+                        <span class="sc add" v-if="r.summary.added">新增 {{ r.summary.added }}</span>
+                        <span class="sc chg" v-if="r.summary.changed">变动 {{ r.summary.changed }}</span>
+                        <span class="sc del" v-if="r.summary.removed">删除 {{ r.summary.removed }}</span>
+                        <button class="expander" @click="openIdx = (openIdx === i ? -1 : i)">
+                          {{ openIdx === i ? '收起 ▴' : '查看明细 ▾' }}
+                        </button>
+                      </div>
+                    </template>
+                    <template v-else-if="r.isImport">
+                      <span class="muted">这次导入没有价格变动</span>
+                    </template>
+                    <span v-else-if="r.what" class="whattext">{{ r.what }}</span>
+                    <span v-else class="muted">–</span>
+                  </td>
+                </tr>
+                <!-- 明细行
+                     Vue 3 里 v-if 的优先级高于 v-for, 同一元素上写 v-if 拿不到 r / i,
+                     所以要用 <template v-for> 包一层 (2026-11-10 踩过)。 -->
+                <template v-for="(r, i) in rows" :key="'d' + i">
+                  <tr v-if="openIdx === i && r.detail && r.detail.length" class="detailrow">
+                    <td colspan="7">
+                      <div class="detailbox">
+                        <div class="dhead">这次改动了 {{ r.detail.length }} 项</div>
+                        <div class="dlist">
+                          <div class="ditem" v-for="(d, k) in r.detail" :key="k" :class="d.cls">
+                            <span class="dtag">{{ d.tag }}</span>
+                            <span class="dlabel">{{ d.label }}</span>
+                            <span class="ddetail">{{ d.detail }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+                <tr v-if="!rows.length">
+                  <td colspan="7">
+                    <div class="blank">
+                      <div class="bh">{{ loading ? '正在读取改动记录…' : '没有匹配的改动记录' }}</div>
+                      <p v-if="!loading && (kind || q.trim())">当前筛选条件下没有结果</p>
+                      <p v-if="!loading && !(kind || q.trim())">还没有任何改动记录</p>
+                      <p v-if="!loading && (kind || q.trim())" style="margin-top:10px">
+                        <button class="primary" @click="q = ''; kind = ''; onFilter()">清空筛选</button>
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <Pager
+            :page="page" :pages="pages" :total="total" :size="size"
+            @update:page="setPage"
+            @update:size="setSize"
+          />
+        </template>
+      </main>
+
+      <PasswordModal :show="showPwd" @close="showPwd = false" />
+    </div>
+  `,
+}).mount('#root');
+</script>
+</body>
+</html>

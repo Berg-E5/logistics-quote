@@ -1,0 +1,51 @@
+# ============================================================
+#  物流报价网站 —— 不进版本库的文件
+#
+#  这个仓库放的是**程序代码**。
+#  价格数据、账号密码、商业报价表一律不进仓库 ——
+#  需要它们的人从发布服务器 (/root/quote-release/) 取安装包。
+# ============================================================
+
+# ---- 账号与凭据 (绝对不能提交) ----
+deploy/.dockerhub-token
+data/
+!data/.gitkeep
+脚本/后台地址.txt
+脚本/原表路径.txt
+脚本/源文件路径.txt
+*.token
+secret.key
+
+# ---- 报价表原件 (商业机密) ----
+# 报价表只在发布服务器上, 不进仓库
+*.xlsx
+*.xls
+scripts/报价表.xlsx
+scripts/原计算器.xlsx
+
+# ---- 价格数据快照 (离线版内嵌的全量价格) ----
+data_v2.js
+public/data_v2.js
+脚本/data_v2.js
+报价对账表-*.csv
+data.json
+rates_raw.json
+
+# ---- 发布包 / 备份 / 产物 ----
+deploy/LAST_PACKAGE.txt
+deploy/quote-install-*.tar.gz
+打包/
+*.bak
+*.bak-*
+*.tmp
+*.log
+
+# ---- 常规 ----
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

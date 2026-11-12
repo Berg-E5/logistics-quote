@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>物流报价查询</title>
+<style>
+  /* ============================================================
+     前台专属样式。设计令牌与通用组件在 ui-common.css (内联注入),
+     这里只放本页特有的东西。
+     取向: 行业工具的密度与精确感, 不做渐变标题 / 大圆角卡片 / emoji 图标。
+     ============================================================ */
+  .wrap { max-width: 1680px; margin: 0 auto; padding: 0 22px 72px; }
+
+  /* ---------------- 工作台布局 ----------------
+     左边参数 (固定, 不跟着滚), 右边结果 + 表格。
+     像交易终端那样: 参数一直在手边, 右边专心看结果。 */
+  .workbench {
+    display: grid; grid-template-columns: 280px minmax(0, 1fr);
+    gap: 14px; align-items: start;
+  }
+  .side {
+    position: sticky; top: 54px;
+    display: flex; flex-direction: column; gap: 12px;
+    max-height: calc(100vh - 70px); overflow-y: auto; overflow-x: hidden;
+    padding-right: 2px;
+  }
+  .side::-webkit-scrollbar { width: 7px; }
+  .side .panel { margin-bottom: 0; }
+  .main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .main .panel { margin-bottom: 0; }
+  /* 断点放低: 1280 宽的屏也能左右分栏, 左边 280 + 右边剩下的 */
+  @media (max-width: 940px) {
+    .workbench { grid-template-columns: 1fr; }
+    .side { position: static; max-height: none; overflow: visible; }
+  }
+
+  /* ---------------- 顶部控制条 ---------------- */
+  header {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 11px 0 11px; margin-bottom: 18px;
+    background: rgba(8,9,11,.82); backdrop-filter: blur(14px) saturate(140%);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  /* 几何标识: 2x2 小方块, 右上那个用强调色 —— 纯 CSS, 不用图片 */
+  .mark {
+    width: 22px; height: 22px; display: grid; grid-template: 1fr 1fr / 1fr 1fr;
+    gap: 2px; flex: none;
+  }
+  .mark i { background: var(--line-3); border-radius: 1px; display: block; }
+  .mark i:nth-child(2) { background: var(--accent); }
+  .mark i:nth-child(3) { background: var(--line-2); }
+  .mark i:nth-child(4) { background: var(--line-3); }
+  header h1 {
+    font-size: 15px; font-weight: 590; margin: 0; letter-spacing: -.2px;
+    color: var(--fg); white-space: nowrap;
+  }
+  header h1::after {
+    content: ""; display: inline-block; width: 1px; height: 12px;
+    background: var(--line-2); margin-left: 11px; vertical-align: -2px;
+  }
+  header p {
+    margin: 0; color: var(--muted); font-size: 11.5px; font-weight: 400;
+    font-family: var(--mono); letter-spacing: -.2px;
+  }
+  .loginbtn {
+    font: inherit; font-size: 12.5px; font-weight: 510; padding: 5px 13px;
+    border-radius: var(--r); border: 1px solid var(--line-2);
+    background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .loginbtn:hover { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-dim); }
+  .usermenu { position: relative; display: inline-block; }
+  .userchip {
+    font: inherit; font-size: 12.5px; font-weight: 510; padding: 4px 10px;
+    border-radius: var(--r); border: 1px solid var(--line-2);
+    background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .userchip:hover { border-color: var(--accent); color: var(--accent-hi); }
+  .userchip .avatar {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--accent);
+    color: #08111f; font-weight: 700; font-size: 10px; display: inline-flex;
+    align-items: center; justify-content: center; text-transform: uppercase;
+  }
+  .userchip .caret { color: var(--muted); font-size: 9px; }
+  .dropdown {
+    position: absolute; right: 0; top: calc(100% + 7px); min-width: 196px;
+    background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+    box-shadow: 0 12px 34px rgba(0,0,0,.6); padding: 5px; z-index: 60; display: none;
+  }
+  .dropdown.open { display: block; }
+  .dd-head { padding: 9px 11px 10px; border-bottom: 1px solid var(--line); margin-bottom: 5px; }
+  .dd-user { font-size: 13px; font-weight: 590; }
+  .dd-role { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .dd-item {
+    display: block; width: 100%; text-align: left; padding: 7px 11px; border: none;
+    border-radius: var(--r-sm); background: transparent; color: var(--fg-2);
+    font: inherit; font-size: 12.5px; font-weight: 510; cursor: pointer; text-decoration: none;
+  }
+  .dd-item:hover { background: rgba(255,255,255,.06); color: var(--accent-hi); }
+  .dd-item.danger:hover { color: var(--bad); background: var(--bad-dim); }
+  .dd-sep { height: 1px; background: var(--line); margin: 5px 0; }
+
+  /* ---------------- 登录墙 ---------------- */
+  .gate {
+    position: fixed; inset: 0; z-index: 90; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 20px; overflow: auto;
+  }
+  /* 作者样式的 display:flex 会压过浏览器默认的 [hidden]{display:none}, 必须显式盖回去 */
+  .gate[hidden] { display: none !important; }
+  .gcard {
+    background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+    padding: 30px 28px; width: min(92vw, 384px); text-align: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+  }
+  .gbrand {
+    font-size: 10.5px; font-weight: 590; letter-spacing: 1.4px; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 18px; font-family: var(--mono);
+  }
+  /* 几何标记代替 emoji 图标 */
+  .gicon {
+    width: 34px; height: 34px; margin: 0 auto 16px; position: relative;
+    border: 1px solid var(--line-3); border-radius: var(--r-sm);
+  }
+  .gicon::before {
+    content: ""; position: absolute; left: 50%; top: 9px; transform: translateX(-50%);
+    width: 12px; height: 9px; border: 1.5px solid var(--accent);
+    border-radius: 2px; border-bottom-width: 2.5px;
+  }
+  .gicon::after {
+    content: ""; position: absolute; left: 50%; top: 20px; transform: translateX(-50%);
+    width: 16px; height: 1.5px; background: var(--accent); opacity: .55;
+  }
+  .gcard h2 { margin: 0 0 8px; font-size: 17px; font-weight: 590; letter-spacing: -.3px; }
+  .gcard p { margin: 0; font-size: 12.5px; line-height: 1.75; color: var(--muted); }
+  .gcard strong { color: var(--fg); font-weight: 590; }
+  .gacts { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 20px; }
+  .gacts button {
+    font: inherit; font-size: 13px; font-weight: 590; padding: 8px 22px; border-radius: var(--r);
+    border: 1px solid var(--accent); background: var(--accent); color: #08111f; cursor: pointer;
+  }
+  .gacts button:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .gacts a { font-size: 12.5px; color: var(--accent-hi); text-decoration: none; }
+  .gacts a:hover { text-decoration: underline; }
+  .ghint { margin-top: 16px !important; font-size: 11.5px !important; color: var(--dim) !important; }
+
+  /* ---------------- 登录弹窗 ---------------- */
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.74); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .mbox {
+    background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+    padding: 22px; width: 340px; max-width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+  .mbox h3 { margin: 0 0 6px; font-size: 15px; font-weight: 590; letter-spacing: -.2px; }
+  .mbox label {
+    display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
+    color: var(--muted); margin-top: 12px;
+  }
+  .mbox input {
+    font: inherit; font-size: 13px; padding: 8px 10px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: rgba(0,0,0,.25); color: var(--fg); width: 100%;
+  }
+  .mbox input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .mbox .err { color: var(--bad); font-size: 12.5px; margin-top: 9px; min-height: 18px; }
+  .mbox .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 9px; }
+  .mbox .row button {
+    font: inherit; font-size: 13px; font-weight: 510; padding: 7px 15px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+  }
+  .mbox .row button.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 590; }
+  .liother {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); text-align: center;
+  }
+  .liother a { color: var(--accent); text-decoration: none; }
+  .liother a:hover { text-decoration: underline; }
+
+  /* ---------------- 输入面板 ---------------- */
+  .panel {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.006) 42%, transparent 130px),
+      var(--panel);
+    border: 1px solid var(--line-2);
+    border-radius: 10px; padding: 0; margin-bottom: 0;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.06),
+      0 22px 46px -32px rgba(0,0,0,.95);
+  }
+  /* 左栏窄, 组标题改成横排小标题 */
+  .grp { display: block; }
+  .grp + .grp { border-top: 1px solid var(--line); }
+  .grp-h {
+    padding: 11px 14px 8px; border-right: none; border-bottom: 1px solid var(--line);
+    flex-direction: row; gap: 8px; align-items: baseline; background: transparent;
+  }
+  .grp-b { padding: 12px 14px 13px; }
+  /* 组标题: 序号 + 名称, 像参数面板的分区标 */
+  .grp-h {
+    font-size: 10.5px; font-weight: 590; letter-spacing: .6px;
+    color: var(--dim); text-transform: uppercase; white-space: nowrap;
+    display: flex; gap: 8px; align-items: baseline;
+  }
+  .grp-h b { color: var(--fg-2); font-weight: 590; font-size: 11px; letter-spacing: .3px; }
+  .grp-h i {
+    font-style: normal; font-family: var(--mono); font-size: 10px;
+    color: var(--dim); letter-spacing: 0;
+  }
+  .grp-b { padding: 13px 16px; }
+  .inputs {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 10px;
+  }
+  /* 国家 / 汇率 占满整行 */
+  .inputs .field.wide { grid-column: 1 / -1; }
+  .field label {
+    display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px;
+    font-weight: 510;
+  }
+  .field input, .field select {
+    width: 100%; padding: 7px 9px; font-size: 14px; font-family: inherit; font-weight: 510;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--line); border-radius: var(--r); outline: none;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .field input:hover, .field select:hover { border-color: var(--line-2); }
+  .field input::placeholder { color: var(--dim); font-weight: 400; }
+  .field input:focus, .field select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .field input.num { font-variant-numeric: tabular-nums; }
+  .seg {
+    display: flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+    background: var(--panel-2);
+  }
+  .seg button {
+    flex: 1; padding: 6px 4px; font-size: 12.5px; font-weight: 510; font-family: inherit;
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button:hover { color: var(--fg-2); background: rgba(255,255,255,.03); }
+  .seg button.on { background: var(--accent-dim); color: var(--accent-hi); font-weight: 590; }
+
+  /* ---------------- 成本对比图 ---------------- */
+  .cmp { padding: 0; }
+  .cmp-h {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 11px 16px 10px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+  }
+  .cmp-h b { font-size: 11.5px; font-weight: 590; color: var(--fg-2); }
+  .cmp-h span { font-size: 11px; color: var(--dim); }
+  .cmp-rows { padding: 10px 16px 13px; display: flex; flex-direction: column; gap: 5px; }
+  .cmpr { display: grid; grid-template-columns: 210px minmax(0,1fr) 104px; gap: 12px; align-items: center; }
+  .cmpr-n { font-size: 11.5px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmpr-n .sub2 { color: var(--dim); font-size: 10.5px; margin-left: 5px; }
+  .cmpr-b { height: 14px; background: rgba(255,255,255,.035); border-radius: 2px; position: relative; overflow: hidden; }
+  .cmpr-b i {
+    position: absolute; inset: 0 auto 0 0; border-radius: 2px;
+    background: var(--accent); opacity: .38; display: block;
+    transform-origin: left center;
+    animation: cmpgrow .45s cubic-bezier(.22,.9,.28,1) backwards;
+  }
+  @keyframes cmpgrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .cmpr.is-best .cmpr-b i { background: var(--good); opacity: 1; }
+  .cmpr.is-picked .cmpr-b i { background: var(--accent); opacity: 1; }
+  .cmpr.is-best.is-picked .cmpr-b i { background: var(--accent); }
+  .cmpr-v {
+    text-align: right; font-size: 12px; font-variant-numeric: tabular-nums;
+    color: var(--fg-2); font-weight: 590;
+  }
+  .cmpr.is-best .cmpr-v { color: var(--good); }
+  .cmpr.is-picked .cmpr-v { color: var(--accent-hi); }
+  .cmpr-d { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .cmp-empty { padding: 22px 16px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  /* ---------------- 结果区标题 ---------------- */
+  .rescap {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 11px 16px 10px; border-top: 1px solid var(--line); background: var(--panel-2);
+  }
+  .rescap b {
+    font-size: 11.5px; font-weight: 590; color: var(--fg-2);
+  }
+  .rescap span { font-size: 11.5px; color: var(--dim); }
+
+  /* 结果卡 (顶线语义在 ui-common 的 .stat::before) */
+  /* 中文标题不要 uppercase / 字距, 否则发虚 */
+  .stat .stat-k { font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .stat.k-best  .stat-k { color: var(--good); }
+  .stat.k-sell  .stat-v { font-size: 24px; }
+  .stat.k-local .stat-v { color: var(--accent-hi); }
+  .stat.k-profit .stat-v.pos { color: var(--fg); }
+  .stat.k-profit .stat-v.neg { color: var(--bad); }
+  .stat .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* 主指标卡: 比其它卡大一档, 数字再大一档 —— 视线要有落点。
+     五张一样的卡平铺过去就没有重点, 看着像老式报表。 */
+  .stats.cols-5 { grid-template-columns: 1.75fr 1.15fr 1fr 1fr 1fr; }
+  .stat.hero { padding: 16px 20px 17px; }
+  .stat.hero .stat-k { font-size: 11.5px; }
+  .stat.hero .stat-v {
+    font-size: 34px; font-weight: 540; letter-spacing: -1.6px;
+    margin-top: 7px; line-height: 1;
+    /* 极淡的辉光 —— 一点点就够, 太亮就俗了 */
+    text-shadow: 0 0 28px rgba(47,196,122,.24);
+  }
+  .stat.hero .stat-s { font-size: 12px; margin-top: 7px; }
+  /* 主卡右上角一抹极淡的光 */
+  .stat.hero::after {
+    content: ""; position: absolute; right: -40px; top: -60px;
+    width: 190px; height: 190px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, rgba(47,196,122,.10), transparent 68%);
+  }
+
+  .bestline { display: none; }
+  .derived { display: none; }
+
+  /* ---------------- 选中渠道 ---------------- */
+  /* 专线三线里本组最便宜的那条 —— 中性色, 绿色只留给全局最低价 */
+  .tag.lbest { background: rgba(120,140,170,.16); color: #9fb2cc; border-color: rgba(120,140,170,.34); }
+
+  /* 点了不可发的行: 闪一下提示 */
+  @keyframes flashna { 0%,100% { background: transparent; } 30% { background: rgba(244,88,94,.16); } }
+  tr.flash-na td { animation: flashna .7s ease-out; }
+
+  .pickline {
+    margin: 0; padding: 13px 16px 14px; background: var(--panel);
+    border-top: 1px solid var(--line); font-size: 13px;
+  }
+  .pickline .phead { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .pickline .phead b {
+    color: var(--accent-hi); font-size: 18px; font-weight: 590;
+    font-variant-numeric: tabular-nums; letter-spacing: -.3px;
+  }
+  .pickline .phead .who { color: var(--fg); font-weight: 590; }
+  .pickline .phint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .pickline .pdiff { font-size: 12.5px; margin-top: 6px; }
+  .pickline .pdiff .up { color: var(--warn); }
+  .pickline .pdiff .dn { color: var(--good); }
+  .pickline .pgrid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    gap: 1px; margin-top: 11px; background: var(--line);
+    border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+  }
+  .pickline .pgrid > div { background: var(--panel-2); padding: 7px 10px; }
+  .pickline .pgrid span {
+    display: block; color: var(--dim); font-size: 10px; letter-spacing: .3px; text-transform: uppercase;
+  }
+  .pickline .pgrid b { font-size: 13.5px; font-weight: 590; font-variant-numeric: tabular-nums; }
+  .pickline .pacts { margin-top: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .pickline button {
+    font: inherit; font-size: 12.5px; font-weight: 510; padding: 5px 12px; border-radius: var(--r);
+    border: 1px solid var(--accent); background: var(--accent-dim); color: var(--accent-hi); cursor: pointer;
+  }
+  .pickline button:hover { background: rgba(77,132,255,.24); }
+  .pickline button.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
+  .pickline button.ghost:hover { background: rgba(255,255,255,.05); color: var(--fg); }
+
+  /* ---------------- 工具条 ---------------- */
+  .toolbar {
+    position: static; top: auto;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 9px 11px; margin-bottom: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg);
+  }
+  .toolbar input[type=search] {
+    padding: 6px 11px; font-size: 12.5px; font-family: inherit;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--line); border-radius: var(--r); outline: none; min-width: 190px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .toolbar input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .toolbar label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .toolbar input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; }
+  .toolbar .count { color: var(--muted); font-size: 11.5px; font-family: var(--mono); }
+  .toolbar .grow { flex: 1; }
+
+  /* ---------------- 表格 ---------------- */
+  .tablewrap {
+    overflow: auto; border: 1px solid var(--line); border-radius: var(--r-lg);
+    background: var(--panel); max-height: calc(100vh - 250px);
+  }
+  .respanel { padding: 0; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  th.num, td.num { text-align: right; }
+  td { vertical-align: top; }
+
+  /* 高亮: 最低价 (绿) */
+  tbody tr.best { background: var(--good-dim); box-shadow: inset 3px 0 0 var(--good); }
+  tbody tr.best:hover { background: rgba(47,196,122,.18); }
+  tbody tr.best td { border-bottom-color: rgba(47,196,122,.16); }
+  /* 高亮: 当前选中 (蓝 = 我选中的, 与绿色的「最低价」明确区分) */
+  tbody tr.picked { background: var(--accent-dim) !important; box-shadow: inset 4px 0 0 var(--accent); }
+  tbody tr.picked td { border-bottom-color: rgba(77,132,255,.22); }
+  .tag.picked {
+    background: rgba(77,132,255,.22); color: #a9c6ff;
+    border-color: rgba(77,132,255,.45); font-weight: 590;
+  }
+  /* 不可发 / 超尺寸 */
+  tbody tr.na { color: var(--dim); }
+  tbody tr.na .ch { color: var(--muted); }
+  tbody tr.na:hover { background: rgba(244,88,94,.05); }
+
+  .ch { font-weight: 590; color: var(--fg); letter-spacing: -.1px; }
+  .sub { color: var(--muted); font-size: 11px; margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag {
+    display: inline-block; padding: 1px 6px; border-radius: var(--r-sm); font-size: 10.5px;
+    background: var(--accent-dim); color: var(--accent-hi); margin-right: 4px;
+    white-space: nowrap; border: 1px solid transparent; font-weight: 510;
+  }
+  .tag.best {
+    background: rgba(47,196,122,.2); color: var(--good);
+    border-color: rgba(47,196,122,.3); font-weight: 590;
+  }
+  .tag.mode { background: rgba(255,255,255,.04); color: var(--muted); border-color: var(--line); }
+  /* 运输方式标签: 海运用蓝 (交互色系), 空运用中性灰 —— 不占用绿色(最便宜)语义 */
+  .tag.sea { background: rgba(79,140,255,.16); color: var(--accent-hi); border-color: rgba(79,140,255,.34); }
+  .tag.air { background: rgba(255,255,255,.04); color: var(--muted); border-color: var(--line); }
+
+  .tag.warn { background: var(--warn-dim); color: var(--warn); border-color: rgba(230,154,47,.28); }
+  .tag.bad  { background: var(--bad-dim);  color: var(--bad);  border-color: rgba(244,88,94,.28); }
+  .limits { color: var(--muted); font-size: 11px; max-width: 250px; white-space: pre-wrap; word-break: break-word; }
+  .note { color: var(--warn); font-size: 11px; }
+
+  /* 价格条: 一眼看出谁便宜 (内联固定宽度, 右边缘对齐, 长度可直接比) */
+  .costcell { white-space: nowrap; }
+  .pbar {
+    position: relative; display: inline-block; vertical-align: middle;
+    width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.07);
+    overflow: hidden; margin-right: 9px;
+  }
+  .pbar i {
+    position: absolute; inset: 0 auto 0 0; border-radius: 2px;
+    background: var(--muted); display: block; opacity: .5;
+  }
+  tr.best .pbar i { background: var(--good); opacity: 1; }
+  tr.na .pbar i { opacity: .2; }
+  .money { font-weight: 590; }
+  td.num.neg { color: var(--bad); }
+
+  footer {
+    margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 11.5px; line-height: 1.9;
+  }
+  footer b { color: var(--fg-2); font-weight: 590; }
+  footer .warnb { color: var(--warn); font-weight: 590; }
+
+  .scopebadge {
+    font-size: 11px; font-weight: 590; padding: 2px 9px; border-radius: 999px;
+    border: 1px solid var(--line-2); color: var(--muted); background: rgba(255,255,255,.04);
+    white-space: nowrap;
+  }
+  .scopebadge.mine {
+    border-color: rgba(77,132,255,.42); color: var(--accent-hi); background: var(--accent-dim);
+  }
+  .fxtip { display: block; color: var(--dim); font-size: 10.5px; margin-top: 4px; }
+  .syncbar { margin-top: 10px; }
+  .sync { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+  .sync.ok { color: var(--muted); }
+  .sync.ok::before {
+    content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--good); margin-right: 6px; vertical-align: middle;
+  }
+  .ltag {
+    font-size: 10px; color: var(--accent-hi); border: 1px solid var(--accent-dim);
+    border-radius: 3px; padding: 0 4px; margin-left: 4px; white-space: nowrap;
+  }
+  .chanlist { margin: 18px 0 0; border-top: 1px solid var(--line); padding-top: 13px; }
+  .chanlist summary {
+    cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 510;
+    padding: 4px 0; user-select: none;
+  }
+  .chanlist summary:hover { color: var(--fg-2); }
+  #chans { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .ctag {
+    font-size: 12px; padding: 4px 9px; border-radius: var(--r);
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg-2);
+  }
+  .ctag i { font-style: normal; color: var(--muted); margin-left: 6px; font-size: 11px; }
+  .ctag.b { border-color: rgba(230,154,47,.4); }
+  .ctag.p { border-color: rgba(47,196,122,.4); }
+
+  /* 体积重除数不确定: 报价表没给, 用兜底值估算, 要提醒人工核对 */
+  .uncert { color: var(--warn); font-size: 11.5px; font-weight: 590; }
+
+  @media (max-width: 1100px) {
+    .stats.cols-5 { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .grp { grid-template-columns: 1fr; }
+    .grp-h {
+      border-right: none; border-bottom: 1px solid var(--line);
+      padding: 10px 16px; flex-direction: row; gap: 8px; align-items: baseline;
+    }
+    .stats.cols-5 { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .stats.cols-5 { grid-template-columns: repeat(2, 1fr); }
+  }
+  /* @ui-common:inline:start */
+  /* ---------------- 设计令牌 ---------------- */
+  :root {
+    /* 底色阶: 不是纯黑 —— 纯黑显老派, 掺一点冷蓝调立刻现代。
+       相邻两级只差一点点, 越往上越亮。 */
+    --bg:      #0a0c11;
+    --panel:   #11141b;
+    --panel-2: #171b24;
+    --panel-3: #1e232e;
+    --panel-4: #262c39;
+
+    /* 发丝线 */
+    --line:   rgba(255,255,255,.062);
+    --line-2: rgba(255,255,255,.11);
+    --line-3: rgba(255,255,255,.19);
+
+    /* 文字 */
+    --fg:    #eef1f6;
+    --fg-2:  #b7becb;
+    --muted: #7e879a;
+    --dim:   #5b6478;
+
+    /* 强调色: 全站只有这一个彩色, 但要够亮够有能量 */
+    --accent:     #4f8cff;
+    --accent-hi:  #7fabff;
+    --accent-dim: rgba(79,140,255,.14);
+    --accent-glow: rgba(79,140,255,.30);
+
+    /* 语义色 */
+    --good:     #2fc47a;
+    --good-dim: rgba(47,196,122,.12);
+    --warn:     #e69a2f;
+    --warn-dim: rgba(230,154,47,.13);
+    --bad:      #f4585e;
+    --bad-dim:  rgba(244,88,94,.13);
+    --violet:     #9b8cff;
+    --violet-dim: rgba(155,140,255,.13);
+
+    /* 圆角: 收紧 */
+    --r-sm: 4px; --r: 6px; --r-lg: 8px;
+
+    /* 字体 */
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+            "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
+            "Roboto Mono", Consolas, "Liberation Mono", monospace;
+
+    /* 旧名兼容: 老页面里写成 --panel2 / --accenthi 的那些 */
+    --panel2: var(--panel-2); --panel3: var(--panel-3);
+    --line2: var(--line-2); --fg2: var(--fg-2);
+    --accenthi: var(--accent-hi); --accentdim: var(--accent-dim);
+    --gooddim: var(--good-dim); --warndim: var(--warn-dim); --baddim: var(--bad-dim);
+  }
+
+  /* ---------------- 基础 ---------------- */
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* 背景光: 左上一束冷光, 右上一束极淡的紫。
+     比全屏网格更有「有光源」的现代感, 网格看着像老式后台模板。 */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(1000px 520px at 16% -10%, rgba(79,140,255,.11), transparent 64%),
+      radial-gradient(760px 420px at 92% 2%, rgba(155,140,255,.055), transparent 62%);
+  }
+  /* 细网格叠在光上面, 只在有光的地方能看见 */
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,.014) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.014) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
+  }
+  body > * { position: relative; z-index: 1; }
+
+  /* 数字一律等宽, 竖着看要能对齐 */
+  .num, td.num, th.num, .stat-v, input[type=number], input[type=search] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* 焦点环: 全站统一, 键盘可见、鼠标不打扰 */
+  :focus-visible {
+    outline: none;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-dim) !important;
+  }
+
+  /* ---------------- 面板材质 ----------------
+     关键在 inset 0 1px 0 那条高光: 面板顶部有一道亮边, 看起来是「浮起来」的。
+     纯色面板看着像贴纸, 有高光才像玻璃/金属。 */
+  .panel {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.006) 42%, transparent 130px),
+      var(--panel);
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.06),
+      0 22px 46px -32px rgba(0,0,0,.95);
+  }
+
+  /* ---------------- 统计卡片 ---------------- */
+  /* 默认 = 独立圆角卡片 (后台用) */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: var(--r-lg); overflow: hidden; margin-bottom: 14px;
+  }
+  /* .flat = 嵌在面板内部 (前台结果区用): 圆角归容器, 自己只做发丝线分隔 */
+  .stats.flat { border: 0; border-radius: 0; margin: 0; background: transparent; }
+  /* .cols-5 = 前台五张结果卡固定五列 */
+  .stats.cols-5 { grid-template-columns: 1.35fr 1.35fr 1fr 1fr 1fr; }
+  /* 统计卡: 数字与说明左右排 —— 数字占主导, 说明退到右边当注解。
+     竖排 (数字在上、说明在下) 看着像老式报表。 */
+  .stat {
+    background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 62%), var(--panel);
+    padding: 13px 16px 14px; position: relative; overflow: hidden;
+    display: flex; flex-direction: column; justify-content: space-between;
+    min-height: 78px;
+  }
+  .stat .stat-body { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  /* 顶部那条线加粗到 3px, 远处也能看出哪张卡是什么色 */
+  .stat::before { height: 3px; }
+  /* 顶部一条 2px 强调线 —— 比彩色胶囊更像仪表, 也不抢戏 */
+  .stat::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+    background: var(--line-2);
+  }
+  .stat.k-best::before { background: var(--good); }
+  .stat.k-sell::before { background: var(--accent); }
+  /* 绿只留给「最便宜」, 其它卡用中性线, 盈亏靠数值本身的颜色表达 */
+  .stat.k-local::before,
+  .stat.k-profit::before { background: var(--line-2); }
+  .stat.k-lock::before  { background: var(--warn); }
+  .stat.k-chg::before   { background: var(--accent); }
+  .stat.k-up::before    { background: var(--bad); }
+  .stat.k-dn::before    { background: var(--good); }
+  .stat.k-new::before   { background: var(--good); }
+  .stat.k-del::before   { background: var(--bad); }
+
+  .stat-k {
+    font-size: 10px; font-weight: 590; letter-spacing: .6px; color: var(--dim);
+    text-transform: uppercase; display: flex; align-items: center; gap: 6px;
+  }
+  .stat-v {
+    font-size: 25px; font-weight: 560; letter-spacing: -1px; margin-top: 6px;
+    font-variant-numeric: tabular-nums; color: var(--fg); line-height: 1.05;
+  }
+  .stat-s { font-size: 11.5px; color: var(--fg-2); margin-top: 5px; opacity: .78; }
+  .stat .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+  /* 语义色: 绿=最便宜/成功, 蓝=交互/动态, 橙=锁定/警告, 红=错误/涨价 */
+  .stat.k-lock .stat-k, .stat.k-lock .stat-v { color: var(--warn); }
+  .stat.k-chg  .stat-k, .stat.k-chg .stat-v  { color: var(--accent-hi); }
+  .stat.k-up   .stat-k, .stat.k-up   .stat-v   { color: var(--bad); }
+  .stat.k-dn   .stat-k, .stat.k-dn   .stat-v   { color: var(--good); }
+  .stat.k-new  .stat-k, .stat.k-new  .stat-v  { color: var(--good); }
+  .stat.k-del  .stat-k, .stat.k-del  .stat-v  { color: var(--bad); }
+  .stat.k-best .stat-v { color: var(--good); }
+
+  /* 统计卡里的迷你趋势条: 用一排细竖线表示近 N 段的分值分布,
+     让卡片不只是干巴巴一个数字 (没有数据时自动不显示) */
+  .stat-spark {
+    display: flex; align-items: flex-end; gap: 3px; height: 13px; margin-top: 9px;
+    opacity: .9;
+  }
+  .stat-spark i {
+    flex: 1; background: var(--line-2); border-radius: 1px; min-height: 2px;
+    display: block;
+  }
+  .stat-spark i.on { background: var(--accent); }
+  .stat-spark i.hot { background: var(--warn); }
+
+  /* ---------------- sticky 工具栏 ---------------- */
+  .toolbar {
+    position: sticky; top: 53px; z-index: 8;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 9px 11px; margin-bottom: 12px;
+    background: rgba(13,14,17,.88); backdrop-filter: blur(12px) saturate(140%);
+    border: 1px solid var(--line); border-radius: var(--r-lg);
+  }
+  .toolbar input[type=search] { min-width: 200px; }
+  .tbsep { width: 1px; height: 18px; background: var(--line-2); margin: 0 1px; }
+
+  /* ---------------- 筛选条件标签 ---------------- */
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+    padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(77,132,255,.30);
+    background: rgba(77,132,255,.07); color: var(--accent-hi);
+    cursor: pointer; font-weight: 510; white-space: nowrap;
+  }
+  .chip:hover { background: rgba(77,132,255,.16); border-color: rgba(77,132,255,.5); }
+  .chip b { font-weight: 590; }
+  .chip .x { opacity: .6; font-size: 12px; line-height: 1; }
+  .chip .x:hover { opacity: 1; }
+  .chip.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
+  .chip.ghost:hover { color: var(--fg-2); background: rgba(255,255,255,.05); }
+
+  /* ---------------- 表格 ---------------- */
+  .tablewrap {
+    border: 1px solid var(--line-2); border-radius: 10px;
+    overflow: auto; background: var(--panel);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  }
+  .tablewrap table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .tablewrap thead th {
+    position: sticky; top: 0; z-index: 3;
+    background: linear-gradient(180deg, var(--panel-3), var(--panel-2)); color: var(--muted);
+    font-size: 10.5px; font-weight: 590; letter-spacing: .5px; text-transform: uppercase;
+    text-align: left; padding: 9px 12px; white-space: nowrap;
+    border-bottom: 1px solid var(--line-3);
+    box-shadow: 0 1px 0 rgba(255,255,255,.04);
+  }
+  .tablewrap thead th.num { text-align: right; }
+  .tablewrap tbody td {
+    padding: 7px 11px; border-bottom: 1px solid var(--line);
+    font-size: 12.5px; vertical-align: middle;
+  }
+  .tablewrap tbody td.num { text-align: right; }
+  .tablewrap tbody tr:last-child td { border-bottom: 0; }
+  .tablewrap tbody tr:hover td { background: rgba(255,255,255,.032); }
+  .tablewrap tbody tr { transition: background .12s ease; }
+
+  /* ---------------- 空状态 ---------------- */
+  .blank { padding: 44px 20px; text-align: center; }
+  .blank .bi { font-size: 24px; opacity: .3; margin-bottom: 10px; }
+  .blank .bh { color: var(--fg); font-size: 14px; font-weight: 590; margin-bottom: 6px; }
+  .blank p { margin: 0 0 4px; color: var(--muted); font-size: 12.5px; }
+
+  /* ---------------- 骨架屏 ---------------- */
+  .skel {
+    background: linear-gradient(90deg, var(--panel-2) 25%, var(--panel-3) 37%, var(--panel-2) 63%);
+    background-size: 400% 100%;
+    animation: skel 1.3s ease-in-out infinite;
+    border-radius: var(--r-sm); height: 11px;
+  }
+  @keyframes skel { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+  /* ---------------- 底部说明 ---------------- */
+  .pagehint {
+    margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); line-height: 1.85;
+  }
+  .pagehint b { color: var(--fg-2); font-weight: 590; }
+  .pagehint code {
+    color: var(--fg-2); background: var(--panel-2); padding: 1px 5px;
+    border-radius: var(--r-sm); font-family: var(--mono); font-size: 11.5px;
+  }
+
+  /* ---------------- 保存状态位 ---------------- */
+  .saved { width: 54px; flex: none; display: inline-block; text-align: left; }
+  .saved.idle { color: var(--dim); }
+  .saved.dirty { color: var(--warn); }
+
+  /* ---------------- 可编辑列 ---------------- */
+  td.editable { background: rgba(79,140,255,.075); }
+  tbody tr:hover td.editable { background: rgba(79,140,255,.13); }
+  th.editable { background: rgba(79,140,255,.17); color: var(--accent-hi); }
+  th.editable .ed { font-size: 10px; opacity: .85; margin-left: 3px; }
+
+  /* ---------------- toast ---------------- */
+  .toasts {
+    position: fixed; right: 18px; bottom: 18px; z-index: 200;
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  }
+  .toast {
+    background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r);
+    padding: 9px 14px; font-size: 12.5px; color: var(--fg);
+    box-shadow: 0 12px 34px rgba(0,0,0,.6);
+    display: flex; align-items: center; gap: 8px;
+    animation: toastin .18s ease-out;
+  }
+  .toast.ok { border-color: rgba(47,196,122,.42); color: var(--good); }
+  .toast.err { border-color: rgba(244,88,94,.42); color: var(--bad); }
+  @keyframes toastin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ---------------- 元数据 / 等宽小件 ---------------- */
+  .mono { font-family: var(--mono); font-size: 11.5px; letter-spacing: -.2px; }
+  .tag-mono {
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    padding: 0 5px; white-space: nowrap;
+  }
+  kbd {
+    font-family: var(--mono); font-size: 10.5px; color: var(--fg-2);
+    background: var(--panel-3); border: 1px solid var(--line-2);
+    border-bottom-width: 2px; border-radius: var(--r-sm);
+    padding: 1px 5px; line-height: 1.4;
+  }
+  /* 状态点: 比彩色胶囊更克制 */
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+    flex: none; display: inline-block; vertical-align: middle;
+  }
+  .dot.live { background: var(--good); box-shadow: 0 0 0 3px var(--good-dim); }
+  .dot.off  { background: var(--dim); }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-dim); }
+
+  /* ---------------- 通用 ---------------- */
+  th { color: var(--fg-2); }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.09); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.17); }
+  /* @ui-common:inline:end */
+  /* ============================================================
+     以下由 脚本/sync_ui_css.py 从 public/ui-common.css 自动注入,
+     不要手改这一段 —— 改 ui-common.css 然后重跑脚本。
+     ============================================================ */
+
+  /* 数据跨度太小时条形图看不出差异, 等于噪音 -> 隐藏 */
+  .pbar.flat { display: none; }
+
+  /* 整列无值的列 (分区 / 附加费) 自动隐藏 */
+  table.no-zone th:nth-child(2), table.no-zone td:nth-child(2) { display: none; }
+  table.no-sur  th:nth-child(7), table.no-sur  td:nth-child(7) { display: none; }
+
+  /* 表头币种标注: 比主标题小一号、暗一点, 不抢但读得到 */
+  th .u { font-weight: 400; color: var(--dim); font-size: 9.5px; letter-spacing: 0; text-transform: none; }
+  /* 表格里的次级字 */
+  td .sub, td .dimtext { color: var(--muted); }
+  td .tag.mode { color: var(--muted); border-color: var(--line-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <span class="mark"><i></i><i></i><i></i><i></i></span>
+    <h1>物流报价查询</h1>
+  </div>
+  <p id="meta">加载中…</p>
+  <span class="scopebadge" id="scopeBadge" hidden></span>
+  <span style="flex:1"></span>
+  <span class="usermenu" id="usermenu" style="display:none">
+    <button class="userchip" id="userchip" aria-haspopup="true" aria-expanded="false">
+      <span class="avatar" id="ddAvatar">?</span>
+      <span id="ddName">用户</span>
+      <span class="caret">▾</span>
+    </button>
+    <div class="dropdown" id="usermenu-items">
+      <div class="dd-head">
+        <div class="dd-user" id="ddUser">—</div>
+        <div class="dd-role" id="ddRole">—</div>
+      </div>
+      <a class="dd-item" href="/admin"><span>后台改价</span></a>
+      <a class="dd-item" href="/admin/changes"><span>改动记录</span></a>
+      <a class="dd-item" id="usersLink" href="/admin/users" style="display:none"><span>用户管理</span></a>
+      <div class="dd-sep"></div>
+      <button class="dd-item danger" id="logout"><span>退出登录</span></button>
+    </div>
+  </span>
+  <button class="loginbtn" id="loginbtn">登录</button>
+</header>
+
+<!-- 登录墙: 未登录时挡住计算区 -->
+<div class="gate" id="gate" hidden>
+  <div class="gcard">
+    <div class="gbrand">物流报价查询</div>
+    <div class="gicon"></div>
+    <h2>请先登录</h2>
+    <p class="muted">报价数据只对登录用户开放。<br>登录后自动显示<strong>你自己上传的</strong>渠道价格表。</p>
+    <div class="gacts">
+      <button class="primary" id="gateLogin">登录</button>
+      <a href="/admin" target="_blank">注册新账号</a>
+    </div>
+    <p class="ghint">注册后上传自己的价格表就能用；也可以让管理员在后台给你建账号。</p>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div class="modal" id="loginmodal" style="display:none">
+  <div class="mbox">
+    <h3>登录</h3>
+    <p class="muted" style="margin:0 0 14px;font-size:12.5px">
+      登录后使用<b>你自己上传的</b>渠道价格表。未登录时显示站主的公开数据。
+    </p>
+    <label>用户名<input id="liUser" type="text" autocomplete="username" value=""></label>
+    <label>密码<input id="liPass" type="password" autocomplete="current-password" value=""></label>
+    <div class="err" id="liErr"></div>
+    <div class="row">
+      <button class="primary" id="liGo">登录</button>
+      <button id="liCancel">取消</button>
+    </div>
+    <div class="liother">
+      还没有账号? 去 <a href="/admin" target="_blank">后台注册</a>
+    </div>
+  </div>
+</div>
+
+<div class="workbench">
+ <aside class="side">
+  <div class="panel">
+  <!-- 货物信息 -->
+  <div class="grp">
+    <div class="grp-h"><i>01</i><b>货物</b></div>
+    <div class="grp-b">
+      <div class="inputs">
+        <div class="field wide">
+          <label for="country">国家 / 地区</label>
+          <select id="country"></select>
+        </div>
+        <div class="field">
+          <label for="kg">重量 (kg)</label>
+          <input id="kg" class="num" type="number" min="0" step="0.1" value="1">
+        </div>
+        <div class="field">
+          <label for="L">长 (cm)</label>
+          <input id="L" class="num" type="number" min="0" step="1" value="30">
+        </div>
+        <div class="field">
+          <label for="W">宽 (cm)</label>
+          <input id="W" class="num" type="number" min="0" step="1" value="20">
+        </div>
+        <div class="field">
+          <label for="H">高 (cm)</label>
+          <input id="H" class="num" type="number" min="0" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>属性</label>
+          <div class="seg" id="attr">
+            <button data-v="普货" class="on">普货</button>
+            <button data-v="带电">带电</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>运输方式</label>
+          <div class="seg" id="trans" role="group" aria-label="运输方式">
+            <button data-v="all" class="on">全部</button>
+            <button data-v="air">空运</button>
+            <button data-v="sea">海运</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 财务参数 -->
+  <div class="grp">
+    <div class="grp-h"><i>02</i><b>财务</b></div>
+    <div class="grp-b">
+      <div class="inputs">
+        <div class="field">
+          <label for="buy">采购价 (¥)</label>
+          <input id="buy" class="num" type="number" min="0" step="1" value="490">
+        </div>
+        <div class="field">
+          <label for="recv">到账 (¥)</label>
+          <input id="recv" class="num" type="number" min="0" step="1" value="1500">
+        </div>
+        <div class="field">
+          <label for="margin">目标利润率</label>
+          <input id="margin" class="num" type="number" min="0" max="0.9" step="0.05" value="0.35">
+        </div>
+        <div class="field">
+          <label for="extra">成本加成系数</label>
+          <input id="extra" class="num" type="number" min="0.1" max="2" step="0.01" value="0.85">
+        </div>
+        <div class="field wide">
+          <label for="fx">汇率 (1 外币 = ? 元)</label>
+          <input id="fx" class="num" type="number" min="0.0001" step="0.01" placeholder="如 6.69">
+          <small id="fxdate" class="fxtip"></small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /panel 参数区 -->
+
+  <div class="panel respanel">
+  <div class="bestline" id="best" hidden></div>
+  <div class="pickline" id="pick" hidden></div>
+  </div>
+ </aside>
+
+ <section class="main">
+  <div class="panel">
+  <!-- 结果卡片 (JS 填充) -->
+  <div class="rescap"><b>结果</b><span>改上面任一参数即时重算 · 下方表格按定价成本升序</span></div>
+  <div class="stats flat cols-5" id="stats">
+    <div class="stat k-best hero">
+      <div class="stat-k"><span class="dot"></span>最低定价成本</div>
+      <div class="stat-v" id="stCost">–</div>
+      <div class="stat-s" id="stWho">—</div>
+    </div>
+    <div class="stat k-sell">
+      <div class="stat-k">建议售价</div>
+      <div class="stat-v" id="stSell">–</div>
+      <div class="stat-s" id="stSellSub">—</div>
+    </div>
+    <div class="stat k-local">
+      <div class="stat-k">当地售价</div>
+      <div class="stat-v" id="stLocal">–</div>
+      <div class="stat-s" id="stLocalSub">—</div>
+    </div>
+    <div class="stat k-profit">
+      <div class="stat-k">毛利</div>
+      <div class="stat-v" id="stProfit">–</div>
+      <div class="stat-s" id="stProfitSub">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-k">计费重 / 体积</div>
+      <div class="stat-v" id="stWeight">–</div>
+      <div class="stat-s" id="stWeightSub">—</div>
+    </div>
+  </div>
+  </div>
+
+  <!-- 成本对比: 把各渠道的定价成本画成横向条, 一眼看出谁便宜、差距多大 -->
+  <div class="panel cmp">
+    <div class="cmp-h">
+      <b>成本对比</b>
+      <span id="cmpNote">按定价成本从低到高, 条长按比例</span>
+    </div>
+    <div id="cmpRows" class="cmp-rows"></div>
+  </div>
+
+  <div class="toolbar">
+  <input type="search" id="q" placeholder="搜渠道名…" autocomplete="off">
+  <label title="不可发 = 超尺寸/超重/属性不符等被规则挡掉的渠道"><input type="checkbox" id="onlyavail" checked> 只显示可发的</label>
+  <span class="count" id="count"></span>
+  <span class="grow"></span>
+</div>
+
+<div class="tablewrap">
+  <table>
+    <thead>
+      <tr>
+        <th>渠道</th>
+        <th>分区</th>
+        <th style="text-align:right">计费重</th>
+        <th style="text-align:right">体积除数</th>
+        <th style="text-align:right">运费 <span class="u">¥/kg</span></th>
+        <th style="text-align:right">挂号费 <span class="u">¥</span></th>
+        <th style="text-align:right">附加费</th>
+        <th style="text-align:right">定价成本 <span class="u">¥</span></th>
+        <th style="text-align:right">售价 <span class="u">¥</span></th>
+        <th style="text-align:right" id="thLocal">当地售价</th>
+        <th style="text-align:right">毛利 <span class="u">¥</span></th>
+        <th>时效</th>
+        <th>尺寸限制 / 说明</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>没有符合条件的渠道</div>
+</div>
+
+ </section>
+</div><!-- /workbench -->
+
+<div class="syncbar"><span id="sync" class="sync">…</span></div>
+
+<details class="chanlist">
+  <summary>全部渠道清单 (<span id="chancount">–</span> 个)</summary>
+  <div id="chans"></div>
+</details>
+
+<footer>
+  <b class="warnb">报价前请人工核对：</b>尺寸超限、超长费、偏远地区附加费、旺季附加费、VAT/关税、
+  最低计费重、分区归属、申报价值限制与禁运品 —— 这些都没有计入金额。<br>
+  <b>计算口径：</b>
+  体积重 = 长×宽×高÷渠道除数；计费重 = MAX(体积重, 实重)；
+  定价成本 = 运费 + 挂号费 + <b>附加费</b> + 采购价；售价 = 定价成本 ÷ (1−利润率) ÷ 成本加成系数；
+  当地售价 = 售价 ÷ 汇率；毛利 = 到账 − 定价成本。
+</footer>
+
+</div>
+
+<script src="engine.js"></script>
+<script src="data_v2.js"></script>
+<script>
+// 数据来源: 内嵌快照 (data_v2.js) 作离线兜底, 线上优先取后端 /api/data
+let DATA = window.DATA;
+let DATA_REV = null, DATA_UPDATED = null, DATA_FROM = 'offline';
+let DATA_SCOPE = null, DATA_MINE = false;   // 数据归属: scope=用户名, mine=是否本人
+const $ = id => document.getElementById(id);
+
+/** 从后端拉数据; 失败就继续用内嵌快照 (双击打开也能用) */
+async function loadRemoteData() {
+  if (!location.protocol.startsWith('http')) return false;
+  try {
+    const r = await fetch('/api/data', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j || !j.data) throw new Error('后端没有数据');
+    DATA = j.data;
+    DATA_REV = j.rev;
+    DATA_UPDATED = j.updatedAt;
+    DATA_FROM = 'server';
+    DATA_SCOPE = j.scope || null;
+    DATA_MINE = !!j.mine;
+    buildRuleMap();
+    buildCurMap();
+    updateScopeBadge();
+    return true;
+  } catch (e) {
+    console.warn('取后端数据失败, 用本地快照:', e.message);
+    return false;
+  }
+}
+
+// 服务端实时汇率 (每 1 小时自动抓一次)。拿不到就用页面内嵌的快照。
+let FX_LIVE = false;
+async function loadLiveFx() {
+  if (!location.protocol.startsWith('http')) return;
+  try {
+    const r = await fetch('/api/fx', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j || !j.rates || !Object.keys(j.rates).length) return;
+    const sel = $('country');
+    const cur = sel ? sel.value : '';
+    const oldRef = FX_REF[cur];
+    const boxVal = $('fx').value;
+    let changed = false;
+    for (const cn in j.rates) {
+      const v = Number(j.rates[cn]);
+      if (isFinite(v) && v > 0 && FX_REF[cn] !== v) { FX_REF[cn] = v; changed = true; }
+    }
+    FX_DATE = j.date || FX_DATE;
+    if (j.publishedAt) FX_PUBLISHED = j.publishedAt;
+    if (j.source) FX_SOURCE = j.source;
+    FX_LIVE = true;
+    // 用户手动改过汇率就别覆盖 (只有还等于旧参考值时才自动换新)
+    if (changed && cur && (boxVal === '' || String(oldRef) === String(boxVal))) {
+      $('fx').value = FX_REF[cur];
+    }
+    $('fxdate').textContent = `实时汇率 ${FX_PUBLISHED || FX_DATE} · ${fxSourceCn() || '服务端自动刷新'}`;
+    // 汇率没变就别重渲染表格 (每 30 秒重画一次纯属浪费)
+    if (changed && typeof render === 'function') render();
+  } catch (e) { /* 拿不到就用内嵌快照 */ }
+}
+
+/** 轮询后端版本, 有更新就重新拉 */
+async function watchVersion() {
+  if (!location.protocol.startsWith('http')) return;
+  setInterval(async () => {
+    try {
+      const r = await fetch('/api/version', { cache: 'no-store' });
+      const v = await r.json();
+      if (v.rev && DATA_REV && v.rev !== DATA_REV) {
+        if (await loadRemoteData()) { render(); flashSync(); }
+      }
+    } catch (e) { /* 网络抖动忽略 */ }
+  }, 60000);
+}
+
+// ---------------- 登录 / 用户中心 ----------------
+async function apiPost(path, body) {
+  const r = await fetch(path, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const txt = await r.text();
+  let j = null;
+  try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+  if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+  return j;
+}
+
+function openUserMenu() {
+  $('usermenu-items').classList.add('open');
+  $('userchip').setAttribute('aria-expanded', 'true');
+}
+function closeUserMenu() {
+  const m = $('usermenu-items');
+  if (m) m.classList.remove('open');
+  const c = $('userchip');
+  if (c) c.setAttribute('aria-expanded', 'false');
+}
+
+/** 显示当前登录状态 */
+async function refreshLoginState() {
+  updateScopeBadge();
+  const menu = $('usermenu');
+  const btn = $('loginbtn');
+  if (!location.protocol.startsWith('http')) {
+    // 本地双击打开: 没有后端, 隐藏登录
+    menu.style.display = 'none';
+    btn.style.display = 'none';
+    return;
+  }
+  try {
+    const r = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
+    const j = await r.json();
+    if (j && j.user) {
+      menu.style.display = 'inline-block';
+      btn.style.display = 'none';
+      $('ddName').textContent = j.user;
+      $('ddUser').textContent = j.user;
+      $('ddAvatar').textContent = String(j.user).charAt(0);
+      $('ddRole').textContent = j.role === 'admin' ? '管理员' : '普通用户';
+      const ul = $('usersLink');
+      if (ul) ul.style.display = (j.role === 'admin') ? '' : 'none';
+    } else {
+      menu.style.display = 'none';
+      btn.style.display = 'inline-block';
+    }
+  } catch (e) {
+    menu.style.display = 'none';
+    btn.style.display = 'inline-block';
+  }
+}
+
+function openLoginModal() {
+  $('liErr').textContent = '';
+  $('liPass').value = '';
+  $('loginmodal').style.display = 'flex';
+  $('liUser').focus();
+}
+function closeLoginModal() { $('loginmodal').style.display = 'none'; }
+
+$('loginbtn').onclick = openLoginModal;
+$('liCancel').onclick = closeLoginModal;
+$('loginmodal').onclick = (e) => { if (e.target === $('loginmodal')) closeLoginModal(); };
+$('liUser').onkeydown = e => { if (e.key === 'Enter') $('liPass').focus(); };
+$('liPass').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
+
+async function doLogin() {
+  const username = $('liUser').value.trim();
+  const password = $('liPass').value;
+  if (!username || !password) { $('liErr').textContent = '用户名和密码都要填'; return; }
+  $('liGo').disabled = true;
+  $('liErr').textContent = '';
+  try {
+    const j = await apiPost('/api/login', { username, password });
+    closeLoginModal();
+    $('liPass').value = '';
+    await refreshLoginState();
+    // 重载页面: cookie 已经带上, 页面会拉到这个用户自己的数据
+    // (不重调 init(), 免得重复绑定事件)
+    location.reload();
+  } catch (e) {
+    $('liErr').textContent = e.message;
+  } finally {
+    $('liGo').disabled = false;
+  }
+}
+$('liGo').onclick = doLogin;
+const gateLogin = $('gateLogin');
+if (gateLogin) gateLogin.onclick = () => { openLoginModal(); };
+
+$('logout').onclick = async () => {
+  closeUserMenu();
+  try { await apiPost('/api/logout', {}); } catch (e) { /* ignore */ }
+  await refreshLoginState();
+  location.reload();
+};
+
+$('userchip').onclick = (e) => {
+  e.stopPropagation();
+  const m = $('usermenu-items');
+  if (m.classList.contains('open')) closeUserMenu();
+  else openUserMenu();
+};
+document.addEventListener('click', (e) => {
+  const um = $('usermenu');
+  if (um && !um.contains(e.target)) closeUserMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeUserMenu(); closeLoginModal(); }
+});
+
+function flashSync() {
+  const el = $('meta');
+  if (!el) return;
+  el.style.color = 'var(--good)';
+  setTimeout(() => { el.style.color = ''; }, 2500);
+}
+
+/** 国家 -> 币种 (从渠道组数据里取, 没有就空)
+    注意: 必须可重建 —— 未登录时 DATA 是 null (data_v2.js 给的是空壳),
+    如果在这里用 IIFE 立即构建, 登录后就永远是个空 Map, 币种会一直缺失。 */
+let CUR_BY_COUNTRY = new Map();
+function buildCurMap() {
+  const m = new Map();
+  for (const g of (DATA && DATA.groups) || []) {
+    if (g.country && g.currency && !m.has(g.country)) m.set(g.country, g.currency);
+  }
+  CUR_BY_COUNTRY = m;
+}
+buildCurMap();
+function curOf(country) { return CUR_BY_COUNTRY.get(country) || ''; }
+
+/** 登录墙: 显示/隐藏 (挡住整个计算区) */
+function showGate(msg) {
+  const g = $('gate');
+  if (!g) return;
+  if (msg) {
+    const p = g.querySelector('.gcard p.muted');
+    if (p) p.innerHTML = msg;
+  }
+  g.hidden = false;
+  document.body.classList.add('locked');
+}
+function hideGate() {
+  const g = $('gate');
+  if (!g) return;
+  g.hidden = true;
+  document.body.classList.remove('locked');
+}
+
+/** 数据归属徽标: 让用户一眼看到当前算的是谁的价格表 */
+function updateScopeBadge() {
+  const b = $('scopeBadge');
+  if (!b) return;
+  if (!DATA) {
+    b.hidden = false;
+    b.className = 'scopebadge';
+    b.textContent = '未登录';
+    return;
+  }
+  if (DATA_SCOPE && DATA_MINE) {
+    b.hidden = false;
+    b.className = 'scopebadge mine';
+    b.textContent = DATA_SCOPE + ' 的价格表';
+  } else if (DATA_SCOPE) {
+    b.hidden = false;
+    b.className = 'scopebadge';
+    b.textContent = '站主公开数据';
+  } else {
+    b.hidden = true;
+  }
+}
+
+// 参考汇率 (1 外币 = ? 人民币)。仅作占位, 实际报价请按当天汇率改。
+let FX_DATE = '2026-11-11';
+let FX_PUBLISHED = '2026-11-11 10:05';    // 牌价发布时间 (线上从服务端拿, 离线版由 update_fx.py 写入)
+let FX_SOURCE = 'boc.cn';       // 汇率来源代码 (同上)
+// fx.json 的 source 字段 -> 人话
+const FX_SRC_CN = {
+  'boc.cn': '中国银行现汇卖出价',
+  'open.er-api.com': '国际中间价',
+  'frankfurter.app': '欧洲央行定盘价',
+};
+function fxSourceCn() { return FX_SRC_CN[FX_SOURCE] || FX_SOURCE || ''; }
+const FX_REF = {
+  '美国': 6.6911,
+  '加拿大': 4.7261,
+  '墨西哥': 0.3625,
+  '澳大利亚': 4.6169,
+  '英国': 8.9509,
+  '法国': 7.4844,
+  '德国': 7.4844,
+  '意大利': 7.4844,
+  '西班牙': 7.4844,
+  '比利时': 7.4844,
+  '波兰': 1.7126,
+  '瑞典': 0.6794,
+  '爱尔兰': 7.4844,
+  '沙特阿拉伯': 1.7912,
+  '阿联酋': 1.8301,
+};
+// FX_DATE: 参考汇率取数日 2026-11-11 (用 脚本/update_fx.py 刷新)
+let ATTR = '普货';
+// 选中的渠道 (用户点选)。存 key: sheet|zone|line|attr
+let PICKED = null;
+
+// 运输方式筛选: 全部 / 空运 / 海运
+let TRANS = 'all';
+
+/**
+ * 按报价表的「参考时效」判定运输方式。
+ *
+ * 口径 (Berg 确认): 时效落在 18-30 这一档的算海运, 其它算空运。
+ * 海运大包专线在报价表里写的是自然天 (18-26天 / 20-28天 / 18-30),
+ * 空运专线写的是「工作日」(10-15工作日 / 19-21工作日) 或不带单位 (10-15)。
+ * 所以除了数值区间, 还要把「工作日」排除掉 —— 否则云途到南美的 19-21工作日
+ * 会被误判成海运。
+ */
+function isSeaLead(lead) {
+  const s = String(lead == null ? '' : lead).trim();
+  if (!s) return false;                    // 没写时效 -> 按空运处理
+  if (/工作日/.test(s)) return false;       // 空运专线写工作日 (云途到南美 19-21工作日)
+  const m = s.match(/(\d+)\s*[-~–—至]\s*(\d+)/);
+  if (!m) return false;
+  const lo = +m[1], hi = +m[2];
+  // 带「天」= 自然日, 海运大包专线就是这个写法 (18-26天 / 20-28天) -> 按 18-30 区间判
+  if (/天/.test(s)) return lo >= 18 && hi <= 30;
+  // 纯数字 (没单位): 只认正好 18-30。
+  // 4PX 到秘鲁是 20-25 —— 同样是空运专线, 数值落在 18-30 区间里但不能算海运。
+  return lo === 18 && hi === 30;
+}
+
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return '–';
+  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function round2(x) { return Math.round(x * 100) / 100; }
+
+/** 让某一行闪一下 (提示「这个点不了」) */
+function flashRow(tr, cls) {
+  if (!tr) return;
+  tr.classList.add(cls);
+  setTimeout(() => tr.classList.remove(cls), 700);
+}
+function fmtKg(n) {
+  if (n === null || n === undefined || isNaN(n)) return '–';
+  return (Math.round(n * 100) / 100).toString();
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 规则索引 —— 数据可能是 null (未登录), 登录拿到数据后要重建
+let RULE_MAP = new Map();
+function buildRuleMap() {
+  RULE_MAP = new Map();
+  for (const r of ((DATA && DATA.rules) || [])) {
+    RULE_MAP.set(`${r.channel}|${r.section}|${r.country}|${r.zone}`, r);
+  }
+}
+buildRuleMap();
+
+function readInputs() {
+  return {
+    country: $('country').value,
+    kg: parseFloat($('kg').value) || 0,
+    L: parseFloat($('L').value) || 0,
+    W: parseFloat($('W').value) || 0,
+    H: parseFloat($('H').value) || 0,
+    attr: ATTR,
+    buy: parseFloat($('buy').value) || 0,
+    recv: parseFloat($('recv').value) || 0,
+    margin: parseFloat($('margin').value),
+    extra: parseFloat($('extra').value) || 0.85,
+    fx: parseFloat($('fx').value) || 0,   // 0 = 不做货币换算
+  };
+}
+
+/**
+ * 成本对比图: 把各渠道的定价成本画成横向条。
+ * 条长按相对最低值缩放, 一眼看出谁便宜、贵多少。
+ * 只画前 4 条 —— 再多就成噪音了, 完整的看下面的表格。
+ */
+function renderCmp(res, list, best) {
+  const box = $('cmpRows');
+  if (!box) return;
+  // 选了空运/海运时, 对比图只画该分类的渠道 (否则图里还是另一个运输方式)
+  const src = TRANS !== 'all' ? list : (res.rows || []);
+  const ok = src.filter(r => r.matched && !r.blocked);
+  if (!ok.length) {
+    box.innerHTML = '<div class="cmp-empty">当前条件下没有可发的渠道</div>';
+    const n = $('cmpNote');
+    if (n) n.textContent = '没有可对比的渠道';
+    return;
+  }
+  const sorted = ok.slice().sort((a, b) => a.total - b.total);
+  const lo = sorted[0].total;
+  const hi = sorted[sorted.length - 1].total;
+  const top = sorted.slice(0, 4);   // 只显示最低的 4 个, 再多就成噪音了
+  const n = $('cmpNote');
+  if (n) {
+    n.textContent = sorted.length > 4
+      ? ('共 ' + sorted.length + ' 个可发渠道, 显示最低的 4 个 · 完整清单看下方表格')
+      : ('共 ' + sorted.length + ' 个可发渠道 · 完整清单看下方表格');
+  }
+  // 条长: 越便宜越长。但各渠道成本常常只差几个百分点, 直接按比例画会挤成一团 ——
+  // 所以把区间压缩到 30%~100%: 最便宜的满格, 最贵的只有三成, 差距一眼能看出来。
+  const span = Math.max(hi - lo, 1e-6);
+  let html = '';
+  for (const r of top) {
+    const rel = (r.total - lo) / span;          // 0 = 最便宜, 1 = 最贵
+    const w = 100 - 70 * rel;                     // 100 → 30
+    const isBest = r.isBest;
+    const isPicked = PICKED === rowKey(r);
+    const diff = lo > 0 ? (r.total - lo) / lo * 100 : 0;
+    html += '<div class="cmpr' + (isBest ? ' is-best' : '') + (isPicked ? ' is-picked' : '') + '">' +
+      '<div class="cmpr-n" title="' + esc(r.sheet) + '">' + esc(r.sheet) +
+        (r.line && r.line !== '-' ? '<span class="sub2">' + esc(r.line) + '</span>' : '') + '</div>' +
+      '<div class="cmpr-b"><i style="width:' + w.toFixed(2) + '%"></i></div>' +
+      '<div class="cmpr-v">¥' + fmt(r.total) +
+        '<div class="cmpr-d">' + (diff < 0.05 ? '基准' : '+' + diff.toFixed(1) + '%') + '</div>' +
+      '</div></div>';
+  }
+  box.innerHTML = html;
+}
+
+function render() {
+  const inp = readInputs();
+  const groups = DATA.groups.filter(g => g.country === inp.country);
+  // preferRates=true: 价格走报价表的费率库 (更全、更新更频繁),
+  // 定价规则只用来补充尺寸限制/重量上下限/超尺寸加收。
+  const res = calc.quoteAll(groups, DATA.tiers, inp, RULE_MAP, true);
+
+  const vol = inp.L * inp.W * inp.H;
+  // 体积重各渠道除数不同 (云途 8000 / 日本 9000 / 三态 6000 ...),
+  // 所以体积/计费重按各渠道实际除数显示在表格里, 这里只留参考值给结果卡片。
+
+  // 基准价: 选了空运/海运后, 「最低定价成本」要按该分类里最便宜的算,
+  // 不能还拿全局最低 (那是另一个运输方式) 来当建议。
+  let best = res.best;
+  if (TRANS !== 'all') {
+    const av = (res.rows || []).filter(r => r.matched && !r.blocked
+      && ((TRANS === 'sea') === isSeaLead(r.lead)));
+    best = av.length ? av.reduce((a, b) => (b.total < a.total ? b : a), av[0]) : null;
+  }
+  const bestKey = best ? rowKey(best) : '';
+  // 结果卡片
+  const S = id => $(id);
+  if (best) {
+    S('stCost').textContent = '¥' + fmt(best.total);
+    // 涨幅注: 与第二便宜差多少, 给个参照
+    S('stWho').textContent = best.sheet
+      + (best.line && best.line !== '-' ? ' · ' + best.line : '')
+      + (best.zone && best.zone !== '-' ? ' · ' + best.zone : '');
+    S('stSell').textContent = '¥' + fmt(best.sells.custom);
+    S('stSellSub').textContent =
+      `定价成本 ÷ ${(1 - inp.margin).toFixed(2)} ÷ ${inp.extra}`
+      + (best.lead ? ' · ' + leadText(best.lead) : '');
+    const cur = curOf(inp.country);
+    if (best.fx > 0) {
+      S('stLocal').textContent = (cur ? cur + ' ' : '') + fmt(best.locals.custom);
+      S('stLocalSub').textContent = `汇率 1 ${cur || '外币'} = ${Number(best.fx).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')} 元`;
+    } else {
+      S('stLocal').textContent = '–';
+      S('stLocalSub').textContent = '未做货币换算';
+    }
+    const pv = S('stProfit');
+    pv.textContent = '¥' + fmt(best.profit);
+    pv.className = 'stat-v ' + (best.profit > 0 ? 'pos' : 'neg');
+    // 毛利按「到账」口径: 到手多少钱减去成本。
+    // 与「建议售价」不是一回事 (那是按目标利润率倒推的最低售价), 所以副标题写清口径。
+    S('stProfitSub').textContent = inp.recv > 0
+      ? `到账 ¥${fmt(inp.recv)} − 成本 · 利润率 ${(best.profit / inp.recv * 100).toFixed(1)}%`
+      : '到账 ¥0';
+    S('stWeight').textContent = fmtKg(best.chargeKg) + ' kg';
+    S('stWeightSub').textContent = `体积 ${fmtKg(vol)} cm³ · 采购价 ¥${fmt(inp.buy)}`;
+  } else {
+    ['stCost','stWho','stSell','stSellSub','stLocal','stLocalSub',
+     'stProfit','stProfitSub','stWeight','stWeightSub'].forEach(id => {
+      const e = S(id); if (!e) return;
+      if (id === 'stWho' || id.endsWith('Sub')) e.textContent = '—';
+      else e.textContent = '–';
+    });
+  }
+
+  // 表头的「当地售价」列标出币种, 免得把外币当人民币看
+  const cur = curOf(inp.country);
+  const thL = $('thLocal');
+  if (thL) thL.textContent = cur ? `当地售价 (${cur})` : '当地售价';
+
+  const kw = $('q').value.trim().toLowerCase();
+  const onlyAvail = $('onlyavail').checked;
+
+  let list = res.rows.slice().sort((a, b) => {
+    // 可发的排前面, 再按成本升序
+    const aOk = a.matched && !a.blocked, bOk = b.matched && !b.blocked;
+    if (aOk !== bOk) return aOk ? -1 : 1;
+    if (aOk) return a.total - b.total;
+    return String(a.sheet).localeCompare(String(b.sheet));
+  });
+  if (kw) list = list.filter(r =>
+    String(r.sheet).toLowerCase().includes(kw) ||
+    String(r.line || '').toLowerCase().includes(kw));
+  // 「只显示可发的」(默认勾上): 大多数人只关心能发的渠道
+  if (onlyAvail) list = list.filter(r => r.matched && !r.blocked);
+  // 运输方式: 按报价表时效分海运/空运 (没写时效的算空运)
+  if (TRANS !== 'all') list = list.filter(r => (TRANS === 'sea') === isSeaLead(r.lead));
+
+  // 价格条刻度: 用全部结果的最便宜/最贵定标, 搜索筛选时不跳动
+  const totals = res.rows.filter(x => x.matched && !x.blocked).map(x => x.total);
+  const tMin = totals.length ? Math.min.apply(null, totals) : 0;
+  const tMax = totals.length ? Math.max.apply(null, totals) : 0;
+  const barPct = (v) => {
+    if (!(tMax > tMin)) return 100;
+    return 15 + 85 * (v - tMin) / (tMax - tMin);
+  };
+  // 数据跨度太小时条形图看不出差异 (比如 606~665 只差 10%), 画了纯属噪音
+  const barNoise = !(tMin > 0) || (tMax - tMin) / tMin < 0.25;
+
+  // 专线三线 (÷18000 / ÷10000 / ÷6000) 在报价表里是三条独立产品线, 网站三行并列显示。
+  // 原《物流定价计算器》的口径是三条线各算一遍取 MIN —— 那相当于「默认选最便宜的那条」。
+  // 这里把组内最便宜的那条标出来, 供用户参考 (绿色只留给全局最低价, 这里用中性角标)。
+  const lineBest = new Set();
+  {
+    const gmap = new Map();
+    for (const r of res.rows) {
+      if (!(r.matched && !r.blocked)) continue;
+      if (!r.line || r.line === '-') continue;
+      const k = [r.sheet, r.country, r.zone || '-', r.attr || ''].join('|');
+      if (!gmap.has(k)) gmap.set(k, []);
+      gmap.get(k).push(r);
+    }
+    for (const arr of gmap.values()) {
+      if (arr.length < 2) continue;           // 只有一条线谈不上「最便宜」
+      let b = arr[0];
+      for (const r of arr) if (r.total < b.total) b = r;
+      lineBest.add(rowKey(b));
+    }
+  }
+
+  renderCmp(res, list, best);
+
+  const tb = $('rows');
+  tb.innerHTML = '';
+  for (const r of list) {
+    const tr = document.createElement('tr');
+    const ok = r.matched && !r.blocked;
+    const isBestNow = !!bestKey && rowKey(r) === bestKey;
+    if (isBestNow) tr.className = 'best';
+    else if (!ok) tr.className = 'na';
+    tr.classList.add('pickable');
+    const rkey = rowKey(r);
+    if (PICKED === rkey) tr.classList.add('picked');
+    tr.dataset.key = rkey;
+
+    const modeCn = r.mode === 'band' ? '按重分段'
+                 : r.mode === 'firstnext' ? '首重续重' : '体积除数';
+
+    let note = '';
+    if (r.blocked) note = `<div class="note"><span class="tag bad">不可发</span>${esc(r.note)}</div>`;
+    else if (r.oversize) note = `<div class="note"><span class="tag warn">超尺寸</span>${esc(r.note)}（仍可发，加收超尺寸费）</div>`;
+
+    tr.innerHTML =
+      `<td><div class="ch">${esc(r.sheet)}</div>` +
+        `<div class="sub">` +
+        (isBestNow ? '<span class="tag best">最低</span>' : '') +
+        (lineBest.has(rkey) ? '<span class="tag lbest" title="这条产品线在本渠道的三条线里最便宜 (原计算器口径取 MIN 就是它)">线内最低</span>' : '') +
+        (PICKED === rkey ? '<span class="tag picked">已选中</span>' : '') +
+        `<span class="tag mode">${modeCn}</span>` +
+        (r.lead ? `<span class="tag ${isSeaLead(r.lead) ? 'sea' : 'air'}" title="按报价表参考时效判定: 18-30 这一档算海运, 其它算空运">${isSeaLead(r.lead) ? '海运' : '空运'}</span>` : '') +
+        (r.line && r.line !== '-' ? `<span class="ltag">${esc(r.line)}</span>` : '') +
+        `</div>${note}</td>` +
+      `<td>${r.zone && r.zone !== '-' ? esc(r.zone) : '–'}</td>` +
+      `<td class="num">${ok ? fmtKg(r.chargeKg) : '–'}</td>` +
+      `<td class="num">${r.divUncertain
+          ? '<span class="uncert" title="报价表的备注区和总目录都没给这个国家的体积重除数, 此处按兜底值估算, 请人工核对">不确定</span>'
+          : (r.divUsed ? r.divUsed : '–')}</td>` +
+      `<td class="num">${ok ? fmt(r.freight) : '–'}</td>` +
+      `<td class="num">${ok ? fmt(r.fee) : '–'}</td>` +
+      `<td class="num"${ok && !r.surFee ? ' title="按报价表规则未触发附加费"' : ''}>${ok && r.surFee ? fmt(r.surFee) : '–'}</td>` +
+      `<td class="num costcell"><span class="pbar${barNoise ? ' flat' : ''}" title="${ok && best ? '比最低价贵 ¥' + fmt(r.total - best.total) : ''}"><i style="width:${barPct(r.total).toFixed(1)}%"></i></span>` +
+        `<b class="money">${ok ? fmt(r.total) : '–'}</b></td>` +
+      `<td class="num">${ok ? fmt(r.sells.custom) : '–'}</td>` +
+      `<td class="num">${ok && r.fx > 0 ? fmt(r.locals.custom) : '–'}</td>` +
+      `<td class="num ${ok ? (r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '') : ''}">${ok ? fmt(r.profit) : '–'}</td>` +
+      `<td>${r.lead ? esc(leadText(r.lead)) : '<span class="dimtext">未提供</span>'}</td>` +
+      `<td class="limits">${esc(limText(r.lim) || (r.limits && String(r.limits).length > 6
+        ? String(r.limits).slice(0, 110) : '')) || '–'}</td>`;
+    tr.addEventListener('click', () => {
+      // 不可发的渠道不让选中 —— 选了也没法报价, 还容易让人以为「就差一点点」
+      if (!ok) { flashRow(tr, 'flash-na'); return; }
+      PICKED = (PICKED === rkey) ? null : rkey;   // 再点一次取消
+      render();
+    });
+    tb.appendChild(tr);
+  }
+  // 整列都是「–」的列 (常见: 分区 / 附加费) 隐藏掉, 别白占宽度挤价格列
+  const hasZone = list.some(r => r.zone && r.zone !== '-');
+  const hasSur = list.some(r => r.matched && !r.blocked && r.surFee);
+  const tbl = document.querySelector('.tablewrap table');
+  if (tbl) {
+    tbl.classList.toggle('no-zone', !hasZone);
+    tbl.classList.toggle('no-sur', !hasSur);
+  }
+  $('empty').hidden = list.length > 0;
+  const totalGroups = (DATA.meta && DATA.meta.groups) || 0;
+  const transTxt = TRANS === 'sea' ? ' · 仅海运' : TRANS === 'air' ? ' · 仅空运' : '';
+  $('count').textContent = totalGroups
+    ? `本国家 ${list.length} 条报价 · 全部 ${totalGroups} 条${transTxt}`
+    : `${list.length} 个渠道${transTxt}`;
+
+  renderPick(list, res.rows, best, inp);
+}
+
+/** 时效写法统一: 报价表里有 "6-12天" / "6-12工作日" / "7-12" / "—" 四种混排 */
+function leadText(s) {
+  let v = String(s).trim();
+  if (!v) return '';
+  if (/^\d+\s*[-~–至]\s*\d+$/.test(v)) v += ' 天';        // "7-12"   -> "7-12 天"
+  else if (/^\d+$/.test(v)) v += ' 天';                     // "7"      -> "7 天"
+  else if (/^\d+\s*[-~–至]\s*\d+\s*天$/.test(v)) v = v.replace(/\s*天$/, ' 天');        // "6-12天" -> "6-12 天"
+  else if (/^\d+\s*[-~–至]\s*\d+\s*个?工作日$/.test(v)) v = v.replace(/\s*个?工作日$/, ' 个工作日');
+  return v;
+}
+
+/** 把 lim 结构转成一句人话 */
+function limText(lim) {
+  if (!lim) return '';
+  const parts = [];
+  if (lim.maxDim) parts.push(`最大 ${lim.maxDim.join('×')}cm`);
+  if (lim.altMaxDim) parts.push(`加收后可发 ${lim.altMaxDim.join('×')}cm`);
+  if (lim.maxSide != null) parts.push(`最长边≤${lim.maxSide}cm`);
+  if (lim.maxSide2 != null) parts.push(`第二边≤${lim.maxSide2}cm`);
+  if (lim.maxGirth1 != null) parts.push(`围长≤${lim.maxGirth1}cm`);
+  if (lim.maxGirth2 != null) parts.push(`长+2×(宽+高)≤${lim.maxGirth2}cm`);
+  if (lim.maxSum3 != null) parts.push(`三边和≤${lim.maxSum3}cm`);
+  if (lim.maxWt != null) parts.push(`实重≤${lim.maxWt}kg`);
+  if (lim.maxVolM3 != null) parts.push(`体积≤${lim.maxVolM3}m³`);
+  if (lim.minDim) parts.push(`最小 ${lim.minDim.join('×')}cm`);
+  return parts.join(' · ');
+}
+
+/** 行的唯一标识 (同一渠道可能有多条产品线/分区) */
+function rowKey(r) {
+  return [r.sheet, r.zone || '-', r.line || '-', r.attr || ''].join('|');
+}
+
+/** 渲染「已选渠道」面板 */
+function renderPick(list, allRows, best, inp) {
+  const box = $('pick');
+  if (!PICKED) { box.hidden = true; box.innerHTML = ''; return; }
+  // 先在当前显示的列表里找, 找不到再到全部结果里找 (被搜索/筛选隐藏时仍可查看)
+  const r = list.find(x => rowKey(x) === PICKED)
+        || (allRows || []).find(x => rowKey(x) === PICKED);
+  if (!r) { box.hidden = true; box.innerHTML = ''; PICKED = null; return; }
+
+  const ok = r.matched && !r.blocked;
+  const modeCn = r.mode === 'band' ? '按重分段'
+               : r.mode === 'firstnext' ? '首重续重' : '体积除数';
+
+  let diff = '';
+  if (ok && best && best !== r) {
+    const d = round2(r.total - best.total);
+    const pct = best.total ? (d / best.total * 100) : 0;
+    diff = d > 0.005
+      ? `<div class="pdiff">比最低价 <b>¥${fmt(best.total)}</b> (${esc(best.sheet)}) <span class="up">贵 ¥${fmt(d)} (+${pct.toFixed(1)}%)</span></div>`
+      : d < -0.005
+      ? `<div class="pdiff">比最低价 <b>¥${fmt(best.total)}</b> (${esc(best.sheet)}) <span class="dn">便宜 ¥${fmt(-d)} (${pct.toFixed(1)}%)</span></div>`
+      : '<div class="pdiff">与最低价相同</div>';
+  } else if (ok && best && rowKey(r) === rowKey(best)) {
+    diff = '<div class="pdiff"><span class="dn">这是当前最低价渠道</span></div>';
+  }
+
+  let note = '';
+  if (r.blocked) note = `<div class="pdiff"><span class="up">不可发: ${esc(r.note || '超出限制')}</span></div>`;
+  else if (r.oversize) note = `<div class="pdiff"><span class="up">${esc(r.note || '')}（仍可发，加收超尺寸费）</span></div>`;
+
+  const grid = ok ? `
+    <div><span>定价成本</span><b>¥${fmt(r.total)}</b></div>
+    <div><span>运费</span><b>¥${fmt(r.freight)}</b></div>
+    <div><span>挂号费</span><b>¥${fmt(r.fee)}</b></div>
+    <div><span>附加费</span><b>${r.surFee ? '¥' + fmt(r.surFee) : '–'}</b></div>
+    <div><span>采购价</span><b>¥${fmt(inp.buy)}</b></div>
+    <div><span>建议售价</span><b>${ok ? '¥' + fmt(r.sells.custom) : '不可发'}</b></div>
+    <div><span>当地售价${r.fx > 0 ? '' : '(需填汇率)'}</span><b>${r.fx > 0 ? fmt(r.locals.custom) : '–'}</b></div>
+    <div><span>毛利额</span><b>${r.profit == null ? '不可发' : '¥' + fmt(r.profit)}</b></div>
+    <div><span>利润比 (相对到账)</span><b>${r.profitRatio == null ? '–' : (r.profitRatio * 100).toFixed(1) + '%'}</b></div>
+    <div><span>计费重</span><b>${fmtKg(r.chargeKg)} kg</b></div>
+    <div><span>体积除数</span><b class="${r.divUncertain ? 'uncert' : ''}" title="${r.divUncertain ? '报价表没给这个国家的体积重除数, 按兜底值估算' : ''}">${r.divUncertain ? '不确定' : (r.divUsed || '–')}</b></div>
+    <div><span>三档售价</span><b>${fmt(r.sells[0.30])} / ${fmt(r.sells[0.35])} / ${fmt(r.sells[0.40])}</b></div>
+    <div><span>时效</span><b>${r.lead ? esc(r.lead) : '–'}</b></div>` : '';
+
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="phead">${ok ? '已选渠道' : '已选渠道 (不可发)'}` +
+    `<b>${ok ? '¥' + fmt(r.total) : '–'}</b>` +
+    `<span class="who">${esc(r.sheet)}</span>` +
+    (r.line && r.line !== '-' ? `<span class="ltag">${esc(r.line)}</span>` : '') +
+    (r.zone && r.zone !== '-' ? `<span class="tag">${esc(r.zone)}</span>` : '') +
+    `<span class="tag mode">${modeCn}</span></div>` +
+    diff + note +
+    (grid ? `<div class="pgrid">${grid}</div>` : '') +
+    (r.surList && r.surList.length
+      ? `<div class="phint">附加费: ` + r.surList.map(s =>
+          `${esc(s.name)} ¥${fmt(s.fee)}`).join(' + ') + `</div>` : '') +
+    (r.surManual && r.surManual.length
+      ? `<div class="phint">另需人工核对: ` +
+        r.surManual.map(s => esc(s.name) + (s.fee ? ` ¥${fmt(s.fee)}` : '')).join('、') +
+        `</div>` : '') +
+    (limText(r.lim) ? `<div class="phint">尺寸限制: ${esc(limText(r.lim))}</div>` : '') +
+    (r.limits ? `<div class="phint">原表限制: ${esc(String(r.limits).slice(0, 200))}</div>` : '') +
+    `<div class="pacts">` +
+      `<button id="pickcopy">复制这条报价</button>` +
+      `<button id="pickclear" class="ghost">取消选择</button>` +
+    `</div>`;
+
+  $('pickcopy').addEventListener('click', () => copyQuote(r, inp));
+  $('pickclear').addEventListener('click', () => { PICKED = null; render(); });
+}
+
+/** 复制单条报价为文本 */
+function copyQuote(r, inp) {
+  const ok = r.matched && !r.blocked;
+  const lines = [
+    `渠道: ${r.sheet}${r.line && r.line !== '-' ? ' / ' + r.line : ''}${r.zone && r.zone !== '-' ? ' ' + r.zone : ''}`,
+    `国家: ${r.country}  重量: ${inp.kg} kg  尺寸: ${inp.L}x${inp.W}x${inp.H} cm  属性: ${inp.attr}`,
+    ok ? `计费重: ${fmtKg(r.chargeKg)} kg${r.divUsed ? ' (体积除数 ' + r.divUsed + ')' : ''}` : '状态: 不可发',
+    ok ? `运费: ¥${fmt(r.freight)}  挂号费: ¥${fmt(r.fee)}` +
+         (r.surFee ? `  附加费: ¥${fmt(r.surFee)}` : '') : '',
+    ok && r.surList && r.surList.length
+      ? `附加费明细: ${r.surList.map(s => s.name + ' ¥' + fmt(s.fee)).join(' + ')}` : '',
+    ok ? `定价成本: ¥${fmt(r.total)} (含采购价 ¥${fmt(inp.buy)})` : '',
+    ok ? `建议售价: ¥${fmt(r.sells.custom)} (${(inp.margin * 100).toFixed(0)}% 毛利)` : '',
+    ok && r.fx > 0 ? `当地售价: ${fmt(r.locals.custom)}` : '',
+    ok ? `毛利额: ¥${fmt(r.profit)}  利润比: ${(r.profitRatio * 100).toFixed(1)}%` : '',
+    r.lead ? `时效: ${r.lead}` : '',
+    r.limits ? `限制: ${String(r.limits).slice(0, 200)}` : '',
+    r.note ? `备注: ${r.note}` : '',
+  ].filter(Boolean);
+  const text = lines.join('\n');
+  const btn = $('pickcopy');
+  const done = (ok2) => {
+    btn.textContent = ok2 ? '已复制 ✓' : '复制失败';
+    setTimeout(() => { btn.textContent = '复制这条报价'; }, 1600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => done(true), () => done(fallbackCopy(text)));
+  } else {
+    done(fallbackCopy(text));
+  }
+}
+
+/** file:// 下 clipboard API 常被拦, 退回 execCommand */
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  let okc = false;
+  try { okc = document.execCommand('copy'); } catch (e) { okc = false; }
+  document.body.removeChild(ta);
+  return okc;
+}
+
+function init() {
+  if (!DATA) {
+    // 线上没登录时 data_v2.js 只给空壳; 本地文件缺失也是这个分支
+    const online = location.protocol.startsWith('http');
+    showGate(online
+      ? '报价数据只对登录用户开放，登录后自动显示你自己的价格表。'
+      : '数据未加载：请确认 data_v2.js 与本页面在同一目录。');
+    $('meta').textContent = online ? '未登录' : '数据未加载';
+    return;
+  }
+  hideGate();
+  buildRuleMap();
+  buildCurMap();
+  const sel = $('country');
+  sel.innerHTML = DATA.countries.map(c => `<option value="${c.name}">${c.label}</option>`).join('');
+
+  // 支持 URL 参数预填: ?country=德国&kg=8&L=45&W=35&H=25&attr=带电&buy=490&recv=1500
+  const qp = new URLSearchParams(location.search);
+  for (const k of ['kg', 'L', 'W', 'H', 'buy', 'recv', 'margin', 'extra']) {
+    if (qp.has(k)) $(k).value = qp.get(k);
+  }
+  if (qp.has('country') && DATA.countries.some(c => c.name === qp.get('country'))) {
+    sel.value = qp.get('country');
+  }
+  // 汇率: URL 指定优先, 否则按国家填参考值
+  if (qp.has('fx')) $('fx').value = qp.get('fx');
+  else if (!qp.has('fx') && FX_REF[sel.value]) $('fx').value = FX_REF[sel.value];
+  $('fxdate').textContent = FX_LIVE
+    ? `实时汇率 ${FX_PUBLISHED || FX_DATE} · ${fxSourceCn() || '服务端自动刷新'}`
+    : '参考汇率 ' + FX_DATE + (fxSourceCn() ? ' · ' + fxSourceCn() : '') + ' · 请按当天汇率改';
+  if (qp.get('attr') === '带电') {
+    ATTR = '带电';
+    for (const x of $('attr').children) x.classList.toggle('on', x.dataset.v === '带电');
+  }
+  $('meta').textContent =
+    `${DATA.meta.channels} 个渠道 · ${DATA.meta.groups} 条报价 · ${DATA.meta.tiers} 条费率档` +
+    `（报价表覆盖 ${DATA.meta.countriesAll || DATA.meta.countries} 个国家/地区, 列表只列常用 ${DATA.meta.countries} 个）`;
+  const sync = $('sync');
+  if (sync) {
+    if (DATA_FROM === 'server' && DATA_REV) {
+      const who = DATA_MINE ? `本人数据 (${DATA_SCOPE})` : `站主公开数据 (${DATA_SCOPE || 'admin'})`;
+      sync.textContent = `已连接后台 · 数据版本 v${DATA_REV} · ${who}` +
+        (DATA_UPDATED ? ` · 更新于 ${new Date(DATA_UPDATED).toLocaleString('zh-CN')}` : '');
+      sync.className = 'sync ok';
+    } else {
+      sync.textContent = '离线快照 · 双击打开时的本地数据';
+      sync.className = 'sync';
+    }
+  }
+
+  // 渠道清单
+  const cl = DATA.meta.channelList || [];
+  $('chancount').textContent = cl.length;
+  $('chans').innerHTML = cl.map(c =>
+    `<span class="ctag${c.attr.includes('带电') ? ' b' : ''}${c.attr.includes('普货') ? ' p' : ''}">` +
+    `${esc(c.sheet)}<i>${c.groups}</i></span>`).join('');
+
+  for (const id of ['country', 'kg', 'L', 'W', 'H', 'buy', 'recv', 'margin', 'extra', 'fx']) {
+    $(id).addEventListener('input', render);
+    $(id).addEventListener('change', render);
+  }
+  // 换国家时换成该国的参考汇率 (汇率跟随国家; 需要别的汇率时选完国家再手改)
+  sel.addEventListener('change', () => {
+    const ref = FX_REF[sel.value];
+    if (ref) $('fx').value = ref;
+    render();
+  });
+  $('q').addEventListener('input', render);
+  $('onlyavail').addEventListener('change', render);
+  // 运输方式分段控件
+  $('trans').addEventListener('click', ev => {
+    const b = ev.target.closest('button[data-v]');
+    if (!b) return;
+    TRANS = b.dataset.v;
+    for (const x of $('trans').children) x.classList.toggle('on', x === b);
+    render();
+  });
+  
+
+  // 属性切换
+  $('attr').addEventListener('click', ev => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    ATTR = b.dataset.v;
+    for (const x of $('attr').children) x.classList.toggle('on', x === b);
+    render();
+  });
+
+  render();
+}
+(async function boot() {
+  await loadRemoteData();
+  init();
+  // 没数据 = 没登录 (线上) 或文件缺失 (本地): 把登录墙亮起来
+  if (!DATA) {
+    showGate(location.protocol.startsWith('http')
+      ? '报价数据只对登录用户开放，登录后自动显示你自己的价格表。'
+      : '数据未加载：请确认 data_v2.js 与本页面在同一目录。');
+    await refreshLoginState();
+    return;
+  }
+  await loadLiveFx();
+  await refreshLoginState();
+  watchVersion();
+  // 每 30 秒同步一次汇率 (服务端每分钟抓一次中行牌价, 端到端最多约 90 秒)
+  setInterval(loadLiveFx, 30 * 1000);
+})();
+</script>
+</body>
+</html>

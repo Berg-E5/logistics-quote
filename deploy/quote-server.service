@@ -1,0 +1,20 @@
+[Unit]
+Description=物流报价网站后端 (Node)
+Documentation=https://quote.byberg.store
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/quote.byberg.store
+ExecStart=/usr/bin/node server/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=8792
+Environment=HOST=127.0.0.1
+StandardOutput=append:/var/log/quote-server.log
+StandardError=append:/var/log/quote-server.err.log
+
+[Install]
+WantedBy=multi-user.target
