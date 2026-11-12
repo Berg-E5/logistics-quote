@@ -10,6 +10,12 @@
 #   2. 从 GitHub 下载程序包 (公开仓库, 不需要登录)
 #   3. 跑 install.sh: 装 systemd + nginx + 证书 + 建 admin 账号 + 自检
 #
+# 数据说明:
+#   这个脚本装的是**程序**, GitHub 仓库里不含报价数据 (报价表和账号数据都不在公开仓库里)。
+#   装完是空站 —— 登录后自己上传报价表做整表导入。
+#   想直接用现成数据, 改用带数据的发布包:
+#     bash deploy/install-remote.sh root@目标服务器 <域名>
+#
 # 程序包从 GitHub 拉:
 #   https://github.com/Berg-E5/logistics-quote/archive/refs/heads/main.tar.gz
 #
@@ -56,7 +62,7 @@ echo "    下载程序包..."
 mkdir -p "$WORK"
 if ! curl -fsSL --retry 3 "$REPO_URL/archive/refs/heads/main.tar.gz" | tar xz -C "$WORK" 2>/dev/null; then
   echo "!! 下载失败。检查这台机器能不能访问 github.com"
-  echo "   (可以用 Docker 方式: 装个 docker 再跑这个脚本, 或者直接用前面那条 docker run)"
+  echo "   (或者手动 clone: git clone $REPO_URL && cd logistics-quote && sudo bash deploy/install.sh <域名>)"
   exit 1
 fi
 PKGDIR="$WORK/logistics-quote-main"
@@ -79,4 +85,8 @@ rm -rf "$WORK"
 echo
 echo "=========================================================="
 echo " 装好了。回上面看后台地址和 admin 密码。"
+echo
+echo " 数据: 这条命令装的是**程序**, 不含报价数据 —— 登录后是空站。"
+echo "       自己在后台「整表导入」上传报价表 xlsx 即可。"
+echo "       想直接用现成数据: bash deploy/install-remote.sh root@<这台机器> <域名>"
 echo "=========================================================="
