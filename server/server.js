@@ -239,6 +239,19 @@ function startImport(scope, filePath) {
       };
       importJob.log.push(`完成 · 数据版本 v${r.rev} · 锁定保留 ${r.lockedPreserved || 0} 档`);
       try { fs.unlinkSync(outJson); } catch (e) { /* ignore */ }
+      // ---- 同步离线版数据文件 ----
+      // 管道产出的是 脚本/data_v2.js, 但双击 index.html 用的离线快照在站点根目录,
+      // 没同步的话离线打开是空壳 (线上没事, 线上走后端 /api/data)。
+      try {
+        const snap = path.join(SCRIPTS, 'data_v2.js');
+        if (fs.existsSync(snap)) {
+          const buf = fs.readFileSync(snap);
+          for (const dst of [path.join(ROOT, 'data_v2.js'), path.join(PUBLIC, 'data_v2.js')]) {
+            try { fs.writeFileSync(dst, buf); } catch (e) { /* ignore */ }
+          }
+          importJob.log.push('离线快照已同步到站点根目录');
+        }
+      } catch (e) { /* ignore */ }
     } catch (e) {
       importJob.state = 'failed';
       importJob.error = '应用数据失败: ' + e.message;
