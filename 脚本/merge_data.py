@@ -33,7 +33,11 @@ import os, os, collections
 
 WEB = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(WEB, "data.json")
-RULES = os.path.join(WEB, "calc_rules.json")
+# 定价规则: 优先用公开脱敏版 (公式骨架, 价格已清零), 有完整版就用完整版。
+# 公开版进 GitHub 仓库, 完整版只留在服务器 —— 网站按报价表取价, 两者结果一致。
+RULES_CANDIDATES = ["calc_rules_public.json", "calc_rules.json"]
+RULES = next((os.path.join(WEB, c) for c in RULES_CANDIDATES
+              if os.path.exists(os.path.join(WEB, c))), os.path.join(WEB, RULES_CANDIDATES[0]))
 OUT = os.path.join(WEB, "data_v2.js")
 
 # 报价表渠道 -> (原表渠道, 原表小节)
@@ -79,7 +83,11 @@ from div_apply import apply_div  # noqa: E402
 
 def main():
     data = json.load(open(DATA, encoding="utf-8"))
+    if not os.path.exists(RULES):
+        print("缺定价规则文件: %s" % " / ".join(RULES_CANDIDATES), file=sys.stderr)
+        return 9
     rules = json.load(open(RULES, encoding="utf-8"))
+    print("定价规则: %s (%d 条)" % (os.path.basename(RULES), len(rules)))
     divrules = json.load(open(DIVR, encoding="utf-8")) if os.path.exists(DIVR) else {}
     surrules = json.load(open(SURR, encoding="utf-8")) if os.path.exists(SURR) else {}
 
