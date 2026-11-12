@@ -23,6 +23,13 @@ secret.key
 scripts/报价表.xlsx
 scripts/原计算器.xlsx
 
+# ---- 从报价表/计算器抽出来的产物 (含真实单价) ----
+# 这些不是网站运行时必需的, 但整表导入/回归验证要用, 需要时从发布服务器取
+**/calc_rules.json
+**/divider_rates.json
+**/expect_calc.json
+**/surcharges.json
+
 # ---- 价格数据快照 (离线版内嵌的全量价格) ----
 data_v2.js
 public/data_v2.js
