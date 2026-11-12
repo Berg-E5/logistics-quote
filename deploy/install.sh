@@ -16,6 +16,10 @@
 #   6. 建 admin 账号 (密码随机, 打印在最后)
 #   7. 自检
 #
+# 数据说明:
+#   从发布包 (install-remote.sh / fetch-release.sh 取得) 装的 -> 自带现成报价数据
+#   从 GitHub 源码装的 (bootstrap.sh / git clone) -> 空站, 只有程序, 装完提示会说明
+#
 # 这个脚本可以在新服务器上跑, 也可以反复跑 (幂等: 重复跑会覆盖程序文件, 不动数据目录)
 #
 set -euo pipefail
@@ -282,6 +286,17 @@ if [ "$FAIL" = "1" ]; then
   exit 1
 fi
 echo
+# ---- 数据状态: 装完到底有没有数据 ----
+HAS_TIERS=0
+for f in "$DIR"/data/users/*/rates.json "$DIR"/data/rates.json; do
+  [ -f "$f" ] || continue
+  if grep -q '"tiers"' "$f" 2>/dev/null; then HAS_TIERS=1; break; fi
+done
+HAS_XLSX=0
+for f in "$DIR"/scripts/*.xlsx "$DIR"/脚本/*.xlsx; do
+  [ -f "$f" ] && HAS_XLSX=1 && break
+done
+
 echo "=========================================================="
 echo " 装好了。"
 echo
@@ -292,5 +307,25 @@ echo "            (忘了就: cd $DIR && node server/user.js passwd admin)"
 echo
 echo "   改价记录:  http://$DOMAIN/admin/changes"
 echo "   用户管理:  http://$DOMAIN/admin/users"
-echo "   整表导入:  后台上传报价表, 或 cd $DIR/scripts && python3 run_pipeline.py"
+# 脚本目录名: 仓库里叫 脚本/, 发布包里叫 scripts/ —— 实际找一下
+SDIR=""
+for d in "$DIR/scripts" "$DIR/脚本"; do
+  [ -d "$d" ] && SDIR="$d" && break
+done
+[ -n "$SDIR" ] && echo "   整表导入:  后台上传报价表, 或 cd $SDIR && python3 run_pipeline.py"
+echo
+if [ "$HAS_TIERS" = "1" ]; then
+  echo "   数据:       已带上现成报价数据, 登录后直接能用。"
+else
+  echo "   数据:       ** 空站 —— 这次装的是程序, 不含报价数据 **"
+  echo
+  echo "               想直接用现成数据, 换这个装法 (从发布服务器取带数据的包):"
+  echo "                 bash deploy/install-remote.sh root@这台机器 $DOMAIN"
+  echo
+  if [ "$HAS_XLSX" = "1" ]; then
+    echo "               或在后台「整表导入」上传报价表 xlsx 自行导入。"
+  else
+    echo "               当前目录里也没有报价表 xlsx, 整表导入需要另外提供。"
+  fi
+fi
 echo "=========================================================="
