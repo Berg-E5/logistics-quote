@@ -20,6 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 目录名对齐: 本地/仓库里叫「脚本」(中文), 服务器上叫 scripts,
+      # Dockerfile 里的 COPY scripts/ 只认后者。
+      - name: 目录名对齐 (脚本 -> scripts)
+        run: |
+          if [ -d "脚本" ] && [ ! -d "scripts" ]; then
+            mv "脚本" scripts
+            echo "已重命名 脚本 -> scripts"
+          fi
+          ls -d scripts
+
       - name: 登录 Docker Hub
         uses: docker/login-action@v3
         with:
