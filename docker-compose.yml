@@ -1,9 +1,5 @@
-# 物流报价网站 —— Docker Compose 部署
+# 物流报价网站 —— Docker Compose 部署 (从源码 build, 不依赖任何镜像仓库)
 #
-#   curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/docker-compose.yml \
-#     -o docker-compose.yml && docker compose up -d
-#
-# 或者 clone 下来:
 #   git clone https://github.com/Berg-E5/logistics-quote.git
 #   cd logistics-quote && docker compose up -d
 #
@@ -17,7 +13,8 @@
 
 services:
   quote:
-    image: utism/quote:latest
+    build: .
+    image: quote:latest
     container_name: quote-server
     restart: unless-stopped
     ports:

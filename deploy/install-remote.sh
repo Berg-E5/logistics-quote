@@ -15,9 +15,7 @@
 #
 # 目标服务器要做的准备: node 18+ / nginx / python3, 以及能 ssh 回来的密钥
 #
-# 不想用 Docker 的话用这个; 有 Docker 的话更短:
-#   docker login && docker run -d --name quote -p 127.0.0.1:8792:8792 \
-#     -v /var/lib/quote/data:/app/data -e ADMIN_PASSWORD='xxx' utism/quote:latest
+# 目标服务器要准备: node 18+、nginx、python3, 以及能 ssh 回来的密钥
 #
 set -euo pipefail
 

@@ -95,5 +95,5 @@ echo " 推完了: https://github.com/$USER_NAME/$REPO"
 echo
 echo " 顺带可以在仓库页做两件事 (可选):"
 echo "   1. 设置 Description / Topics (topics 建议: logistics, pricing, nodejs, vue)"
-echo "   2. Settings -> Pages 或者加一个 .github/workflows 自动推 Docker 镜像"
+echo "   2. 设置 Homepage 和仓库简介"
 echo "=========================================================="
