@@ -9,43 +9,43 @@
 
 ## 一条命令装起来
 
+在一台新服务器上（需要 node 18+ / nginx / python3）：
+
 ```bash
-docker run -d --name quote --restart unless-stopped \
-  -p 127.0.0.1:8792:8792 \
-  -v /var/lib/quote/data:/app/data \
-  -e ADMIN_PASSWORD='你的密码' \
-  utism/quote:latest
+curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/deploy/bootstrap.sh \
+  | sudo bash -s -- <你的域名>
 ```
 
-目标服务器只要装了 docker，**不用装 node / nginx / python**。
-镜像在 [Docker Hub](https://hub.docker.com/r/utism/quote) 上，公开仓库，直接拉。
+脚本会下载程序包，然后装 systemd 单元、nginx 反代、申请证书、建 admin 账号、自检。
 
 起好之后：
 
-- 前台报价：<http://服务器:8792/>
-- 后台改价：<http://服务器:8792/admin>
-- 改动记录：<http://服务器:8792/admin/changes>
-- 用户管理：<http://服务器:8792/admin/users>
+- 前台报价：<https://你的域名/>
+- 后台改价：<https://你的域名/admin>
+- 改动记录：<https://你的域名/admin/changes>
+- 用户管理：<https://你的域名/admin/users>
 
-首次启动会自动建 `admin` 账号，密码看 `docker logs quote`。
+## 其它方式
 
-**镜像里不含任何数据** —— 报价表原件、价格快照、账号密码都不在镜像里。
-要装一个有数据的站，用 volume 挂载数据目录，或者装完在后台网页上传报价表做整表导入。
-
-## 不用 Docker
-
-```bash
-git clone https://github.com/<你的账号>/<仓库名>.git
-cd <仓库名>
-sudo bash deploy/install.sh <你的域名>
-```
-
-会装 systemd 单元、nginx 反代、申请证书、建 admin 账号。
-
-或者在你自己的电脑上远程装：
+**在你自己的电脑上远程装**（自动传包 + 远程安装）：
 
 ```bash
 bash deploy/install-remote.sh root@新服务器 quote.example.com
+```
+
+**手动三步**：
+
+```bash
+git clone https://github.com/Berg-E5/logistics-quote.git
+cd logistics-quote
+sudo bash deploy/install.sh <你的域名>
+```
+
+**想用 Docker**（从源码 build，不依赖任何镜像仓库）：
+
+```bash
+git clone https://github.com/Berg-E5/logistics-quote.git
+cd logistics-quote && docker compose up -d
 ```
 
 ---
@@ -115,8 +115,8 @@ bash deploy/install-remote.sh root@新服务器 quote.example.com
 |---|---|
 | `deploy/install.sh` | 在一台新服务器上装（依赖检查 → systemd → nginx → 证书 → admin） |
 | `deploy/install-remote.sh` | 在本地跑一条命令，远程装到别的服务器 |
-| `deploy/release.sh [--push]` | 打包 + build 镜像 + 更新发布目录 + 可选推 Docker Hub |
-| `deploy/docker-push.sh` | 推镜像到 Docker Hub |
+| `deploy/release.sh` | 打包 + 更新发布目录 |
+| `deploy/bootstrap.sh` | 一条命令安装 (curl \| bash) |
 | `脚本/verify_calc.js` | 原计算器口径回归（264 组） |
 | `脚本/verify_rates.js` | 报价表口径交叉验证（401 组，独立实现） |
 | `脚本/sync_copies.py` | 多副本同步 + 一致性检查 |
@@ -130,8 +130,8 @@ bash deploy/install-remote.sh root@新服务器 quote.example.com
 - 报价表原件（商业数据）
 - 价格数据快照
 
-`.gitignore` 已经把这些全部排除。需要这些数据的人从
-[Docker Hub](https://hub.docker.com/r/utism/quote) 装镜像，或从发布服务器取安装包。
+`.gitignore` 已经把这些全部排除。需要这些数据的人从发布服务器
+(`/root/quote-release/`) 取带数据的安装包，或装完后在后台网页上传报价表做整表导入。
 
 ## 许可
 
