@@ -1,0 +1,48 @@
+name: 推 Docker 镜像到 Docker Hub
+
+# 手动触发, 或者往 main 推代码时自动跑
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '镜像标签 (留空 = latest)'
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 设镜像标签
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG=latest; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=utism/quote:$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: 构建并推送
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 顺带把 release 目录的安装包更新一下
+        if: github.event.inputs.tag == '' && false
+        run: echo skip

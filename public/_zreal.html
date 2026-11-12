@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>物流报价查询</title>
+<style>
+  /* ============================================================
+     配色: 画布靠亮度阶梯分层, 细边线勾结构, 蓝=交互 绿=钱 橙=注意
+     ============================================================ */
+  :root {
+    --bg:      #0a0b0e;
+    --panel:   #101116;
+    --panel-2: #17181e;
+    --panel-3: #1e2027;
+    --line:    rgba(255,255,255,.07);
+    --line-2:  rgba(255,255,255,.13);
+    --fg:      #f1f2f4;
+    --fg-2:    #c6cad1;
+    --muted:   #8a8f99;
+    --dim:     #5c616b;
+    --accent:      #5b8cff;
+    --accent-hi:   #7ba3ff;
+    --accent-dim:  rgba(91,140,255,.15);
+    --good:      #35d07f;
+    --good-dim:  rgba(53,208,127,.12);
+    --warn:      #f0a63a;
+    --warn-dim:  rgba(240,166,58,.14);
+    --bad:       #ff6b6b;
+    --bad-dim:   rgba(255,107,107,.13);
+    --r-sm: 5px; --r: 7px; --r-lg: 11px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-feature-settings: "cv01", "ss03";
+    font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1560px; margin: 0 auto; padding: 22px 20px 64px; }
+
+  /* ---------------- 页头 ---------------- */
+  header {
+    margin-bottom: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 19px; font-weight: 590; margin: 0; letter-spacing: -.32px;
+    background: linear-gradient(92deg, #fff, #b9c3d6);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; font-weight: 400; }
+  .loginbtn {
+    font: inherit; font-size: 12.5px; font-weight: 510; padding: 6px 14px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: rgba(255,255,255,.04); color: var(--fg-2);
+    cursor: pointer; transition: all .15s;
+  }
+  .loginbtn:hover { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-dim); }
+  .usermenu { position: relative; display: inline-block; }
+  .userchip {
+    font: inherit; font-size: 12.5px; font-weight: 510; padding: 5px 11px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: rgba(255,255,255,.04); color: var(--fg-2);
+    cursor: pointer; display: inline-flex; align-items: center; gap: 7px; transition: all .15s;
+  }
+  .userchip:hover { border-color: var(--accent); color: var(--accent-hi); }
+  .userchip .avatar {
+    width: 19px; height: 19px; border-radius: 50%; background: var(--accent);
+    color: #08111f; font-weight: 700; font-size: 10.5px; display: inline-flex;
+    align-items: center; justify-content: center; text-transform: uppercase;
+  }
+  .userchip .caret { color: var(--muted); font-size: 9px; }
+  .dropdown {
+    position: absolute; right: 0; top: calc(100% + 7px); min-width: 196px;
+    background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+    box-shadow: rgba(0,0,0,.55) 0 10px 30px, rgba(0,0,0,.3) 0 2px 6px; padding: 5px;
+    z-index: 60; display: none;
+  }
+  .dropdown.open { display: block; }
+  .dd-head { padding: 9px 11px 10px; border-bottom: 1px solid var(--line); margin-bottom: 5px; }
+  .dd-user { font-size: 13px; font-weight: 590; }
+  .dd-role { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .dd-item {
+    display: block; width: 100%; text-align: left; padding: 8px 11px; border: none;
+    border-radius: var(--r-sm); background: transparent; color: var(--fg-2);
+    font: inherit; font-size: 12.5px; font-weight: 510; cursor: pointer; text-decoration: none;
+  }
+  .dd-item:hover { background: rgba(255,255,255,.06); color: var(--accent-hi); }
+  .dd-item.danger:hover { color: var(--bad); background: var(--bad-dim); }
+  .dd-sep { height: 1px; background: var(--line); margin: 5px 0; }
+
+  /* ---------------- 登录墙 ---------------- */
+  .gate {
+    position: fixed; inset: 0; z-index: 90; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    overflow: auto;
+  }
+  /* 作者样式的 display:flex 会压过浏览器默认的 [hidden]{display:none},
+     必须显式盖回去, 否则登录成功后登录墙还挡在屏幕上 */
+  .gate[hidden] { display: none !important; }
+  .gcard {
+    background: var(--panel); border: 1px solid var(--line-2); border-radius: 15px;
+    padding: 34px 30px; width: min(92vw, 380px); text-align: center;
+    box-shadow: rgba(0,0,0,.55) 0 24px 60px;
+  }
+  .gbrand {
+    font-size: 11px; font-weight: 590; letter-spacing: 1.2px; color: var(--dim);
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  .gicon { font-size: 30px; line-height: 1; margin-bottom: 12px; opacity: .9; }
+  .gcard h2 { margin: 0 0 8px; font-size: 19px; font-weight: 590; letter-spacing: -.3px; }
+  .gcard p { margin: 0; font-size: 13px; line-height: 1.7; }
+  .gcard strong { color: var(--fg); font-weight: 590; }
+  .gacts { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 20px; }
+  .gacts button {
+    font: inherit; font-size: 13.5px; font-weight: 590; padding: 9px 22px; border-radius: var(--r);
+    border: 1px solid var(--accent); background: var(--accent); color: #08111f; cursor: pointer;
+  }
+  .gacts button:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .gacts a { font-size: 13px; color: var(--accent-hi); text-decoration: none; }
+  .gacts a:hover { text-decoration: underline; }
+  .ghint { margin-top: 16px !important; font-size: 12px !important; color: var(--muted) !important; }
+
+  /* ---------------- 登录弹窗 ---------------- */
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    backdrop-filter: blur(3px);
+  }
+  .mbox {
+    background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 13px;
+    padding: 22px; width: 340px; max-width: 100%;
+    box-shadow: rgba(0,0,0,.6) 0 24px 60px;
+  }
+  .mbox h3 { margin: 0 0 6px; font-size: 15.5px; font-weight: 590; letter-spacing: -.2px; }
+  .mbox label {
+    display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
+    color: var(--muted); margin-top: 12px;
+  }
+  .mbox input {
+    font: inherit; font-size: 13px; padding: 8px 10px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: rgba(0,0,0,.25); color: var(--fg); width: 100%;
+  }
+  .mbox input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .mbox .err { color: var(--bad); font-size: 12.5px; margin-top: 9px; min-height: 18px; }
+  .mbox .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 9px; }
+  .mbox .row button {
+    font: inherit; font-size: 13px; font-weight: 510; padding: 7px 15px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+  }
+  .mbox .row button.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 590; }
+  .liother {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); text-align: center;
+  }
+  .liother a { color: var(--accent); text-decoration: none; }
+  .liother a:hover { text-decoration: underline; }
+
+  /* ---------------- 输入面板 ---------------- */
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--r-lg); padding: 0; margin-bottom: 16px;
+    box-shadow: rgba(0,0,0,.22) 0 0 0 1px;
+  }
+  .grp { display: grid; grid-template-columns: 96px 1fr; gap: 0; align-items: start; }
+  .grp + .grp { border-top: 1px solid var(--line); }
+  .grp-h {
+    padding: 15px 16px 15px 18px; font-size: 11px; font-weight: 590; letter-spacing: .6px;
+    color: var(--dim); text-transform: uppercase; white-space: nowrap;
+    border-right: 1px solid var(--line); background: rgba(255,255,255,.012);
+  }
+  .grp-b { padding: 14px 16px; }
+  .inputs {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 178px));
+    justify-content: start; gap: 10px 12px;
+  }
+  .field label {
+    display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; font-weight: 510;
+  }
+  .field input, .field select {
+    width: 100%; padding: 9px 10px; font-size: 15px; font-family: inherit; font-weight: 510;
+    background: var(--panel-2); color: var(--fg);
+    border: 1px solid var(--line); border-radius: var(--r); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field input::placeholder { color: var(--dim); font-weight: 400; }
+  .field input:focus, .field select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .field input.num { font-variant-numeric: tabular-nums; }
+  .seg {
+    display: flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+    background: var(--panel-2);
+  }
+  .seg button {
+    flex: 1; padding: 8px 4px; font-size: 13px; font-weight: 510; font-family: inherit;
+    background: transparent; color: var(--muted); border: none; cursor: pointer; transition: all .15s;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button:hover { color: var(--fg-2); }
+  .seg button.on { background: var(--accent-dim); color: var(--accent-hi); font-weight: 590; }
+
+  /* ---------------- 结果卡片 ---------------- */
+  .stats {
+    display: grid; grid-template-columns: 1.35fr 1.35fr 1fr 1fr 1fr;
+    gap: 1px; background: var(--line); border-bottom: 1px solid var(--line);
+  }
+  .stat { background: var(--panel); padding: 13px 16px 14px; position: relative; overflow: hidden; }
+  .stat-k { font-size: 11px; font-weight: 590; letter-spacing: .4px; color: var(--dim);
+            text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+  .stat-v {
+    font-size: 22px; font-weight: 590; letter-spacing: -.6px; margin-top: 5px;
+    font-variant-numeric: tabular-nums; color: var(--fg-2); line-height: 1.15;
+  }
+  .stat-s { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  /* 主指标: 最低定价成本 / 建议售价 */
+  .stat.s-best .stat-k { color: var(--good); }
+  .stat.s-best .stat-v { color: var(--good); font-size: 25px; }
+  .stat.s-best { background: linear-gradient(180deg, var(--good-dim), transparent 70%); }
+  .stat.s-sell .stat-k { color: var(--fg-2); }
+  .stat.s-sell .stat-v { color: #fff; font-size: 25px; }
+  .stat.s-sell { background: linear-gradient(180deg, rgba(255,255,255,.045), transparent 70%); }
+  /* 次指标 */
+  .stat.s-profit .stat-v.pos { color: var(--good); }
+  .stat.s-profit .stat-v.neg { color: var(--bad); }
+  .stat.s-local .stat-v { color: var(--accent-hi); }
+  .stat .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .bestline { display: none; }
+  .derived { display: none; }
+
+  /* ---------------- 选中渠道 ---------------- */
+  .pickline {
+    margin: 0; padding: 13px 16px 14px;
+    background: var(--panel); border-top: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .pickline .phead { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+  .pickline .phead b { color: var(--accent-hi); font-size: 18px; font-weight: 590;
+                       font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
+  .pickline .phead .who { color: var(--fg); font-weight: 590; }
+  .pickline .phint { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .pickline .pdiff { font-size: 12.5px; margin-top: 6px; }
+  .pickline .pdiff .up { color: var(--warn); }
+  .pickline .pdiff .dn { color: var(--good); }
+  .pickline .pgrid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+    gap: 1px; margin-top: 11px; background: var(--line); border: 1px solid var(--line);
+    border-radius: var(--r); overflow: hidden;
+  }
+  .pickline .pgrid > div { background: var(--panel-2); padding: 7px 10px; }
+  .pickline .pgrid span { display: block; color: var(--muted); font-size: 10.5px; }
+  .pickline .pgrid b { font-size: 13.5px; font-weight: 590; font-variant-numeric: tabular-nums; }
+  .pickline .pacts { margin-top: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .pickline button {
+    font: inherit; font-size: 12.5px; font-weight: 510; padding: 6px 12px; border-radius: var(--r);
+    border: 1px solid var(--accent); background: var(--accent-dim); color: var(--accent-hi); cursor: pointer;
+  }
+  .pickline button:hover { background: rgba(91,140,255,.24); }
+  .pickline button.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
+  .pickline button.ghost:hover { background: rgba(255,255,255,.05); color: var(--fg); }
+
+  /* ---------------- 工具条 ---------------- */
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 11px;
+  }
+  .toolbar input[type=search] {
+    padding: 8px 12px; font-size: 13px; font-family: inherit;
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line); border-radius: var(--r); outline: none; min-width: 200px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .toolbar input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .toolbar label { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .toolbar input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+  .toolbar .count { color: var(--muted); font-size: 12.5px; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* ---------------- 表格 ---------------- */
+  .tablewrap {
+    overflow: auto; border: 1px solid var(--line); border-radius: var(--r-lg);
+    background: var(--panel); max-height: calc(100vh - 190px);
+  }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  th {
+    background: var(--panel-2); color: var(--muted); font-weight: 590;
+    text-align: left; padding: 9px 11px; white-space: nowrap;
+    border-bottom: 1px solid var(--line-2); position: sticky; top: 0; z-index: 3; font-size: 11px;
+    letter-spacing: .3px; text-transform: uppercase;
+  }
+  th.num, td.num { text-align: right; }
+  td {
+    padding: 10px 11px; border-bottom: 1px solid var(--line); vertical-align: top;
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background .12s; }
+  tbody tr:hover { background: rgba(255,255,255,.028); }
+
+  /* 高亮: 最低价 */
+  tbody tr.best { background: var(--good-dim); box-shadow: inset 3px 0 0 var(--good); }
+  tbody tr.best:hover { background: rgba(53,208,127,.18); }
+  tbody tr.best td { border-bottom-color: rgba(53,208,127,.16); }
+  /* 高亮: 当前选中 (蓝色 = 我选中的, 与绿色的「最低价」明确区分) */
+  tbody tr.picked { background: var(--accent-dim) !important; box-shadow: inset 4px 0 0 var(--accent); }
+  tbody tr.picked td { border-bottom-color: rgba(91,140,255,.22); }
+  tbody tr.picked td:first-child { box-shadow: inset 1px 0 0 rgba(91,140,255,.25); }
+  .tag.picked { background: rgba(91,140,255,.22); color: #a9c6ff; border-color: rgba(91,140,255,.45); font-weight: 590; }
+  /* 不可发 / 超尺寸 */
+  tbody tr.na { color: var(--dim); }
+  tbody tr.na .ch { color: var(--muted); }
+  tbody tr.na:hover { background: rgba(255,107,107,.05); }
+
+  .ch { font-weight: 590; color: var(--fg); letter-spacing: -.1px; }
+  .sub { color: var(--muted); font-size: 11px; margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag {
+    display: inline-block; padding: 1px 6px; border-radius: var(--r-sm); font-size: 10.5px;
+    background: var(--accent-dim); color: var(--accent-hi); margin-right: 4px; white-space: nowrap;
+    border: 1px solid transparent; font-weight: 510;
+  }
+  .tag.best { background: rgba(53,208,127,.2); color: var(--good); border-color: rgba(53,208,127,.3); font-weight: 590; }
+  .tag.mode { background: rgba(255,255,255,.05); color: var(--muted); border-color: var(--line); }
+  .tag.warn { background: var(--warn-dim); color: var(--warn); border-color: rgba(240,166,58,.28); }
+  .tag.bad  { background: var(--bad-dim);  color: var(--bad);  border-color: rgba(255,107,107,.28); }
+  .limits { color: var(--muted); font-size: 11px; max-width: 260px; white-space: pre-wrap; word-break: break-word; }
+  .note { color: var(--warn); font-size: 11px; }
+
+  /* 价格条: 一眼看出谁便宜 (内联固定宽度, 右边缘对齐, 长度可直接比) */
+  .costcell { white-space: nowrap; }
+  .pbar {
+    position: relative; display: inline-block; vertical-align: middle;
+    width: 46px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.08);
+    overflow: hidden; margin-right: 9px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+  .pbar i {
+    position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent);
+    display: block; opacity: .8;
+  }
+  tr.best .pbar i { background: var(--good); opacity: 1; }
+  tr.best .pbar { box-shadow: inset 0 0 0 1px rgba(53,208,127,.35); }
+  tr.na .pbar i { opacity: .2; }
+  .money { font-weight: 590; }
+  td.num.pos { color: var(--good); }
+  td.num.neg { color: var(--bad); }
+
+  .empty { padding: 48px 16px; text-align: center; color: var(--muted); }
+
+  footer {
+    margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12px; line-height: 1.75;
+  }
+  footer b { color: var(--warn); font-weight: 590; }
+  footer .ok { color: var(--good); }
+
+  .scopebadge {
+    font-size: 11px; font-weight: 590; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--line-2); color: var(--muted); background: rgba(255,255,255,.04);
+    white-space: nowrap;
+  }
+  .scopebadge.mine {
+    border-color: rgba(91,140,255,.42); color: var(--accent-hi); background: var(--accent-dim);
+  }
+  .fxtip { display: block; color: var(--dim); font-size: 10.5px; margin-top: 4px; }
+  .syncbar { margin-top: 14px; }
+  .sync { font-size: 11.5px; color: var(--dim); }
+  .sync.ok { color: var(--muted); }
+  .sync.ok::before {
+    content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--good); margin-right: 6px; vertical-align: middle; opacity: .8;
+  }
+  .ltag {
+    font-size: 10px; color: var(--accent-hi); border: 1px solid var(--accent-dim);
+    border-radius: 3px; padding: 0 4px; margin-left: 4px; white-space: nowrap;
+  }
+  .chanlist { margin: 20px 0 0; border-top: 1px solid var(--line); padding-top: 13px; }
+  .chanlist summary {
+    cursor: pointer; color: var(--muted); font-size: 12.5px; font-weight: 510;
+    padding: 4px 0; user-select: none;
+  }
+  .chanlist summary:hover { color: var(--fg-2); }
+  #chans { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .ctag {
+    font-size: 12px; padding: 4px 9px; border-radius: var(--r);
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg-2);
+  }
+  .ctag i { font-style: normal; color: var(--muted); margin-left: 6px; font-size: 11px; }
+  .ctag.b { border-color: rgba(240,166,58,.4); }
+  .ctag.p { border-color: rgba(53,208,127,.4); }
+
+  @media (max-width: 1100px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .grp { grid-template-columns: 1fr; }
+    .grp-h { border-right: none; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>物流报价查询</h1>
+  <p id="meta">加载中…</p>
+  <span class="scopebadge" id="scopeBadge" hidden></span>
+  <span style="flex:1"></span>
+  <span class="usermenu" id="usermenu" style="display:none">
+    <button class="userchip" id="userchip" aria-haspopup="true" aria-expanded="false">
+      <span class="avatar" id="ddAvatar">?</span>
+      <span id="ddName">用户</span>
+      <span class="caret">▾</span>
+    </button>
+    <div class="dropdown" id="usermenu-items">
+      <div class="dd-head">
+        <div class="dd-user" id="ddUser">—</div>
+        <div class="dd-role" id="ddRole">—</div>
+      </div>
+      <a class="dd-item" href="/admin"><span>后台改价</span></a>
+      <a class="dd-item" href="/admin/changes"><span>改动记录</span></a>
+      <a class="dd-item" id="usersLink" href="/admin/users" style="display:none"><span>用户管理</span></a>
+      <div class="dd-sep"></div>
+      <button class="dd-item danger" id="logout"><span>退出登录</span></button>
+    </div>
+  </span>
+  <button class="loginbtn" id="loginbtn">登录</button>
+</header>
+
+<!-- 登录墙: 未登录时挡住计算区 -->
+<div class="gate" id="gate" hidden>
+  <div class="gcard">
+    <div class="gbrand">物流报价查询</div>
+    <div class="gicon">🔒</div>
+    <h2>请先登录</h2>
+    <p class="muted">报价数据只对登录用户开放。<br>登录后自动显示<strong>你自己上传的</strong>渠道价格表。</p>
+    <div class="gacts">
+      <button class="primary" id="gateLogin">登录</button>
+      <a href="/admin" target="_blank">注册新账号</a>
+    </div>
+    <p class="ghint">注册后上传自己的价格表就能用；也可以让管理员在后台给你建账号。</p>
+  </div>
+</div>
+
+<!-- 登录弹窗 -->
+<div class="modal" id="loginmodal" style="display:none">
+  <div class="mbox">
+    <h3>登录</h3>
+    <p class="muted" style="margin:0 0 14px;font-size:12.5px">
+      登录后使用<b>你自己上传的</b>渠道价格表。未登录时显示站主的公开数据。
+    </p>
+    <label>用户名<input id="liUser" type="text" autocomplete="username" value=""></label>
+    <label>密码<input id="liPass" type="password" autocomplete="current-password" value=""></label>
+    <div class="err" id="liErr"></div>
+    <div class="row">
+      <button class="primary" id="liGo">登录</button>
+      <button id="liCancel">取消</button>
+    </div>
+    <div class="liother">
+      还没有账号? 去 <a href="/admin" target="_blank">后台注册</a>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <!-- 货物信息 -->
+  <div class="grp">
+    <div class="grp-h">货物</div>
+    <div class="grp-b">
+      <div class="inputs">
+        <div class="field">
+          <label for="country">国家 / 地区</label>
+          <select id="country"></select>
+        </div>
+        <div class="field">
+          <label for="kg">重量 (kg)</label>
+          <input id="kg" class="num" type="number" min="0" step="0.1" value="1">
+        </div>
+        <div class="field">
+          <label for="L">长 (cm)</label>
+          <input id="L" class="num" type="number" min="0" step="1" value="30">
+        </div>
+        <div class="field">
+          <label for="W">宽 (cm)</label>
+          <input id="W" class="num" type="number" min="0" step="1" value="20">
+        </div>
+        <div class="field">
+          <label for="H">高 (cm)</label>
+          <input id="H" class="num" type="number" min="0" step="1" value="15">
+        </div>
+        <div class="field">
+          <label>属性</label>
+          <div class="seg" id="attr">
+            <button data-v="普货" class="on">普货</button>
+            <button data-v="带电">带电</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 财务参数 -->
+  <div class="grp">
+    <div class="grp-h">财务</div>
+    <div class="grp-b">
+      <div class="inputs">
+        <div class="field">
+          <label for="buy">采购价 (¥)</label>
+          <input id="buy" class="num" type="number" min="0" step="1" value="490">
+        </div>
+        <div class="field">
+          <label for="recv">到账 (¥)</label>
+          <input id="recv" class="num" type="number" min="0" step="1" value="1500">
+        </div>
+        <div class="field">
+          <label for="margin">目标利润率</label>
+          <input id="margin" class="num" type="number" min="0" max="0.9" step="0.05" value="0.35">
+        </div>
+        <div class="field">
+          <label for="extra">成本加成系数</label>
+          <input id="extra" class="num" type="number" min="0.1" max="2" step="0.01" value="0.85">
+        </div>
+        <div class="field">
+          <label for="fx">汇率 (1 外币 = ? 元)</label>
+          <input id="fx" class="num" type="number" min="0.0001" step="0.01" placeholder="如 6.69">
+          <small id="fxdate" class="fxtip"></small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 结果卡片 (JS 填充) -->
+  <div class="stats" id="stats">
+    <div class="stat s-best">
+      <div class="stat-k"><span class="dot"></span>最低定价成本</div>
+      <div class="stat-v" id="stCost">–</div>
+      <div class="stat-s" id="stWho">—</div>
+    </div>
+    <div class="stat s-sell">
+      <div class="stat-k">建议售价</div>
+      <div class="stat-v" id="stSell">–</div>
+      <div class="stat-s" id="stSellSub">—</div>
+    </div>
+    <div class="stat s-local">
+      <div class="stat-k">当地售价</div>
+      <div class="stat-v" id="stLocal">–</div>
+      <div class="stat-s" id="stLocalSub">—</div>
+    </div>
+    <div class="stat s-profit">
+      <div class="stat-k">毛利</div>
+      <div class="stat-v" id="stProfit">–</div>
+      <div class="stat-s" id="stProfitSub">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-k">计费重 / 体积</div>
+      <div class="stat-v" id="stWeight">–</div>
+      <div class="stat-s" id="stWeightSub">—</div>
+    </div>
+  </div>
+
+  <div class="bestline" id="best" hidden></div>
+  <div class="pickline" id="pick" hidden></div>
+</div>
+
+<div class="toolbar">
+  <input type="search" id="q" placeholder="搜渠道名…" autocomplete="off">
+  <label><input type="checkbox" id="onlyavail"> 只看可发</label>
+  <label><input type="checkbox" id="hidezero" checked> 隐藏不可发的</label>
+  <span class="count" id="count"></span>
+</div>
+
+<div class="tablewrap">
+  <table>
+    <thead>
+      <tr>
+        <th>渠道</th>
+        <th>分区</th>
+        <th style="text-align:right">计费重</th>
+        <th style="text-align:right">体积除数</th>
+        <th style="text-align:right">运费</th>
+        <th style="text-align:right">挂号费</th>
+        <th style="text-align:right">附加费</th>
+        <th style="text-align:right">定价成本</th>
+        <th style="text-align:right">售价</th>
+        <th style="text-align:right" id="thLocal">当地售价</th>
+        <th style="text-align:right">毛利</th>
+        <th>时效</th>
+        <th>尺寸限制 / 说明</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden>没有符合条件的渠道</div>
+</div>
+
+<div class="syncbar"><span id="sync" class="sync">…</span></div>
+
+<details class="chanlist">
+  <summary>全部渠道清单 (<span id="chancount">–</span> 个)</summary>
+  <div id="chans"></div>
+</details>
+
+<footer>
+  <b>报价前请人工核对：</b>尺寸超限、超长费、偏远地区附加费、旺季附加费、VAT/关税、
+  最低计费重、分区归属、申报价值限制与禁运品 —— 这些都没有计入金额。<br>
+  <b>计算口径：</b>
+  体积重 = 长×宽×高÷渠道除数；计费重 = MAX(体积重, 实重)；
+  定价成本 = 运费 + 挂号费 + <b>附加费</b> + 采购价；售价 = 定价成本 ÷ (1−利润率) ÷ 成本加成系数；
+  当地售价 = 售价 ÷ 汇率；毛利 = 到账 − 定价成本。
+</footer>
+
+</div>
+
+<script src="engine.js"></script>
+<script src="data_v2.js"></script>
+<script>
+// 数据来源: 内嵌快照 (data_v2.js) 作离线兜底, 线上优先取后端 /api/data
+let DATA = window.DATA;
+let DATA_REV = null, DATA_UPDATED = null, DATA_FROM = 'offline';
+let DATA_SCOPE = null, DATA_MINE = false;   // 数据归属: scope=用户名, mine=是否本人
+const $ = id => document.getElementById(id);
+
+/** 从后端拉数据; 失败就继续用内嵌快照 (双击打开也能用) */
+async function loadRemoteData() {
+  if (!location.protocol.startsWith('http')) return false;
+  try {
+    const r = await fetch('/api/data', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j || !j.data) throw new Error('后端没有数据');
+    DATA = j.data;
+    DATA_REV = j.rev;
+    DATA_UPDATED = j.updatedAt;
+    DATA_FROM = 'server';
+    DATA_SCOPE = j.scope || null;
+    DATA_MINE = !!j.mine;
+    buildRuleMap();
+    updateScopeBadge();
+    return true;
+  } catch (e) {
+    console.warn('取后端数据失败, 用本地快照:', e.message);
+    return false;
+  }
+}
+
+// 服务端实时汇率 (每 3 小时自动抓一次)。拿不到就用页面内嵌的快照。
+let FX_LIVE = false;
+async function loadLiveFx() {
+  if (!location.protocol.startsWith('http')) return;
+  try {
+    const r = await fetch('/api/fx', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j || !j.rates || !Object.keys(j.rates).length) return;
+    const sel = $('country');
+    const cur = sel ? sel.value : '';
+    const oldRef = FX_REF[cur];
+    const boxVal = $('fx').value;
+    let changed = false;
+    for (const cn in j.rates) {
+      const v = Number(j.rates[cn]);
+      if (isFinite(v) && v > 0 && FX_REF[cn] !== v) { FX_REF[cn] = v; changed = true; }
+    }
+    FX_DATE = j.date || FX_DATE;
+    FX_LIVE = true;
+    // 用户手动改过汇率就别覆盖 (只有还等于旧参考值时才自动换新)
+    if (changed && cur && (boxVal === '' || String(oldRef) === String(boxVal))) {
+      $('fx').value = FX_REF[cur];
+    }
+    $('fxdate').textContent = `实时汇率 ${FX_DATE} · 服务端自动刷新`;
+    if (typeof render === 'function') render();
+  } catch (e) { /* 拿不到就用内嵌快照 */ }
+}
+
+/** 轮询后端版本, 有更新就重新拉 */
+async function watchVersion() {
+  if (!location.protocol.startsWith('http')) return;
+  setInterval(async () => {
+    try {
+      const r = await fetch('/api/version', { cache: 'no-store' });
+      const v = await r.json();
+      if (v.rev && DATA_REV && v.rev !== DATA_REV) {
+        if (await loadRemoteData()) { render(); flashSync(); }
+      }
+    } catch (e) { /* 网络抖动忽略 */ }
+  }, 60000);
+}
+
+// ---------------- 登录 / 用户中心 ----------------
+async function apiPost(path, body) {
+  const r = await fetch(path, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const txt = await r.text();
+  let j = null;
+  try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+  if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+  return j;
+}
+
+function openUserMenu() {
+  $('usermenu-items').classList.add('open');
+  $('userchip').setAttribute('aria-expanded', 'true');
+}
+function closeUserMenu() {
+  const m = $('usermenu-items');
+  if (m) m.classList.remove('open');
+  const c = $('userchip');
+  if (c) c.setAttribute('aria-expanded', 'false');
+}
+
+/** 显示当前登录状态 */
+async function refreshLoginState() {
+  updateScopeBadge();
+  const menu = $('usermenu');
+  const btn = $('loginbtn');
+  if (!location.protocol.startsWith('http')) {
+    // 本地双击打开: 没有后端, 隐藏登录
+    menu.style.display = 'none';
+    btn.style.display = 'none';
+    return;
+  }
+  try {
+    const r = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
+    const j = await r.json();
+    if (j && j.user) {
+      menu.style.display = 'inline-block';
+      btn.style.display = 'none';
+      $('ddName').textContent = j.user;
+      $('ddUser').textContent = j.user;
+      $('ddAvatar').textContent = String(j.user).charAt(0);
+      $('ddRole').textContent = j.role === 'admin' ? '管理员' : '普通用户';
+      const ul = $('usersLink');
+      if (ul) ul.style.display = (j.role === 'admin') ? '' : 'none';
+    } else {
+      menu.style.display = 'none';
+      btn.style.display = 'inline-block';
+    }
+  } catch (e) {
+    menu.style.display = 'none';
+    btn.style.display = 'inline-block';
+  }
+}
+
+function openLoginModal() {
+  $('liErr').textContent = '';
+  $('liPass').value = '';
+  $('loginmodal').style.display = 'flex';
+  $('liUser').focus();
+}
+function closeLoginModal() { $('loginmodal').style.display = 'none'; }
+
+$('loginbtn').onclick = openLoginModal;
+$('liCancel').onclick = closeLoginModal;
+$('loginmodal').onclick = (e) => { if (e.target === $('loginmodal')) closeLoginModal(); };
+$('liUser').onkeydown = e => { if (e.key === 'Enter') $('liPass').focus(); };
+$('liPass').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
+
+async function doLogin() {
+  const username = $('liUser').value.trim();
+  const password = $('liPass').value;
+  if (!username || !password) { $('liErr').textContent = '用户名和密码都要填'; return; }
+  $('liGo').disabled = true;
+  $('liErr').textContent = '';
+  try {
+    const j = await apiPost('/api/login', { username, password });
+    closeLoginModal();
+    $('liPass').value = '';
+    await refreshLoginState();
+    // 重载页面: cookie 已经带上, 页面会拉到这个用户自己的数据
+    // (不重调 init(), 免得重复绑定事件)
+    location.reload();
+  } catch (e) {
+    $('liErr').textContent = e.message;
+  } finally {
+    $('liGo').disabled = false;
+  }
+}
+$('liGo').onclick = doLogin;
+const gateLogin = $('gateLogin');
+if (gateLogin) gateLogin.onclick = () => { openLoginModal(); };
+
+$('logout').onclick = async () => {
+  closeUserMenu();
+  try { await apiPost('/api/logout', {}); } catch (e) { /* ignore */ }
+  await refreshLoginState();
+  location.reload();
+};
+
+$('userchip').onclick = (e) => {
+  e.stopPropagation();
+  const m = $('usermenu-items');
+  if (m.classList.contains('open')) closeUserMenu();
+  else openUserMenu();
+};
+document.addEventListener('click', (e) => {
+  const um = $('usermenu');
+  if (um && !um.contains(e.target)) closeUserMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeUserMenu(); closeLoginModal(); }
+});
+
+function flashSync() {
+  const el = $('meta');
+  if (!el) return;
+  el.style.color = 'var(--good)';
+  setTimeout(() => { el.style.color = ''; }, 2500);
+}
+
+/** 国家 -> 币种 (从渠道组数据里取, 没有就空) */
+const CUR_BY_COUNTRY = (() => {
+  const m = new Map();
+  for (const g of (DATA && DATA.groups) || []) {
+    if (g.country && g.currency && !m.has(g.country)) m.set(g.country, g.currency);
+  }
+  return m;
+})();
+function curOf(country) { return CUR_BY_COUNTRY.get(country) || ''; }
+
+/** 登录墙: 显示/隐藏 (挡住整个计算区) */
+function showGate(msg) {
+  const g = $('gate');
+  if (!g) return;
+  if (msg) {
+    const p = g.querySelector('.gcard p.muted');
+    if (p) p.innerHTML = msg;
+  }
+  g.hidden = false;
+  document.body.classList.add('locked');
+}
+function hideGate() {
+  const g = $('gate');
+  if (!g) return;
+  g.hidden = true;
+  document.body.classList.remove('locked');
+}
+
+/** 数据归属徽标: 让用户一眼看到当前算的是谁的价格表 */
+function updateScopeBadge() {
+  const b = $('scopeBadge');
+  if (!b) return;
+  if (!DATA) {
+    b.hidden = false;
+    b.className = 'scopebadge';
+    b.textContent = '未登录';
+    return;
+  }
+  if (DATA_SCOPE && DATA_MINE) {
+    b.hidden = false;
+    b.className = 'scopebadge mine';
+    b.textContent = DATA_SCOPE + ' 的价格表';
+  } else if (DATA_SCOPE) {
+    b.hidden = false;
+    b.className = 'scopebadge';
+    b.textContent = '站主公开数据';
+  } else {
+    b.hidden = true;
+  }
+}
+
+// 参考汇率 (1 外币 = ? 人民币)。仅作占位, 实际报价请按当天汇率改。
+let FX_DATE = '2026-11-09';
+const FX_REF = {
+  '美国': 6.6798,
+  '加拿大': 4.7323,
+  '墨西哥': 0.3572,
+  '澳大利亚': 4.5887,
+  '英国': 8.9243,
+  '法国': 7.446,
+  '德国': 7.446,
+  '意大利': 7.446,
+  '西班牙': 7.446,
+  '比利时': 7.446,
+  '波兰': 1.7102,
+  '瑞典': 0.6776,
+  '爱尔兰': 7.446,
+  '沙特阿拉伯': 1.7813,
+  '阿联酋': 1.8189,
+};
+// FX_DATE: 参考汇率取数日 2026-11-09 (用 脚本/update_fx.py 刷新)
+let ATTR = '普货';
+// 选中的渠道 (用户点选)。存 key: sheet|zone|line|attr
+let PICKED = null;
+
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return '–';
+  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function round2(x) { return Math.round(x * 100) / 100; }
+function fmtKg(n) {
+  if (n === null || n === undefined || isNaN(n)) return '–';
+  return (Math.round(n * 100) / 100).toString();
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 规则索引 —— 数据可能是 null (未登录), 登录拿到数据后要重建
+let RULE_MAP = new Map();
+function buildRuleMap() {
+  RULE_MAP = new Map();
+  for (const r of ((DATA && DATA.rules) || [])) {
+    RULE_MAP.set(`${r.channel}|${r.section}|${r.country}|${r.zone}`, r);
+  }
+}
+buildRuleMap();
+
+function readInputs() {
+  return {
+    country: $('country').value,
+    kg: parseFloat($('kg').value) || 0,
+    L: parseFloat($('L').value) || 0,
+    W: parseFloat($('W').value) || 0,
+    H: parseFloat($('H').value) || 0,
+    attr: ATTR,
+    buy: parseFloat($('buy').value) || 0,
+    recv: parseFloat($('recv').value) || 0,
+    margin: parseFloat($('margin').value),
+    extra: parseFloat($('extra').value) || 0.85,
+    fx: parseFloat($('fx').value) || 0,   // 0 = 不做货币换算
+  };
+}
+
+function render() {
+  const inp = readInputs();
+  const groups = DATA.groups.filter(g => g.country === inp.country);
+  // preferRates=true: 价格走报价表的费率库 (更全、更新更频繁),
+  // 定价规则只用来补充尺寸限制/重量上下限/超尺寸加收。
+  const res = calc.quoteAll(groups, DATA.tiers, inp, RULE_MAP, true);
+
+  const vol = inp.L * inp.W * inp.H;
+  // 体积重各渠道除数不同 (云途 8000 / 日本 9000 / 三态 6000 ...),
+  // 所以体积/计费重按各渠道实际除数显示在表格里, 这里只留参考值给结果卡片。
+
+  const best = res.best;
+  // 结果卡片
+  const S = id => $(id);
+  if (best) {
+    S('stCost').textContent = '¥' + fmt(best.total);
+    S('stWho').textContent = best.sheet
+      + (best.line && best.line !== '-' ? ' · ' + best.line : '')
+      + (best.zone && best.zone !== '-' ? ' · ' + best.zone : '');
+    S('stSell').textContent = '¥' + fmt(best.sells.custom);
+    S('stSellSub').textContent =
+      `目标毛利 ${(inp.margin * 100).toFixed(0)}% · 成本加成 ${inp.extra}`
+      + (best.lead ? ' · ' + best.lead : '');
+    const cur = curOf(inp.country);
+    if (best.fx > 0) {
+      S('stLocal').textContent = (cur ? cur + ' ' : '') + fmt(best.locals.custom);
+      S('stLocalSub').textContent = `汇率 1 ${cur || '外币'} = ${fmt(best.fx)} 元`;
+    } else {
+      S('stLocal').textContent = '–';
+      S('stLocalSub').textContent = '未做货币换算';
+    }
+    const pv = S('stProfit');
+    pv.textContent = '¥' + fmt(best.profit);
+    pv.className = 'stat-v ' + (best.profit > 0 ? 'pos' : 'neg');
+    S('stProfitSub').textContent = inp.recv > 0
+      ? `到账 ¥${fmt(inp.recv)} · 利润率 ${(best.profit / inp.recv * 100).toFixed(1)}%`
+      : '到账 ¥0';
+    S('stWeight').textContent = fmtKg(best.chargeKg) + ' kg';
+    S('stWeightSub').textContent = `体积 ${fmtKg(vol)} cm³ · 采购价 ¥${fmt(inp.buy)}`;
+  } else {
+    ['stCost','stWho','stSell','stSellSub','stLocal','stLocalSub',
+     'stProfit','stProfitSub','stWeight','stWeightSub'].forEach(id => {
+      const e = S(id); if (!e) return;
+      if (id === 'stWho' || id.endsWith('Sub')) e.textContent = '—';
+      else e.textContent = '–';
+    });
+  }
+
+  // 表头的「当地售价」列标出币种, 免得把外币当人民币看
+  const cur = curOf(inp.country);
+  const thL = $('thLocal');
+  if (thL) thL.textContent = cur ? `当地售价 (${cur})` : '当地售价';
+
+  const kw = $('q').value.trim().toLowerCase();
+  const onlyAvail = $('onlyavail').checked;
+  const hideZero = $('hidezero').checked;
+
+  let list = res.rows.slice().sort((a, b) => {
+    // 可发的排前面, 再按成本升序
+    const aOk = a.matched && !a.blocked, bOk = b.matched && !b.blocked;
+    if (aOk !== bOk) return aOk ? -1 : 1;
+    if (aOk) return a.total - b.total;
+    return String(a.sheet).localeCompare(String(b.sheet));
+  });
+  if (kw) list = list.filter(r =>
+    String(r.sheet).toLowerCase().includes(kw) ||
+    String(r.line || '').toLowerCase().includes(kw));
+  if (onlyAvail) list = list.filter(r => r.matched && !r.blocked);
+  else if (hideZero) list = list.filter(r => !(r.blocked || !r.matched));
+
+  // 价格条刻度: 用全部结果的最便宜/最贵定标, 搜索筛选时不跳动
+  const totals = res.rows.filter(x => x.matched && !x.blocked).map(x => x.total);
+  const tMin = totals.length ? Math.min.apply(null, totals) : 0;
+  const tMax = totals.length ? Math.max.apply(null, totals) : 0;
+  const barPct = (v) => {
+    if (!(tMax > tMin)) return 100;
+    return 15 + 85 * (v - tMin) / (tMax - tMin);
+  };
+
+  const tb = $('rows');
+  tb.innerHTML = '';
+  for (const r of list) {
+    const tr = document.createElement('tr');
+    const ok = r.matched && !r.blocked;
+    if (r.isBest) tr.className = 'best';
+    else if (!ok) tr.className = 'na';
+    tr.classList.add('pickable');
+    const rkey = rowKey(r);
+    if (PICKED === rkey) tr.classList.add('picked');
+    tr.dataset.key = rkey;
+
+    const modeCn = r.mode === 'band' ? '按重分段'
+                 : r.mode === 'firstnext' ? '首重续重' : '体积除数';
+
+    let note = '';
+    if (r.blocked) note = `<div class="note"><span class="tag bad">不可发</span>${esc(r.note)}</div>`;
+    else if (r.oversize) note = `<div class="note"><span class="tag warn">超尺寸</span>${esc(r.note)}（仍可发，加收超尺寸费）</div>`;
+
+    tr.innerHTML =
+      `<td><div class="ch">${esc(r.sheet)}` +
+        (r.isBest ? ' <span class="tag best">最低</span>' : '') +
+        (PICKED === rkey ? ' <span class="tag picked">已选中</span>' : '') + `</div>` +
+        `<div class="sub"><span class="tag mode">${modeCn}</span>` +
+        (r.line && r.line !== '-' ? `<span class="ltag">${esc(r.line)}</span>` : '') +
+        `</div>${note}</td>` +
+      `<td>${r.zone && r.zone !== '-' ? esc(r.zone) : '–'}</td>` +
+      `<td class="num">${ok ? fmtKg(r.chargeKg) : '–'}</td>` +
+      `<td class="num">${r.divUsed ? r.divUsed : '–'}</td>` +
+      `<td class="num">${ok ? fmt(r.freight) : '–'}</td>` +
+      `<td class="num">${ok ? fmt(r.fee) : '–'}</td>` +
+      `<td class="num"${ok && !r.surFee ? ' title="按报价表规则未触发附加费"' : ''}>${ok && r.surFee ? fmt(r.surFee) : '–'}</td>` +
+      `<td class="num costcell"><span class="pbar" title="${ok && best ? '比最低价贵 ¥' + fmt(r.total - best.total) : ''}"><i style="width:${barPct(r.total).toFixed(1)}%"></i></span>` +
+        `<b class="money">${ok ? fmt(r.total) : '–'}</b></td>` +
+      `<td class="num">${ok ? fmt(r.sells.custom) : '–'}</td>` +
+      `<td class="num">${ok && r.fx > 0 ? fmt(r.locals.custom) : '–'}</td>` +
+      `<td class="num ${ok ? (r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '') : ''}">${ok ? fmt(r.profit) : '–'}</td>` +
+      `<td>${r.lead ? esc(r.lead) : '–'}</td>` +
+      `<td class="limits">${esc(limText(r.lim) || (r.limits && String(r.limits).length > 6
+        ? String(r.limits).slice(0, 110) : '')) || '–'}</td>`;
+    tr.addEventListener('click', () => {
+      PICKED = (PICKED === rkey) ? null : rkey;   // 再点一次取消
+      render();
+    });
+    tb.appendChild(tr);
+  }
+  $('empty').hidden = list.length > 0;
+  const totalGroups = (DATA.meta && DATA.meta.groups) || 0;
+  $('count').textContent = totalGroups
+    ? `本国家 ${list.length} 条报价 · 全部 ${totalGroups} 条`
+    : `${list.length} 个渠道`;
+
+  renderPick(list, res.rows, res.best, inp);
+}
+
+/** 把 lim 结构转成一句人话 */
+function limText(lim) {
+  if (!lim) return '';
+  const parts = [];
+  if (lim.maxDim) parts.push(`最大 ${lim.maxDim.join('×')}cm`);
+  if (lim.altMaxDim) parts.push(`加收后可发 ${lim.altMaxDim.join('×')}cm`);
+  if (lim.maxSide != null) parts.push(`最长边≤${lim.maxSide}cm`);
+  if (lim.maxSide2 != null) parts.push(`第二边≤${lim.maxSide2}cm`);
+  if (lim.maxGirth1 != null) parts.push(`围长≤${lim.maxGirth1}cm`);
+  if (lim.maxGirth2 != null) parts.push(`长+2×(宽+高)≤${lim.maxGirth2}cm`);
+  if (lim.maxSum3 != null) parts.push(`三边和≤${lim.maxSum3}cm`);
+  if (lim.maxWt != null) parts.push(`实重≤${lim.maxWt}kg`);
+  if (lim.maxVolM3 != null) parts.push(`体积≤${lim.maxVolM3}m³`);
+  if (lim.minDim) parts.push(`最小 ${lim.minDim.join('×')}cm`);
+  return parts.join(' · ');
+}
+
+/** 行的唯一标识 (同一渠道可能有多条产品线/分区) */
+function rowKey(r) {
+  return [r.sheet, r.zone || '-', r.line || '-', r.attr || ''].join('|');
+}
+
+/** 渲染「已选渠道」面板 */
+function renderPick(list, allRows, best, inp) {
+  const box = $('pick');
+  if (!PICKED) { box.hidden = true; box.innerHTML = ''; return; }
+  // 先在当前显示的列表里找, 找不到再到全部结果里找 (被搜索/筛选隐藏时仍可查看)
+  const r = list.find(x => rowKey(x) === PICKED)
+        || (allRows || []).find(x => rowKey(x) === PICKED);
+  if (!r) { box.hidden = true; box.innerHTML = ''; PICKED = null; return; }
+
+  const ok = r.matched && !r.blocked;
+  const modeCn = r.mode === 'band' ? '按重分段'
+               : r.mode === 'firstnext' ? '首重续重' : '体积除数';
+
+  let diff = '';
+  if (ok && best && best !== r) {
+    const d = round2(r.total - best.total);
+    const pct = best.total ? (d / best.total * 100) : 0;
+    diff = d > 0.005
+      ? `<div class="pdiff">比最低价 <b>¥${fmt(best.total)}</b> (${esc(best.sheet)}) <span class="up">贵 ¥${fmt(d)} (+${pct.toFixed(1)}%)</span></div>`
+      : d < -0.005
+      ? `<div class="pdiff">比最低价 <b>¥${fmt(best.total)}</b> (${esc(best.sheet)}) <span class="dn">便宜 ¥${fmt(-d)} (${pct.toFixed(1)}%)</span></div>`
+      : '<div class="pdiff">与最低价相同</div>';
+  } else if (ok && r.isBest) {
+    diff = '<div class="pdiff"><span class="dn">这是当前最低价渠道</span></div>';
+  }
+
+  let note = '';
+  if (r.blocked) note = `<div class="pdiff"><span class="up">不可发: ${esc(r.note || '超出限制')}</span></div>`;
+  else if (r.oversize) note = `<div class="pdiff"><span class="up">${esc(r.note || '')}（仍可发，加收超尺寸费）</span></div>`;
+
+  const grid = ok ? `
+    <div><span>定价成本</span><b>¥${fmt(r.total)}</b></div>
+    <div><span>运费</span><b>¥${fmt(r.freight)}</b></div>
+    <div><span>挂号费</span><b>¥${fmt(r.fee)}</b></div>
+    <div><span>附加费</span><b>${r.surFee ? '¥' + fmt(r.surFee) : '–'}</b></div>
+    <div><span>采购价</span><b>¥${fmt(inp.buy)}</b></div>
+    <div><span>建议售价</span><b>¥${fmt(r.sells.custom)}</b></div>
+    <div><span>当地售价${r.fx > 0 ? '' : '(需填汇率)'}</span><b>${r.fx > 0 ? fmt(r.locals.custom) : '–'}</b></div>
+    <div><span>毛利额</span><b>¥${fmt(r.profit)}</b></div>
+    <div><span>利润比 (相对到账)</span><b>${(r.profitRatio * 100).toFixed(1)}%</b></div>
+    <div><span>计费重</span><b>${fmtKg(r.chargeKg)} kg</b></div>
+    <div><span>体积除数</span><b>${r.divUsed || '–'}</b></div>
+    <div><span>三档售价</span><b>${fmt(r.sells[0.30])} / ${fmt(r.sells[0.35])} / ${fmt(r.sells[0.40])}</b></div>
+    <div><span>时效</span><b>${r.lead ? esc(r.lead) : '–'}</b></div>` : '';
+
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="phead">${ok ? '已选渠道' : '已选渠道 (不可发)'}` +
+    `<b>${ok ? '¥' + fmt(r.total) : '–'}</b>` +
+    `<span class="who">${esc(r.sheet)}</span>` +
+    (r.line && r.line !== '-' ? `<span class="ltag">${esc(r.line)}</span>` : '') +
+    (r.zone && r.zone !== '-' ? `<span class="tag">${esc(r.zone)}</span>` : '') +
+    `<span class="tag mode">${modeCn}</span></div>` +
+    diff + note +
+    (grid ? `<div class="pgrid">${grid}</div>` : '') +
+    (r.surList && r.surList.length
+      ? `<div class="phint">附加费: ` + r.surList.map(s =>
+          `${esc(s.name)} ¥${fmt(s.fee)}`).join(' + ') + `</div>` : '') +
+    (r.surManual && r.surManual.length
+      ? `<div class="phint">另需人工核对: ` +
+        r.surManual.map(s => esc(s.name) + (s.fee ? ` ¥${fmt(s.fee)}` : '')).join('、') +
+        `</div>` : '') +
+    (limText(r.lim) ? `<div class="phint">尺寸限制: ${esc(limText(r.lim))}</div>` : '') +
+    (r.limits ? `<div class="phint">原表限制: ${esc(String(r.limits).slice(0, 200))}</div>` : '') +
+    `<div class="pacts">` +
+      `<button id="pickcopy">复制这条报价</button>` +
+      `<button id="pickclear" class="ghost">取消选择</button>` +
+    `</div>`;
+
+  $('pickcopy').addEventListener('click', () => copyQuote(r, inp));
+  $('pickclear').addEventListener('click', () => { PICKED = null; render(); });
+}
+
+/** 复制单条报价为文本 */
+function copyQuote(r, inp) {
+  const ok = r.matched && !r.blocked;
+  const lines = [
+    `渠道: ${r.sheet}${r.line && r.line !== '-' ? ' / ' + r.line : ''}${r.zone && r.zone !== '-' ? ' ' + r.zone : ''}`,
+    `国家: ${r.country}  重量: ${inp.kg} kg  尺寸: ${inp.L}x${inp.W}x${inp.H} cm  属性: ${inp.attr}`,
+    ok ? `计费重: ${fmtKg(r.chargeKg)} kg${r.divUsed ? ' (体积除数 ' + r.divUsed + ')' : ''}` : '状态: 不可发',
+    ok ? `运费: ¥${fmt(r.freight)}  挂号费: ¥${fmt(r.fee)}` +
+         (r.surFee ? `  附加费: ¥${fmt(r.surFee)}` : '') : '',
+    ok && r.surList && r.surList.length
+      ? `附加费明细: ${r.surList.map(s => s.name + ' ¥' + fmt(s.fee)).join(' + ')}` : '',
+    ok ? `定价成本: ¥${fmt(r.total)} (含采购价 ¥${fmt(inp.buy)})` : '',
+    ok ? `建议售价: ¥${fmt(r.sells.custom)} (${(inp.margin * 100).toFixed(0)}% 毛利)` : '',
+    ok && r.fx > 0 ? `当地售价: ${fmt(r.locals.custom)}` : '',
+    ok ? `毛利额: ¥${fmt(r.profit)}  利润比: ${(r.profitRatio * 100).toFixed(1)}%` : '',
+    r.lead ? `时效: ${r.lead}` : '',
+    r.limits ? `限制: ${String(r.limits).slice(0, 200)}` : '',
+    r.note ? `备注: ${r.note}` : '',
+  ].filter(Boolean);
+  const text = lines.join('\n');
+  const btn = $('pickcopy');
+  const done = (ok2) => {
+    btn.textContent = ok2 ? '已复制 ✓' : '复制失败';
+    setTimeout(() => { btn.textContent = '复制这条报价'; }, 1600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => done(true), () => done(fallbackCopy(text)));
+  } else {
+    done(fallbackCopy(text));
+  }
+}
+
+/** file:// 下 clipboard API 常被拦, 退回 execCommand */
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  let okc = false;
+  try { okc = document.execCommand('copy'); } catch (e) { okc = false; }
+  document.body.removeChild(ta);
+  return okc;
+}
+
+function init() {
+  if (!DATA) {
+    // 线上没登录时 data_v2.js 只给空壳; 本地文件缺失也是这个分支
+    const online = location.protocol.startsWith('http');
+    showGate(online
+      ? '报价数据只对登录用户开放，登录后自动显示你自己的价格表。'
+      : '数据未加载：请确认 data_v2.js 与本页面在同一目录。');
+    $('meta').textContent = online ? '未登录' : '数据未加载';
+    return;
+  }
+  hideGate();
+  buildRuleMap();
+  const sel = $('country');
+  sel.innerHTML = DATA.countries.map(c => `<option value="${c.name}">${c.label}</option>`).join('');
+
+  // 支持 URL 参数预填: ?country=德国&kg=8&L=45&W=35&H=25&attr=带电&buy=490&recv=1500
+  const qp = new URLSearchParams(location.search);
+  for (const k of ['kg', 'L', 'W', 'H', 'buy', 'recv', 'margin', 'extra']) {
+    if (qp.has(k)) $(k).value = qp.get(k);
+  }
+  if (qp.has('country') && DATA.countries.some(c => c.name === qp.get('country'))) {
+    sel.value = qp.get('country');
+  }
+  // 汇率: URL 指定优先, 否则按国家填参考值
+  if (qp.has('fx')) $('fx').value = qp.get('fx');
+  else if (!qp.has('fx') && FX_REF[sel.value]) $('fx').value = FX_REF[sel.value];
+  $('fxdate').textContent = FX_LIVE
+    ? `实时汇率 ${FX_DATE} · 服务端自动刷新`
+    : '参考汇率 ' + FX_DATE + ' · 请按当天汇率改';
+  if (qp.get('attr') === '带电') {
+    ATTR = '带电';
+    for (const x of $('attr').children) x.classList.toggle('on', x.dataset.v === '带电');
+  }
+  $('meta').textContent =
+    `${DATA.meta.channels} 个渠道 · ${DATA.meta.groups} 条报价 · ${DATA.meta.tiers} 条费率档` +
+    `（报价表覆盖 ${DATA.meta.countriesAll || DATA.meta.countries} 个国家/地区, 列表只列常用 ${DATA.meta.countries} 个）`;
+  const sync = $('sync');
+  if (sync) {
+    if (DATA_FROM === 'server' && DATA_REV) {
+      const who = DATA_MINE ? `本人数据 (${DATA_SCOPE})` : `站主公开数据 (${DATA_SCOPE || 'admin'})`;
+      sync.textContent = `已连接后台 · 数据版本 v${DATA_REV} · ${who}` +
+        (DATA_UPDATED ? ` · 更新于 ${new Date(DATA_UPDATED).toLocaleString('zh-CN')}` : '');
+      sync.className = 'sync ok';
+    } else {
+      sync.textContent = '离线快照 · 双击打开时的本地数据';
+      sync.className = 'sync';
+    }
+  }
+
+  // 渠道清单
+  const cl = DATA.meta.channelList || [];
+  $('chancount').textContent = cl.length;
+  $('chans').innerHTML = cl.map(c =>
+    `<span class="ctag${c.attr.includes('带电') ? ' b' : ''}${c.attr.includes('普货') ? ' p' : ''}">` +
+    `${esc(c.sheet)}<i>${c.groups}</i></span>`).join('');
+
+  for (const id of ['country', 'kg', 'L', 'W', 'H', 'buy', 'recv', 'margin', 'extra', 'fx']) {
+    $(id).addEventListener('input', render);
+    $(id).addEventListener('change', render);
+  }
+  // 换国家时换成该国的参考汇率 (汇率跟随国家; 需要别的汇率时选完国家再手改)
+  sel.addEventListener('change', () => {
+    const ref = FX_REF[sel.value];
+    if (ref) $('fx').value = ref;
+    render();
+  });
+  $('q').addEventListener('input', render);
+  $('onlyavail').addEventListener('change', render);
+  $('hidezero').addEventListener('change', render);
+
+  // 属性切换
+  $('attr').addEventListener('click', ev => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    ATTR = b.dataset.v;
+    for (const x of $('attr').children) x.classList.toggle('on', x === b);
+    render();
+  });
+
+  render();
+}
+(async function boot() {
+  await loadRemoteData();
+  init();
+  // 没数据 = 没登录 (线上) 或文件缺失 (本地): 把登录墙亮起来
+  if (!DATA) {
+    showGate(location.protocol.startsWith('http')
+      ? '报价数据只对登录用户开放，登录后自动显示你自己的价格表。'
+      : '数据未加载：请确认 data_v2.js 与本页面在同一目录。');
+    await refreshLoginState();
+    return;
+  }
+  await loadLiveFx();
+  await refreshLoginState();
+  watchVersion();
+  // 每 30 分钟同步一次汇率
+  setInterval(loadLiveFx, 30 * 60 * 1000);
+})();
+</script>
+<script>
+window.addEventListener('load', function(){ setTimeout(function(){
+  var stage = sessionStorage.getItem('st') || '1';
+  sessionStorage.setItem('st','2');
+  if (stage === '1') {
+    var g = document.getElementById('gate');
+    var pre = document.createElement('pre'); pre.id='probe';
+    pre.textContent = JSON.stringify({stage:'1_未登录',
+      gateDisplay:getComputedStyle(g).display,
+      rows:document.querySelectorAll('tr.pickable').length});
+    document.body.appendChild(pre);
+    document.getElementById('gateLogin').click();
+    setTimeout(function(){
+      document.getElementById('liUser').value='admin';
+      document.getElementById('liPass').value='9CcyCfNv-Ww2';
+      document.getElementById('liGo').click();
+    }, 400);
+  }
+}, 600); });
+// reload 之后执行
+if (sessionStorage.getItem('st') === '2') {
+  setTimeout(function(){
+    var g = document.getElementById('gate');
+    var pre = document.createElement('pre'); pre.id='probe2';
+    pre.textContent = JSON.stringify({stage:'2_登录并reload后',
+      gateDisplay:getComputedStyle(g).display,
+      gateVisible:getComputedStyle(g).display!=='none',
+      rows:document.querySelectorAll('tr.pickable').length,
+      card:(document.getElementById('stCost')||{}).textContent,
+      badge:(document.getElementById('scopeBadge')||{}).textContent});
+    document.body.appendChild(pre);
+  }, 1500);
+}
+</script></body>
+</html>

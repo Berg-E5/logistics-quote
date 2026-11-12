@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>报价后台 · 物流报价</title>
+<link rel="stylesheet" href="/ui-common.css">
+<link rel="stylesheet" href="/admin-common.css">
+<style>
+  /* ---------------- 登录/注册 Tab ---------------- */
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+  .tabs button { background: transparent; border: none; color: var(--muted); padding: 5px 10px;
+    border-radius: var(--r); font-size: 13.5px; font-weight: 510; }
+  .tabs button.on { background: var(--panel2); color: var(--fg); font-weight: 590; }
+  .gate label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px;
+    color: var(--muted); margin-bottom: 11px; }
+  .gate .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .gate .row input { flex: 1; }
+  .gate strong { color: var(--fg); font-weight: 590; }
+
+  /* ---------------- 仪表条 + 渠道分布条 ---------------- */
+  .dash { margin-bottom: 10px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: var(--r); }
+  .dash-inner { display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    padding: 9px 14px; }
+  /* flex-shrink 必须是 0: 写成 1 的话它不会换行, 而是被压扁和上面那行挤在一起 */
+  .dash-inner .chdist { flex: 1 0 100%; margin: 0; padding: 0 14px 8px; }
+  .metrics { display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap; }
+  .metric { display: flex; align-items: baseline; gap: 7px; }
+  .metric .mk { font-size: 11.5px; color: var(--muted); letter-spacing: .02em; }
+  .metric .mv { font-family: var(--mono); font-size: 17px; font-weight: 600;
+    font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .metric .ms { font-size: 11.5px; color: var(--muted); margin-left: 2px; }
+  .metric.k-lock .mv { color: var(--warn); }
+  .metric.k-chg .mv { color: var(--accent-hi); }
+  .dash-spark { display: flex; align-items: flex-end; gap: 2px; height: 22px; }
+  .dash-spark i { width: 3px; background: var(--line-2); border-radius: 1px; min-height: 2px; }
+  .dash-spark i.on { background: var(--accent); }
+  .dash-spark i.hot { background: var(--accent-hi); }
+  .dash-link { font-size: 12.5px; color: var(--accent-hi); text-decoration: none; white-space: nowrap; }
+  .dash-link:hover { text-decoration: underline; }
+
+  /* 渠道分布条 */
+  .chdist { display: grid; grid-template-columns: 176px 1fr; gap: 14px; align-items: end; }
+  .chd-side { display: flex; flex-direction: column; gap: 4px; padding-bottom: 22px; min-width: 0; }
+  .chd-main { min-width: 0; }
+  .chd-hint { font-size: 11px; color: var(--muted); margin-top: 7px; }
+  .chd-sum { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px;
+    line-height: 1.45; }
+  .chd-sum i { display: block; font-style: normal; color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .72; }
+  .chd-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 18px;
+    font-size: 11.5px; position: relative; z-index: 2; }
+  .chd-side .chd-t { background: none; padding-right: 0; }
+  .chd-t { font-size: 12.5px; font-weight: 590; color: var(--fg);
+    white-space: nowrap; }
+  .chd-cur { color: var(--muted); }
+  .chd-cur b { color: var(--fg); font-weight: 590; }
+  .chd-cur .x { cursor: pointer; color: var(--accent-hi); margin-left: 4px; }
+  .chd-cur .x:hover { text-decoration: underline; }
+  .chd-bars { display: flex; align-items: flex-end; gap: 3px; height: 44px;
+    overflow: hidden; position: relative; z-index: 1;
+    border-bottom: 1px solid var(--line-2); }
+  .chd-bars.filtered .chd-bar { opacity: .16; }
+  .chd-bars.filtered .chd-bar.on { opacity: 1; box-shadow: 0 0 0 1px var(--accent); }
+  .chd-bar { flex: 1 1 0; min-width: 4px; border: none; padding: 0; cursor: pointer;
+    align-self: flex-end; display: block;
+    border-radius: 2px 2px 0 0; opacity: .38; transition: opacity .15s, transform .15s; }
+  .chd-bar.top { opacity: .85; }
+  .chd-bar:hover { opacity: 1; transform: translateY(-2px); }
+  .chd-bar:hover { opacity: .95; transform: translateY(-2px); }
+  .chd-bar.on { opacity: 1; box-shadow: 0 0 0 1px var(--accent); }
+
+  /* 导入进度条 ---------------- */
+  .progwrap { margin-top: 12px; }
+  .progbar { height: 6px; border-radius: 3px; background: var(--panel3); overflow: hidden; }
+  .progbar > i { display: block; height: 100%; border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+    transition: width .5s ease; }
+  .progtxt { display: flex; justify-content: space-between; align-items: baseline;
+    gap: 10px; margin-top: 7px; font-size: 12.5px; }
+  .progtxt b { font-weight: 590; }
+  .progsteps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .progsteps span { font-size: 11.5px; color: var(--muted); padding: 2px 7px;
+    border-radius: 999px; background: var(--panel2); border: 1px solid transparent;
+    white-space: nowrap; }
+  .progsteps span.done { color: var(--fg); background: var(--panel3); }
+  .progsteps span.on { color: var(--accent-hi); border-color: var(--accent);
+    background: rgba(79,140,255,.10); }
+
+  /* ---------------- 右侧固定列 ---------------- */
+  th.sticky-r, td.sticky-r { position: sticky; background: var(--panel); z-index: 2; }
+  /* 锁定列只有 56px, 「锁定」两个字会被压成竖排 —— 强制横排 */
+  th.sticky-r.sr-3, td.sticky-r.sr-3 { white-space: nowrap; }
+  th.sticky-r { z-index: 4; background: var(--panel2); }
+  td.sticky-r { border-left: 1px solid var(--line); }
+  th.sticky-r:first-of-type { border-left: 1px solid var(--line2); }
+  .sr-1 { right: 258px; }   /* 运费 */
+  .sr-2 { right: 146px; }   /* 挂号费 */
+  .sr-3 { right: 90px; }    /* 锁定 */
+  .sr-4 { right: 0; }       /* 操作 */
+  /* 固定列左边缘加阴影, 横向滚动时看得出「这里是钉住的」 */
+  .tablewrap th.sticky-r, .tablewrap td.sticky-r { box-shadow: -8px 0 12px -8px rgba(0,0,0,.65); }
+  .tablewrap th.sticky-r { box-shadow: -8px 0 12px -8px rgba(0,0,0,.65), inset 0 -1px 0 var(--line2); }
+
+  /* ---------------- 行内编辑 ---------------- */
+
+  /* ---------------- 后台专属 ---------------- */
+  tbody tr.unsaved td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  td.sheetcell { font-weight: 590; color: var(--fg); }
+  td.sheetcell.lockedname { padding-right: 30px; }
+  /* 编辑列左侧一条细蓝线, 一眼分出只读区/编辑区 */
+  td.editable:first-of-type, th.editable:first-of-type { box-shadow: inset 2px 0 0 rgba(91,140,255,.55); }
+  /* 保存按钮降权: 只有这一行有改动时才变主色 */
+  .save { background: transparent; border-color: var(--line-2); color: var(--muted); font-weight: 510; }
+  .save:disabled { opacity: .28; }
+  .save.armed { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 590; }
+  .save.armed:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  /* 锁定: 开关 + 文字 (纯文字按钮太像老式后台) */
+  .lockbtn { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; }
+  .lockbtn .sw {
+    width: 28px; height: 16px; border-radius: 999px; padding: 0; flex: none;
+    background: var(--panel-3); border: 1px solid var(--line-2); position: relative;
+    transition: background .18s, border-color .18s;
+  }
+  .lockbtn .knob {
+    position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--muted); display: block;
+    transition: transform .2s cubic-bezier(.3,1.5,.5,1), background .18s;
+  }
+  .lockbtn.on .sw { background: var(--warn-dim); border-color: rgba(230,154,47,.55); }
+  .lockbtn.on .knob { transform: translateX(12px); background: var(--warn); }
+  .lockbtn .lt { font-size: 10.5px; font-weight: 590; }
+  .lockbtn.on .lt { color: var(--warn); }
+  .lockbtn:not(.on) .lt { color: var(--dim); }
+
+  /* 概览条: 数据规模一眼看到, 右侧挂快捷键提示 */
+  .ovbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 9px 14px; margin-bottom: 10px;
+    background: linear-gradient(180deg, rgba(255,255,255,.028), transparent 70%), var(--panel);
+    border: 1px solid var(--line); border-radius: var(--r-lg);
+    font-size: 12px; color: var(--muted);
+  }
+  .ov b {
+    color: var(--fg); font-weight: 590; font-variant-numeric: tabular-nums;
+    margin-right: 4px; font-size: 13px;
+  }
+  .ov-sep { width: 1px; height: 14px; background: var(--line-2); }
+  .ov-keys { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 11.5px; }
+  .ov-keys kbd { margin-left: 6px; }
+  .ov-keys kbd:first-child { margin-left: 0; }
+
+  /* 渠道组头行: 像文件树的目录行, 点一下展开/收起 */
+  tr.ghead { cursor: pointer; }
+  tr.ghead td {
+    background: var(--panel-2); padding: 7px 12px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  tr.ghead:hover td { background: var(--panel-3); }
+  tr.ghead.open td { background: var(--panel-3); }
+  tr.ghead .gcaret {
+    display: inline-block; width: 12px; color: var(--muted);
+    font-size: 10px; transition: transform .15s;
+  }
+  tr.ghead b {
+    color: var(--fg); font-weight: 590; font-size: 12.5px; margin-left: 7px;
+  }
+  tr.ghead .gmeta {
+    color: var(--dim); font-size: 11px; margin-left: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  tr.ghead .grow { flex: 1; }
+  tr.ghead .gprice {
+    color: var(--fg-2); font-size: 11.5px; font-variant-numeric: tabular-nums;
+    font-weight: 590;
+  }
+  tr.ghead .chcolor {
+    position: static; display: inline-block; vertical-align: -2px;
+    width: 2px; height: 13px; margin-right: 7px; transform: none;
+  }
+
+  /* 渠道色条: 首列左侧一条 2px 色带, 按渠道分组 */
+  td.sheetcell { position: relative; padding-left: 14px; }
+  td.sheetcell .chcolor {
+    position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
+    width: 2px; height: 15px; border-radius: 1px; display: block; opacity: .85;
+  }
+
+  /* 整列无值就藏掉 —— 分区/产品线/方式/时效 这几列经常整列是空的,
+     留着就是浪费宽度, 把表格挤得读不下去。 */
+  table.no-zone th:nth-child(3), table.no-zone td:nth-child(3) { display: none; }
+  table.no-line th:nth-child(4), table.no-line td:nth-child(4) { display: none; }
+  table.no-mode th:nth-child(5), table.no-mode td:nth-child(5) { display: none; }
+
+  /* 底部说明做成清单, 不然一坨文字看着乱 */
+  .pagehint { display: flex; flex-direction: column; gap: 5px; }
+  .pagehint .ph-row { display: flex; gap: 8px; align-items: baseline; }
+  .pagehint .ph-row i {
+    width: 4px; height: 4px; border-radius: 50%; background: var(--line-3);
+    flex: none; transform: translateY(-2px);
+  }
+
+  .cell { display: flex; gap: 4px; align-items: center; }
+  /* 输入框比所在单元格亮一档 —— 不然在非 sticky 列里看不出这是个可改的框 */
+  .cell input {
+    width: 86px; padding: 4px 6px; text-align: right;
+    background: var(--panel-4); border-color: rgba(79,140,255,.30);
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+  .cell input:hover { border-color: rgba(79,140,255,.55); background: #2a3140; }
+  .cell input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .cell input.fee { width: 70px; }
+  .cell input.dirty { border-color: var(--warn); background: rgba(240,166,58,.08); box-shadow: 0 0 0 3px var(--warndim); }
+  .saved { color: var(--good); font-weight: 590; font-size: 11px; min-width: 44px; }
+  .saved.err { color: var(--bad); }
+  .saved.dirty { color: var(--warn); }
+
+  /* ---------------- 锁定行 ---------------- */
+  tbody tr.locked { background: var(--warndim); box-shadow: inset 3px 0 0 var(--warn); }
+  tbody tr.locked:hover { background: rgba(240,166,58,.2); }
+  tbody tr.locked td { border-bottom-color: rgba(240,166,58,.16); }
+  /* 固定列的底色必须不透明 (否则横向滚动时内容会透出来),
+     用 panel 打底 + 琥珀色叠出来的实色, 让锁定感连到最右边 */
+  tbody tr.locked td.sticky-r { background: #1f1a16; }
+  tbody tr.locked:hover td.sticky-r { background: #2a231b; }
+  tbody tr.locked .price, tbody tr.locked .fee {
+    border-color: rgba(240,166,58,.4); background: rgba(240,166,58,.06);
+  }
+  tbody tr.locked td:first-child { position: relative; }
+  tbody tr.locked td:first-child::before {
+    content: "锁定"; position: absolute; right: 4px; top: 3px; font-size: 9.5px;
+    font-weight: 590; color: var(--warn); letter-spacing: .4px;
+  }
+  /* 让表格窄屏时能横向滚动 —— 右侧四列的 sticky 才有意义 */
+  .tablewrap table { min-width: 1130px; }
+  /* 体积数 (可改, 渠道组级别 —— 跟运费/挂号费一样的编辑体验) */
+  td.divcell input.divin { width: 78px; }
+  td.divcell input.divin.uncertain { color: var(--bad); border-color: rgba(255,107,107,.45); }
+  /* 锁定行里体积数也跟着标成琥珀, 跟运费/挂号费一致 */
+  tbody tr.locked .divin { border-color: rgba(240,166,58,.4); background: rgba(240,166,58,.06); }
+  th .ed { font-size: 10px; font-weight: 510; color: var(--accent-hi); margin-left: 4px; opacity: .85; }
+  .lockbtn {
+    font-size: 15px; line-height: 1; padding: 3px 7px; border-radius: var(--r-sm);
+    border: 1px solid var(--line); background: transparent; cursor: pointer; opacity: .45;
+  }
+  .lockbtn:hover { opacity: 1; border-color: var(--accent); }
+  .lockbtn.on { opacity: 1; border-color: var(--warn); background: var(--warndim); color: var(--warn);
+    box-shadow: 0 0 0 2px var(--warndim); }
+
+  /* ---------------- 属性徽章 (带电用紫色, 避开琥珀色的「锁定」) ---------------- */
+  .pill.p { border-color: rgba(91,140,255,.4); color: var(--accenthi); background: var(--accentdim); }
+  .pill.b { border-color: rgba(192,132,252,.42); color: #d8b4fe; background: rgba(192,132,252,.14); }
+
+  /* ---------------- 面板 / 引导 ---------------- */
+  .welcome {
+    background: var(--panel); border: 1px solid var(--accent); border-radius: var(--r-lg);
+    padding: 20px; margin-bottom: 16px;
+  }
+  .welcome h2 { margin: 0 0 8px; font-size: 16px; font-weight: 590; }
+  .welcome p { margin: 0 0 10px; font-size: 13px; color: var(--fg); }
+  .welcome p.muted { font-size: 12.5px; color: var(--muted); }
+  .welcome .wrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .implog {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 8px 10px; margin-top: 10px; max-height: 150px; overflow: auto;
+    font-size: 11.5px; color: var(--muted); white-space: pre-wrap; display: none;
+  }
+  .implog.show { display: block; }
+  .repcard {
+    margin-top: 10px; max-height: 340px; overflow: auto; border: 1px solid var(--line);
+    border-radius: var(--r);
+  }
+  .repcard table { font-size: 12px; }
+  .repcard th { position: sticky; top: 0; }
+  .rep-new { color: var(--good); }
+  .rep-old { color: var(--muted); text-decoration: line-through; }
+  .rep-del { color: var(--bad); }
+
+  .addgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .addgrid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .addgrid input, .addgrid select { width: 100%; }
+  #addpane .row { display: flex; gap: 8px; align-items: center; }
+  .badge { font-size: 11px; color: var(--bg); background: var(--accent); border-radius: 9px;
+    padding: 0 6px; line-height: 16px; min-width: 16px; text-align: center; display: none; font-weight: 590; }
+  .badge.show { display: inline-block; }
+  .dd-item .badge { margin-left: 6px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="/vue.global.prod.js"></script>
+<script src="/admin-common.js"></script>
+<script>
+const A = window.QuoteAdmin;
+const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
+
+const MODE_CN = { band: '按重分段', firstnext: '首重续重', divider: '体积除数' };
+
+/* 登录 / 注册 门 (本页专属: 带 Tab) */
+const AuthGate = {
+  emits: ['login', 'register'],
+  setup(props, { emit }) {
+    const tab = ref('login');
+    const username = ref(''), password = ref('');
+    const regUser = ref(''), regPass = ref(''), regPass2 = ref('');
+    const err = ref('');
+    const busy = ref(false);
+    function switchTab(t) { tab.value = t; err.value = ''; }
+    async function doLogin() {
+      if (!username.value.trim() || !password.value) { err.value = '用户名和密码都要填'; return; }
+      err.value = ''; busy.value = true;
+      try {
+        await A.api('/api/login', { method: 'POST', body: { username: username.value.trim(), password: password.value } });
+        emit('login');
+      } catch (e) { err.value = e.message; }
+      finally { busy.value = false; }
+    }
+    async function doRegister() {
+      if (!regUser.value.trim() || !regPass.value) { err.value = '用户名和密码都要填'; return; }
+      if (regPass.value !== regPass2.value) { err.value = '两次输入的密码不一样'; return; }
+      if (regPass.value.length < 8) { err.value = '密码至少 8 位'; return; }
+      err.value = ''; busy.value = true;
+      try {
+        await A.api('/api/register', { method: 'POST', body: { username: regUser.value.trim(), password: regPass.value } });
+        emit('register');
+      } catch (e) { err.value = e.message; }
+      finally { busy.value = false; }
+    }
+    return { tab, username, password, regUser, regPass, regPass2, err, busy, switchTab, doLogin, doRegister };
+  },
+  template: `
+    <div class="gate">
+      <div class="tabs">
+        <button :class="{on: tab==='login'}" @click="switchTab('login')">登录</button>
+        <button :class="{on: tab==='reg'}" @click="switchTab('reg')">注册</button>
+      </div>
+      <template v-if="tab==='login'">
+        <h2>登录</h2>
+        <p>用你的账号登录, 就能改价、整表导入、看改动记录。</p>
+        <label>用户名<input v-model="username" autocomplete="username" @keyup.enter="doLogin"></label>
+        <label>密码<input v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin"></label>
+        <div class="err">{{ err }}</div>
+        <div class="row">
+          <button class="primary" style="flex:1" :disabled="busy" @click="doLogin">{{ busy ? '登录中…' : '登录' }}</button>
+        </div>
+      </template>
+      <template v-else>
+        <h2>注册</h2>
+        <p>注册后<strong>数据是空的</strong> —— 你需要自己上传渠道价格表才能开始报价。
+           每个账号的数据互相隔离, 只有你自己能看到。</p>
+        <label>用户名<input v-model="regUser" placeholder="字母数字, 2-32 位" autocomplete="username"></label>
+        <label>密码<input v-model="regPass" type="password" placeholder="至少 8 位" autocomplete="new-password"></label>
+        <label>确认密码<input v-model="regPass2" type="password" placeholder="再输一次密码" autocomplete="new-password"></label>
+        <div class="err">{{ err }}</div>
+        <div class="row">
+          <button class="primary" style="flex:1" :disabled="busy" @click="doRegister">{{ busy ? '注册中…' : '注册并登录' }}</button>
+        </div>
+      </template>
+    </div>
+  `,
+};
+
+createApp({
+  components: {
+    AppHeader: A.AppHeader, AuthGate, Pager: A.Pager, PasswordModal: A.PasswordModal,
+  },
+  setup() {
+    const { logged, checking, me, afterLogin, reset: resetAuth } = A.useAuth(async () => {
+      await onAuthed();
+    });
+    const version = ref('读取中…');
+    const rev = ref(0);
+    const rows = ref([]);
+    const groups = ref([]);        // 按渠道分组后的数据
+    const totalGroups = ref(0);
+    const summary = ref([]);      // 全量渠道聚合 (后端不分页给), 用来画渠道分布条
+    const collapsed = ref(new Set());   // 折叠起来的渠道名
+    const allOpen = ref(false);         // 「展开全部」模式 (跨页也保持)
+    const seenSheets = ref(new Set());  // 已经出现过的渠道名
+    const userTouched = ref(false);     // 用户手动动过折叠状态
+    const total = ref(0);
+    const page = ref(1);
+    const size = ref(10);
+    const chgBadge = ref(0);
+    const chgSpark = ref([]);      // 近 12 小时改动分布 (迷你趋势条)
+    const showPwd = ref(false);
+    const loadErr = ref('');
+
+    // 筛选
+    const q = ref(''), fSheet = ref(''), fCountry = ref(''), fAttr = ref('');
+    const sheetOpts = ref([]), countryOpts = ref([]), attrOpts = ref([]);
+
+    // 面板开关
+    const showImport = ref(false), showAdd = ref(false);
+    const showWelcome = ref(false);
+
+    // 导入
+    const impState = ref(''), impLog = ref(''), impReport = ref('');
+    // 导入进度条
+    const impProg = reactive({ show: false, pct: 0, step: 0, stepTotal: 0,
+                               stepDone: 0, stepName: '', label: '', elapsed: 0, steps: [] });
+    const welState = ref(''), welLog = ref(''), welReport = ref('');
+    const impBtn = ref(null), welBtn = ref(null);
+    const impFile = ref(null);
+    let impTimer = null;
+
+    // 新增费率档
+    const n = reactive({ sheet:'', country:'', zone:'', line:'', attr:'', mode:'band',
+                        lo:0, hi:999, price:'', fee:0 });
+    const addMsg = ref(''), addErr = ref('');
+
+    /** 当前页有几个渠道是展开的 */
+    const openCount = computed(() => groups.value.filter(g => isOpen(g.sheet)).length);
+    /** 当前页所有档位 (分组模式下 rows 里没有数据了, 要从 groups 里摊平) */
+    const allRows = computed(() => {
+      const out = [];
+      for (const g of groups.value) for (const r of g.rows) out.push(r);
+      return out;
+    });
+    /** 当前筛选下某列有没有值 —— 全空就把整列藏了, 别浪费宽度 */
+    const hasZone = computed(() => allRows.value.some(r => r.zone && r.zone !== '-'));
+    const hasLine = computed(() => allRows.value.some(r =>
+      (r.line && r.line !== '-') || r.attr));
+    const hasMode = computed(() => allRows.value.some(r => r.mode && r.mode !== 'band'));
+    const pages = computed(() => Math.max(1, Math.ceil(totalGroups.value / size.value)));
+    const offset = computed(() => (page.value - 1) * size.value);
+    const countText = computed(() => totalGroups.value
+      ? `共 ${totalGroups.value} 个渠道 / ${total.value} 条档位，当前是第 ${offset.value + 1}-${Math.min(offset.value + size.value, totalGroups.value)} 个渠道`
+      : '没有数据');
+    const lockCountText = computed(() => lockCount.value
+      ? `已锁定 ${lockCount.value} 档 (整表推送时保留)` : '没有锁定的档位');
+    const lockCount = ref(0);
+    const updatedAt = ref('');
+    const updatedText = computed(() => {
+      if (!updatedAt.value) return '';
+      const d = new Date(updatedAt.value);
+      if (isNaN(d.getTime())) return '';
+      const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+      if (mins < 1) return '刚刚更新';
+      if (mins < 60) return mins + ' 分钟前更新';
+      if (mins < 1440) return Math.floor(mins / 60) + ' 小时前更新';
+      return d.toLocaleDateString('zh-CN') + ' 更新';
+    });
+
+    /* ---------------- 数据 ---------------- */
+    async function loadAll() {
+      loadErr.value = '';
+      try {
+        await loadRows(true);
+        await fillFilters();
+        await loadChanges();
+      } catch (e) { loadErr.value = e.message; }
+    }
+
+    async function loadRows(resetPage) {
+      if (resetPage) page.value = 1;
+      const p = new URLSearchParams();
+      p.set('group', '1');           // 按渠道分组返回, 分页按组算
+      p.set('limit', String(size.value));
+      p.set('offset', String(offset.value));
+      if (fSheet.value) p.set('sheet', fSheet.value);
+      if (fCountry.value) p.set('country', fCountry.value);
+      if (fAttr.value) p.set('attr', fAttr.value);
+      if (q.value.trim()) p.set('q', q.value.trim());
+      const j = await A.api('/api/rates?' + p.toString());
+      total.value = j.total == null ? 0 : j.total;
+      totalGroups.value = j.totalGroups || (j.groups || []).length;
+      // 按档位数降序 —— 柱子形成包络线, 一眼看出头部渠道和长尾
+      summary.value = (j.summary || []).slice()
+        .sort((a, b) => (b.count || 0) - (a.count || 0) || String(a.sheet).localeCompare(String(b.sheet)))
+        .map((c, i) => Object.assign({}, c, { rank: i }));
+      rev.value = j.rev;
+      groups.value = (j.groups || []).map(g => ({
+        ...g,
+        rows: (g.rows || []).map(t => ({
+          ...t,
+          _price: t.price == null ? '' : t.price,
+          _fee: t.fee == null ? '' : t.fee,
+          _div: t.div == null ? '' : t.div,
+          _dirty: false,
+          _msg: '', _msgErr: false,
+        })),
+      }));
+      // 记下见过哪些渠道 (「收起全部」要跨页生效)
+      const seen = new Set(seenSheets.value);
+      for (const g of groups.value) seen.add(g.sheet);
+      seenSheets.value = seen;
+      // 搜东西的时候全部展开 —— 不然搜到了却看不到
+      if (q.value.trim()) { allOpen.value = true; collapsed.value = new Set(); }
+      else if (!userTouched.value) {
+        // 首次 / 翻页: 新一页的渠道默认收起
+        collapsed.value = new Set(groups.value.map(g => g.sheet));
+      }
+      if (page.value > pages.value) page.value = pages.value;
+    }
+
+    /* ---------------- 渠道分组折叠 ----------------
+       默认全部收起 —— 1170 条摊平了要翻 100 多页, 收起之后一屏 23 个渠道,
+       每个渠道的档位数/国家数/最低价都在组头上, 想看细节再点开。 */
+    function isOpen(sheet) { return allOpen.value || !collapsed.value.has(sheet); }
+    function toggleGroup(sheet) {
+      userTouched.value = true;
+      if (allOpen.value) {
+        // 从「全展开」切到「单个收起」: 先把所有渠道标记为收起, 再放开这一个
+        allOpen.value = false;
+        const s = new Set(seenSheets.value);
+        s.delete(sheet);
+        collapsed.value = s;
+      } else {
+        const s = new Set(collapsed.value);
+        if (s.has(sheet)) s.delete(sheet); else s.add(sheet);
+        collapsed.value = s;
+      }
+    }
+    function expandAll() { userTouched.value = true; allOpen.value = true; collapsed.value = new Set(); }
+    function collapseAll() {
+      userTouched.value = true; allOpen.value = false;
+      collapsed.value = new Set(seenSheets.value);
+    }
+    /** 隐藏了几列 —— 组头行的 colspan 要跟着变 */
+    const colspan = computed(() =>
+      11 - (hasZone.value ? 0 : 1) - (hasLine.value ? 0 : 1) - (hasMode.value ? 0 : 1));
+
+    async function fillFilters() {
+      try {
+        const cur = await A.api('/api/data');
+        const tiers = (cur.data && cur.data.tiers) || [];
+        const tally = (key) => {
+          const m = new Map();
+          for (const t of tiers) { const k = t[key] || ''; m.set(k, (m.get(k) || 0) + 1); }
+          return m;
+        };
+        const toOpts = (map) => [...map.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([k, n]) => ({ label: (k === '' ? '通用' : k) + ' (' + n + ')', value: k === '' ? '__general__' : k }));
+        sheetOpts.value = toOpts(tally('sheet'));
+        countryOpts.value = toOpts(tally('country'));
+        attrOpts.value = toOpts(tally('attr'));
+      } catch (e) { /* 下拉填充失败不影响主功能 */ }
+    }
+
+    async function loadChanges() {
+      try {
+        const j = await A.api('/api/changes?limit=500');
+        const list = j.changes || [];
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        chgBadge.value = list.filter(c => new Date(c.at).getTime() >= today.getTime()).length;
+        // 近 12 小时的改动分布, 画成卡片里的迷你趋势条
+        const now = Date.now(), HOUR = 3600e3;
+        const buckets = new Array(12).fill(0);
+        for (const c of list) {
+          const ts = new Date(c.at).getTime();
+          if (!isFinite(ts)) continue;
+          const back = Math.floor((now - ts) / HOUR);
+          if (back >= 0 && back < 12) buckets[11 - back]++;
+        }
+        const mx = Math.max.apply(null, buckets.concat([1]));
+        chgSpark.value = buckets.map(v => Math.round(26 + 74 * v / mx));
+      } catch (e) { /* ignore */ }
+    }
+
+    async function loadLocks() {
+      try {
+        const j = await A.api('/api/locks');
+        lockCount.value = j.count || (j.locks ? Object.keys(j.locks).length : 0);
+      } catch (e) { /* ignore */ }
+    }
+
+    /* ---------------- toast ---------------- */
+    const toasts = ref([]);
+    function toast(msg, kind) {
+      const id = Date.now() + Math.random();
+      toasts.value.push({ id, msg, kind: kind || 'ok' });
+      setTimeout(() => { toasts.value = toasts.value.filter(x => x.id !== id); }, 2600);
+    }
+
+    /* ---------------- 筛选条件标签 ---------------- */
+    const chips = computed(() => {
+      const out = [];
+      if (q.value.trim()) out.push({ k: 'q', label: '搜索', text: q.value.trim() });
+      if (fSheet.value) {
+        const o = sheetOpts.value.find(x => x.value === fSheet.value);
+        out.push({ k: 'sheet', label: '渠道', text: o ? o.label.replace(/\s*\(\d+\)$/, '') : fSheet.value });
+      }
+      if (fCountry.value) {
+        const o = countryOpts.value.find(x => x.value === fCountry.value);
+        out.push({ k: 'country', label: '国家', text: o ? o.label.replace(/\s*\(\d+\)$/, '') : fCountry.value });
+      }
+      if (fAttr.value) {
+        const o = attrOpts.value.find(x => x.value === fAttr.value);
+        out.push({ k: 'attr', label: '属性', text: o ? o.label.replace(/\s*\(\d+\)$/, '') : fAttr.value });
+      }
+      return out;
+    });
+    function clearChip(k) {
+      if (k === 'q') q.value = '';
+      else if (k === 'sheet') fSheet.value = '';
+      else if (k === 'country') fCountry.value = '';
+      else if (k === 'attr') fAttr.value = '';
+      applyFilter();
+    }
+    function clearAllFilters() {
+      q.value = ''; fSheet.value = ''; fCountry.value = ''; fAttr.value = '';
+      applyFilter();
+    }
+
+    /* ---------------- 行内编辑 ---------------- */
+    /** 显式处理输入: 自己先写值再判断 dirty。
+        用 v-model + @input 时两者的执行顺序不确定, markDirty 可能读到旧值,
+        导致改了价却不显示「未保存」。 */
+    function onEdit(r, field, ev) {
+      r[field] = ev.target.value;
+      markDirty(r);
+    }
+
+    /**
+     * 导出当前筛选下的渠道组体积数 (CSV)。
+     * 用途: 拿去跟源报价表逐条对账 —— 渠道 / 国家 / 除数 / 来源 / 档位数。
+     * 用当前筛选条件 (渠道 / 国家 / 属性 / 搜索词), 跟页面上看到的范围一致。
+     */
+    async function exportDivs() {
+      try {
+        const j = await A.api('/api/divs');
+        const kw = q.value.trim().toLowerCase();
+        const rows = (j.rows || []).filter(r => {
+          if (fSheet.value && r.sheet !== fSheet.value) return false;
+          if (fCountry.value && r.country !== fCountry.value) return false;
+          if (fAttr.value && fAttr.value !== '__general__' && r.attr !== fAttr.value) return false;
+          if (!kw) return true;
+          return [r.sheet, r.country, r.zone, r.line, r.attr, r.mode, r.div, r.src]
+            .join(' ').toLowerCase().includes(kw);
+        });
+        if (!rows.length) { toast('当前筛选下没有渠道组', 'err'); return; }
+        const esc = v => {
+          const s = (v === null || v === undefined) ? '' : String(v);
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const head = ['渠道', '国家', '分区', '产品线', '属性', '方式',
+                      '体积数', '来源', '不确定', '可报价档位数', '时效', '币种'];
+        const lines = [head.join(',')];
+        for (const r of rows) {
+          lines.push([r.sheet, r.country, r.zone, r.line, r.attr || '通用', r.mode,
+                      r.div, r.src, r.uncertain ? '是' : '', r.tiers, r.lead, r.cur]
+                     .map(esc).join(','));
+        }
+        // 加 BOM, Excel 打开中文才不乱码
+        const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a2 = document.createElement('a');
+        a2.href = URL.createObjectURL(blob);
+        const d = new Date();
+        const stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0')
+                    + String(d.getDate()).padStart(2, '0');
+        a2.download = `体积数-${me.user || 'admin'}-${stamp}.csv`;
+        document.body.appendChild(a2); a2.click();
+        setTimeout(() => { URL.revokeObjectURL(a2.href); a2.remove(); }, 1000);
+        toast(`已导出 ${rows.length} 个渠道组的体积数`);
+      } catch (e) {
+        toast('导出失败: ' + e.message, 'err');
+      }
+    }
+
+    /** 渠道名 -> 一个稳定的颜色 (同样的渠道永远是同一个色),
+        首列左侧一条细色条, 扫一眼就能把同一渠道的行分出来。 */
+    function chColor(sheet) {
+      const s = String(sheet || '');
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      // 色相铺开, 饱和度和亮度压低 —— 是分组标记, 不是装饰
+      const hue = h % 360;
+      return 'hsl(' + hue + ' 46% 58%)';
+    }
+
+    function markDirty(r) {
+      const dp = r._price !== '' && Math.abs(Number(r._price) - (r.price || 0)) > 1e-9;
+      const df = r._fee !== '' && Math.abs(Number(r._fee) - (r.fee || 0)) > 1e-9;
+      // 体积数是渠道组级别的 —— 同一组的其它档位也会跟着变
+      const dd = r._div !== '' && r.div != null && Math.abs(Number(r._div) - Number(r.div)) > 1e-9;
+      r._dirty = dp || df || dd;
+      r._msg = r._dirty ? '未保存' : '';
+      r._msgErr = false;
+    }
+
+    async function saveRow(r) {
+      r._msg = '保存中…'; r._msgErr = false;
+      const patch = {};
+      if (r._price !== '') patch.price = Number(r._price);
+      if (r._fee !== '') patch.fee = Number(r._fee);
+      // 体积数改了? 这一格是渠道组级别的, 整组一起变
+      const divChanged = r._div !== '' && r.div != null
+        && Math.abs(Number(r._div) - Number(r.div)) > 1e-9;
+      try {
+        if (Object.keys(patch).length) {
+          const res = await A.api('/api/rates/' + r.id, { method: 'PUT', body: patch });
+          r.price = res.tier.price; r.fee = res.tier.fee;
+          r._price = res.tier.price; r._fee = res.tier.fee;
+          rev.value = res.rev;
+          version.value = '数据版本 v' + res.rev + ' · ' + new Date(res.updatedAt).toLocaleString('zh-CN');
+        }
+        if (divChanged) {
+          const dres = await A.api('/api/divs', { method: 'PUT', body: { key: r.divKey, div: Number(r._div) } });
+          r.div = dres.div; r._div = dres.div; r.divSrc = dres.src; r.divUncertain = false;
+          // 同一组的其它档位也变了 —— 一起刷新, 不然会显示旧值
+          for (const o of rows.value) {
+            if (o.divKey === r.divKey) {
+              o.div = dres.div; o._div = dres.div; o.divSrc = dres.src; o.divUncertain = false;
+              if (o !== r) { o._dirty = false; o._msg = '已同步 ✓'; }
+            }
+          }
+          rev.value = dres.rev;
+          version.value = '数据版本 v' + dres.rev + ' · ' + new Date(dres.updatedAt).toLocaleString('zh-CN');
+          toast(`体积数已改为 ${dres.div} · 同组 ${r.divTiers} 个重量段一起生效`);
+        }
+        r._dirty = false; r._msg = '已保存 ✓'; r._msgErr = false;
+        if (!divChanged) toast('已保存 · 数据版本 v' + rev.value);
+        loadChanges();
+      } catch (e) {
+        r._msg = '失败'; r._msgErr = true; r._msgTitle = e.message;
+        toast('保存失败: ' + e.message, 'err');
+      }
+    }
+
+    async function toggleLock(r) {
+      const want = !r.locked;
+      try {
+        const res = await A.api('/api/rates/' + r.id + '/lock', { method: 'PUT', body: { locked: want } });
+        r.locked = want;
+        lockCount.value = res.count;
+      } catch (e) {
+        loadErr.value = '操作失败: ' + e.message;
+      }
+    }
+
+    /* ---------------- 筛选 / 分页 ---------------- */
+    let filterTimer = null;
+    function applyFilter() {
+      page.value = 1;
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(() => loadRows(false).catch(e => loadErr.value = e.message), 220);
+    }
+    function setPage(p) { page.value = p; loadRows(false); }
+
+    /** 档位最多的几个渠道 (给分布条做文字摘要) */
+    const topSheets = computed(() => summary.value.slice()
+      .sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 3));
+
+    /** 渠道分布条: 柱子高度 (像素, 4~40px) —— 用像素不用百分比,
+     *  百分比在 flex 容器里高度不可控, 柱子会顶穿标题行。 */
+    const summaryMax = computed(() =>
+      Math.max.apply(null, summary.value.map(c => c.count || 0).concat([1])));
+    function barPx(n) {
+      const max = summaryMax.value || 1;
+      return Math.max(4, Math.round((n || 0) / max * 44));
+    }
+    /** 点柱子 = 筛该渠道; 再点同一个 = 取消 */
+    function toggleSheet(sheet) {
+      fSheet.value = (fSheet.value === sheet) ? '' : sheet;
+      applyFilter();
+    }
+    function setSize(n) { size.value = n; page.value = 1; loadRows(false); }
+
+    /* ---------------- 整表导入 ---------------- */
+    async function uploadTable(file, isWelcome) {
+      const state = isWelcome ? welState : impState;
+      const log = isWelcome ? welLog : impLog;
+      const btn = isWelcome ? welBtn : impBtn;
+      if (!file) { state.value = '先选一个 .xlsx 文件'; return; }
+      if (!/\.xlsx$/i.test(file.name)) { state.value = '只支持 .xlsx'; return; }
+      if (btn) btn.disabled = true;
+      state.value = `正在上传 ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`;
+      log.value = '';
+      impProg.show = true; impProg.pct = 0; impProg.step = 0; impProg.stepDone = 0;
+      impProg.stepName = '上传文件'; impProg.label = '上传文件';
+      impProg.elapsed = 0; impProg.steps = IMP_STEPS;
+      try {
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let bin = '';
+        const CH = 0x8000;
+        for (let i = 0; i < bytes.length; i += CH) {
+          bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+        }
+        const b64 = btoa(bin);
+        await A.api('/api/import-file', { method: 'POST', body: { filename: file.name, data: b64 } });
+        state.value = '已提交, 正在抽取…';
+        pollImport(isWelcome);
+      } catch (e) {
+        state.value = '上传失败: ' + e.message;
+        if (btn) btn.disabled = false;
+      }
+    }
+    // pipeline 的 7 个步骤 (和 run_pipeline.py 的 STEPS 一致)
+    const IMP_STEPS = ['抽取费率档', '抽取专线三线', '抽取尺寸限制与附加费',
+                       '抽取逐国体积重除数', '抽取定价规则', '打包数据', '合并并生成数据文件'];
+
+    function applyProgress(j) {
+      impProg.show = true;
+      impProg.pct = Math.max(0, Math.min(100, Number(j.progress) || 0));
+      impProg.step = Number(j.step) || 0;
+      impProg.stepTotal = Number(j.stepTotal) || 0;
+      impProg.stepDone = Number(j.stepDone) || 0;
+      impProg.stepName = j.stepName || '';
+      impProg.elapsed = Number(j.elapsed) || 0;
+      impProg.steps = IMP_STEPS;
+      if (j.state === 'done') impProg.label = '导入完成';
+      else if (j.state === 'failed') impProg.label = '导入失败';
+      else if (impProg.step > 0) {
+        impProg.label = `第 ${impProg.step} 步 · ${impProg.stepName}`;
+      } else {
+        impProg.label = '上传文件';
+      }
+    }
+
+    // 标签页切到后台时, 浏览器的 setInterval 会被节流 (可能到 1 分钟一次),
+    // 进度条看着像卡住。切回前台立刻拉一次状态。
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && impTimer) {
+        impTimer = setInterval(pollImport, 2000);
+        pollImport();
+      }
+    });
+
+    function pollImport(isWelcome) {
+      const state = isWelcome ? welState : impState;
+      const log = isWelcome ? welLog : impLog;
+      const btn = isWelcome ? welBtn : impBtn;
+      if (impTimer) clearInterval(impTimer);
+      impTimer = setInterval(async () => {
+        let j;
+        try { j = await A.api('/api/import-status'); } catch (e) { return; }
+        log.value = (j.log || []).join('\n');
+        if (j.state === 'running') {
+          applyProgress(j);
+          state.value = '正在处理…';
+          return;
+        }
+        if (j.state === 'done') { applyProgress(j); impProg.pct = 100; }
+        clearInterval(impTimer); impTimer = null;
+        if (btn) btn.disabled = false;
+        if (j.state === 'failed') {
+          state.value = '失败: ' + (j.error || '未知错误');
+          applyProgress(j);
+          return;
+        }
+        const r = j.result || {};
+        const rep = r.report || {};
+        const c = rep.counts || {};
+        state.value = `完成 · 数据版本 v${r.rev} · 价格更新 ${c.changed || 0} · 新增渠道档 ${c.added || 0} · 移除 ${c.removed || 0}`
+          + (r.lockedPreserved ? ` · 锁定保留 ${r.lockedPreserved} 档` : '');
+        const html = buildReport(rep);
+        if (isWelcome) welReport.value = html; else impReport.value = html;
+        await loadAll();
+        await fillFilters();
+      }, 2000);
+    }
+
+    function buildReport(rep) {
+      const c = rep.counts || {};
+      const bySheet = rep.bySheet || {};
+      const sheets = Object.keys(bySheet).sort((a, b) =>
+        (bySheet[b].changed + bySheet[b].added + bySheet[b].removed) -
+        (bySheet[a].changed + bySheet[a].added + bySheet[a].removed));
+      let html = '';
+      if (sheets.length) {
+        html += '<div class="muted" style="font-size:12.5px;margin:12px 0 6px">按渠道汇总</div>'
+          + '<div class="repcard"><table><thead><tr><th>渠道</th><th>价格更新</th><th>新增</th><th>移除</th></tr></thead><tbody>'
+          + sheets.map(s => `<tr><td>${A.esc(s)}</td>`
+            + `<td class="num rep-new">${bySheet[s].changed || 0}</td>`
+            + `<td class="num rep-new">${bySheet[s].added || 0}</td>`
+            + `<td class="num rep-del">${bySheet[s].removed || 0}</td></tr>`).join('')
+          + '</tbody></table></div>';
+      }
+      const rows = (arr, cols) => {
+        if (!arr || !arr.length) return '';
+        return '<div class="repcard"><table><thead><tr>'
+          + cols.map(x => `<th>${x[0]}</th>`).join('') + '</tr></thead><tbody>'
+          + arr.map(r => '<tr>' + cols.map(x => `<td class="${x[2] || ''}">${x[1](r)}</td>`).join('') + '</tr>').join('')
+          + '</tbody></table></div>';
+      };
+      if ((rep.changed || []).length) {
+        html += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">价格有变化的档位 (${rep.changed.length})</div>`
+          + rows(rep.changed, [['渠道 / 国家 / 重量段', r => A.esc(r.label)],
+            ['原运费', r => `<span class="rep-old">${r.oldPrice}</span>`, 'num'],
+            ['新运费', r => `<b class="rep-new">${r.newPrice}</b>`, 'num'],
+            ['原挂号费', r => `<span class="rep-old">${r.oldFee}</span>`, 'num'],
+            ['新挂号费', r => `<b class="rep-new">${r.newFee}</b>`, 'num']]);
+      }
+      if ((rep.added || []).length) {
+        html += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">新增的档位 (${rep.added.length}) —— 多半是新渠道</div>`
+          + rows(rep.added, [['渠道 / 国家 / 重量段', r => A.esc(r.label)],
+            ['运费', r => `<b class="rep-new">${r.price}</b>`, 'num'],
+            ['挂号费', r => r.fee, 'num']]);
+      }
+      if ((rep.removed || []).length) {
+        html += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">移除的档位 (${rep.removed.length}) —— 报价表里没有了</div>`
+          + rows(rep.removed, [['渠道 / 国家 / 重量段', r => A.esc(r.label)],
+            ['原运费', r => `<span class="rep-del">${r.price}</span>`, 'num'],
+            ['原挂号费', r => r.fee, 'num']]);
+      }
+      if (rep.truncated) html += '<div class="muted" style="font-size:12px;margin-top:8px">明细太多, 只显示前 300 条</div>';
+      return html;
+    }
+
+    /* ---------------- 新增费率档 ---------------- */
+    async function addRate() {
+      addErr.value = ''; addMsg.value = '';
+      const body = {
+        sheet: n.sheet.trim(), country: n.country.trim(),
+        zone: n.zone.trim() || '-', line: n.line.trim() || '-',
+        attr: n.attr, mode: n.mode,
+        lo: Number(n.lo || 0), hi: Number(n.hi || 999),
+        price: n.price, fee: n.fee || 0,
+      };
+      if (!body.sheet || !body.country) { addErr.value = '渠道和国家都要填'; return; }
+      try {
+        const r = await A.api('/api/rates', { method: 'POST', body });
+        addMsg.value = `已新增 · 数据版本 v${r.rev}`;
+        n.sheet = ''; n.country = ''; n.price = '';
+        await loadAll();
+        await fillFilters();
+      } catch (e) { addErr.value = e.message; }
+    }
+
+    /* ---------------- 登录 / 启动 ---------------- */
+        /** 登录成功后加载本页数据 (由 useAuth 的回调触发) */
+    async function onAuthed() {
+      await refreshVersion();
+      await loadAll();
+      await loadLocks();
+      // 新账号没数据 -> 显示引导
+      showWelcome.value = total.value === 0;
+    }
+
+    async function refreshVersion() {
+      try {
+        const v = await A.api('/api/version');
+        version.value = '数据版本 v' + v.rev
+          + (v.updatedAt ? ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN') : '');
+        rev.value = v.rev;
+        if (v.updatedAt) updatedAt.value = v.updatedAt;
+      } catch (e) { /* ignore */ }
+    }
+
+    async function logout() {
+      try { await A.api('/api/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+      location.href = '/';
+    }
+
+    /* ---------------- 键盘快捷键 ----------------
+       / 聚焦搜索   n 新增费率档   Esc 关闭面板
+       在输入框里不触发 (否则打字会误触发) */
+    function onKey(e) {
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || tag === 'select'
+        || (e.target && e.target.isContentEditable);
+      if (e.key === 'Escape') {
+        if (showAdd.value) showAdd.value = false;
+        else if (showImport.value) showImport.value = false;
+        else if (showWelcome.value) showWelcome.value = false;
+        return;
+      }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        const box = document.querySelector('.toolbar input[type=search]');
+        if (box) { box.focus(); box.select(); }
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        showAdd.value = true;
+      }
+    }
+    onMounted(async () => {
+      document.addEventListener('keydown', onKey);
+      try { await afterLogin(); } catch (e) { logged.value = false; }
+    });
+    onUnmounted(() => {
+      document.removeEventListener('keydown', onKey);
+      if (impTimer) clearInterval(impTimer);
+    });
+
+    return {
+      logged, checking, me, version, rev, rows, groups, totalGroups, summary, collapsed, total, page, size, pages, hasZone, hasLine, hasMode,
+      isOpen, toggleGroup, expandAll, collapseAll, colspan, openCount, chgBadge, chgSpark, showPwd, loadErr,
+      q, fSheet, fCountry, fAttr, sheetOpts, countryOpts, attrOpts,
+      showImport, showAdd, showWelcome,
+      impState, impLog, impReport, impBtn, welState, welLog, welReport, welBtn,
+      impProg, IMP_STEPS,
+      n, addMsg, addErr, lockCount,
+      countText, lockCountText, MODE_CN, toasts, chips, clearChip, clearAllFilters, updatedText,
+      onEdit, markDirty, saveRow, toggleLock, applyFilter, setPage, setSize, exportDivs, chColor,
+      barPx, toggleSheet, topSheets,
+      uploadTable, addRate, afterLogin, logout, refreshVersion, loadAll,
+    };
+  },
+  template: `
+    <div>
+      <AppHeader
+        title="报价后台"
+        :version="version"
+        :user="me.user"
+        :role="me.role"
+        :badge="chgBadge"
+        refresh
+        :links="[{href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
+        @logout="logout"
+        @password="showPwd = true"
+        @refresh="loadAll"
+      />
+
+      <main>
+        <template v-if="checking">
+          <div class="gate"><p class="muted">正在检查登录状态…</p></div>
+        </template>
+
+        <template v-else-if="!logged">
+          <AuthGate @login="afterLogin" @register="afterLogin" />
+        </template>
+
+
+        <template v-else>
+          <!-- 空数据引导 -->
+          <div class="welcome" v-if="showWelcome">
+            <h2>先上传你的渠道价格表</h2>
+            <p>你的账号现在是空的 —— 没有任何渠道报价。上传一份《渠道整合报价》xlsx,
+               系统会自动抽取所有渠道、国家、重量段, 之后就能报价、改价了。</p>
+            <p class="muted">表格格式和盛途那份一样就行 (每个渠道一个 sheet,
+               表头写「国家 / 尺寸限制 / 运费 / 重量 / 普货 / 带电」这类)。
+               你的数据只有你自己能看到, 不会跟别人混。</p>
+            <div class="wrow">
+              <input type="file" accept=".xlsx" style="font-size:13px" @change="welFile = $event.target.files[0]">
+              <button class="primary" ref="welBtn" @click="uploadTable(welFile, true)">上传并导入</button>
+              <span class="muted">{{ welState }}</span>
+            </div>
+            <div class="progwrap" v-if="impProg.show">
+              <div class="progbar"><i :style="{width: impProg.pct + '%'}"></i></div>
+              <div class="progtxt">
+                <b>{{ impProg.label }}</b>
+                <span class="muted">{{ impProg.pct }}% · 已用 {{ impProg.elapsed }} 秒</span>
+              </div>
+              <div class="progsteps">
+                <span v-for="(s, i) in impProg.steps" :key="i"
+                      :class="{ on: i + 1 === impProg.step, done: i + 1 <= impProg.stepDone }">{{ s }}</span>
+              </div>
+            </div>
+            <pre class="implog" :class="{show: welLog}" v-html="welLog"></pre>
+            <div v-html="welReport"></div>
+          </div>
+
+          <!-- 仪表条 + 渠道分布: 合成一个卡片, 别把表格挤到屏幕外 -->
+          <div class="dash">
+          <div class="dash-inner">
+            <div class="metrics">
+              <div class="metric">
+                <span class="mk">费率档</span><b class="mv">{{ total }}</b>
+              </div>
+              <div class="metric">
+                <span class="mk">渠道</span><b class="mv">{{ totalGroups || sheetOpts.length }}</b>
+              </div>
+              <div class="metric">
+                <span class="mk">国家</span><b class="mv">{{ countryOpts.length }}</b>
+              </div>
+              <div class="metric k-lock">
+                <span class="mk">锁定</span><b class="mv">{{ lockCount }}</b>
+              </div>
+              <div class="metric k-chg">
+                <span class="mk">今日改动</span><b class="mv">{{ chgBadge }}</b>
+              </div>
+              <div class="metric">
+                <span class="mk">版本</span><b class="mv">v{{ rev }}</b>
+                <span class="ms">{{ me.user }}<span v-if="updatedText"> · {{ updatedText }}</span></span>
+              </div>
+            </div>
+            <div class="dash-spark" v-if="chgSpark.length" title="近 12 小时的改动次数分布">
+              <i v-for="(v, i) in chgSpark" :key="i" :style="{height: v + '%'}"
+                 :class="{on: v > 30, hot: v > 85}"></i>
+            </div>
+            <div class="grow"></div>
+            <a class="dash-link" href="/admin/changes">改动记录 →</a>
+            <span class="ov-keys">
+              <kbd>/</kbd> 搜索 <kbd>n</kbd> 新增档位 <kbd>Esc</kbd> 关闭面板
+            </span>
+          </div>
+
+          <!-- 渠道分布: 左边标签栏 + 右边柱状图, 像正经图表那样 -->
+          <div class="chdist" v-if="summary.length">
+            <div class="chd-side">
+              <span class="chd-t">渠道分布</span>
+              <span class="chd-sum" v-if="topSheets.length"
+                    :title="'最大 ' + topSheets[0].sheet + ' ' + topSheets[0].count + ' 条档位'">
+                最大 {{ topSheets[0].count }} 档
+                <i>{{ topSheets[0].sheet }}</i>
+              </span>
+              <span class="chd-cur" v-if="fSheet">
+                正在看 <b>{{ fSheet }}</b>
+                <span class="x" @click="toggleSheet(fSheet)">✕</span>
+              </span>
+            </div>
+            <div class="chd-main">
+              <div class="chd-bars" :class="{filtered: !!fSheet}">
+                <button v-for="c in summary" :key="c.sheet" class="chd-bar"
+                        :class="{on: fSheet === c.sheet, top: c.rank < 3}"
+                        :style="{height: barPx(c.count) + 'px', background: chColor(c.sheet)}"
+                        :title="c.sheet + ' · ' + c.count + ' 条档位 · ' + c.countries + ' 个国家 · 最低 ¥' + c.minPrice + ' · 均价 ¥' + c.avgPrice"
+                        @click="toggleSheet(c.sheet)"></button>
+              </div>
+              <div class="chd-hint">柱高 = 档位数 · 共 {{ summary.length }} 个渠道 · 点柱子筛该渠道</div>
+            </div>
+          </div>
+          </div>
+
+          <!-- 工具条 -->
+          <div class="toolbar">
+            <input type="search" v-model="q" placeholder="搜渠道 / 国家 / 分区 / 产品线…" @input="applyFilter" @keyup.enter="applyFilter">
+            <select v-model="fSheet" @change="applyFilter">
+              <option value="">全部渠道</option>
+              <option v-for="o in sheetOpts" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <select v-model="fCountry" @change="applyFilter">
+              <option value="">全部国家</option>
+              <option v-for="o in countryOpts" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <select v-model="fAttr" @change="applyFilter">
+              <option value="">全部属性</option>
+              <option v-for="o in attrOpts" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <button class="primary" @click="applyFilter">查询</button>
+            <span class="tbsep"></span>
+            <button @click="expandAll" title="展开所有渠道的档位">展开全部</button>
+            <button @click="collapseAll" title="全部收起, 一屏只看渠道清单">收起全部</button>
+            <span class="tbsep"></span>
+            <button @click="showAdd = !showAdd">+ 新增费率档</button>
+            <button @click="showImport = !showImport">⬆ 整表导入</button>
+            <button @click="exportDivs" title="导出当前筛选下的渠道组体积数 (渠道/国家/来源/档位数), 拿去跟源报价表对账">导出体积数 CSV</button>
+            <span style="flex:1"></span>
+            <span class="err" style="margin:0" v-if="loadErr">{{ loadErr }}</span>
+          </div>
+          <div class="toolbar sub" v-if="chips.length">
+            <span class="chips">
+              <span class="muted" style="font-size:11.5px">当前筛选</span>
+              <span class="chip" v-for="c in chips" :key="c.k" @click="clearChip(c.k)" :title="'点一下清除这个条件'">
+                <b>{{ c.label }}</b> {{ c.text }} <span class="x">✕</span>
+              </span>
+              <span class="chip ghost" @click="clearAllFilters" title="清空所有筛选条件">清空筛选</span>
+            </span>
+            <span class="grow"></span>
+            <span class="ov-keys"><kbd>/</kbd> 搜索 <kbd>n</kbd> 新增档位 <kbd>Esc</kbd> 关闭面板</span>
+          </div>
+
+          <!-- 整表导入面板 -->
+          <div class="pane" v-if="showImport">
+            <h3>整表导入</h3>
+            <p class="muted" style="margin:0 0 10px;font-size:12.5px">
+              上传新的《渠道整合报价》xlsx。系统会自动抽取、对比、然后应用:
+              <b>新渠道自动加上, 有价格变化的自动更新, 锁定的档位保留不动</b>。整表里没有的渠道会被移除。
+            </p>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input type="file" accept=".xlsx" style="font-size:13px" @change="impFile = $event.target.files[0]">
+              <button class="primary" ref="impBtn" @click="uploadTable(impFile, false)">开始导入</button>
+              <span class="muted">{{ impState }}</span>
+            </div>
+            <div class="progwrap" v-if="impProg.show">
+              <div class="progbar"><i :style="{width: impProg.pct + '%'}"></i></div>
+              <div class="progtxt">
+                <b>{{ impProg.label }}</b>
+                <span class="muted">{{ impProg.pct }}% · 已用 {{ impProg.elapsed }} 秒</span>
+              </div>
+              <div class="progsteps">
+                <span v-for="(s, i) in impProg.steps" :key="i"
+                      :class="{ on: i + 1 === impProg.step, done: i + 1 <= impProg.stepDone }">{{ s }}</span>
+              </div>
+            </div>
+            <pre class="implog" :class="{show: impLog}" v-html="impLog"></pre>
+            <div v-html="impReport"></div>
+          </div>
+
+          <!-- 新增费率档面板 -->
+          <div class="pane" v-if="showAdd">
+            <h3>新增一条费率档</h3>
+            <p class="muted" style="margin:0 0 10px;font-size:12.5px">
+              用于手工加一个渠道, 或补一个漏掉的重量档。渠道名、国家写成和报价表一样的字。
+            </p>
+            <div class="addgrid">
+              <label>渠道<input v-model="n.sheet" placeholder="如 新渠道名称"></label>
+              <label>国家<input v-model="n.country" placeholder="如 美国"></label>
+              <label>分区<input v-model="n.zone" placeholder="默认 -"></label>
+              <label>产品线<input v-model="n.line" placeholder="默认 -"></label>
+              <label>属性<select v-model="n.attr">
+                <option value="">通用</option><option>普货</option><option>带电</option>
+              </select></label>
+              <label>方式<select v-model="n.mode">
+                <option value="band">按重分段</option>
+                <option value="firstnext">首重续重</option>
+                <option value="divider">体积除数</option>
+              </select></label>
+              <label>重量下限 kg<input v-model.number="n.lo" type="number" step="0.001"></label>
+              <label>重量上限 kg<input v-model.number="n.hi" type="number" step="0.001"></label>
+              <label>运费 ¥/kg<input v-model="n.price" type="number" step="0.01" min="0"></label>
+              <label>挂号费<input v-model.number="n.fee" type="number" step="0.01" min="0"></label>
+            </div>
+            <div class="row" style="margin-top:10px">
+              <button class="primary" @click="addRate">保存</button>
+              <button @click="showAdd = false">取消</button>
+              <span class="err" style="color:var(--bad);font-size:12.5px" v-if="addErr">{{ addErr }}</span>
+              <span class="ok" style="font-size:12.5px" v-if="addMsg">{{ addMsg }}</span>
+            </div>
+          </div>
+
+          <!-- 费率表 -->
+          <div class="tablewrap">
+            <table class="rtab" :class="{'no-zone': !hasZone, 'no-line': !hasLine, 'no-mode': !hasMode}">
+              <thead><tr>
+                <th style="width:210px">渠道</th>
+                <th style="width:70px">国家</th>
+                <th style="width:64px">分区</th>
+                <th style="width:120px">产品线 / 属性</th>
+                <th style="width:78px">方式</th>
+                <th style="width:110px">重量段</th>
+                <th style="width:92px" class="editable" title="体积重除数 = 长×宽×高÷这个数。改这一格会改掉同渠道同国家的全部重量段">
+                  体积数<span class="ed">✎ 可改</span></th>
+                <th style="width:130px" class="sticky-r sr-1 editable">运费 ¥/kg<span class="ed">✎ 可改</span></th>
+                <th style="width:112px" class="sticky-r sr-2 editable">挂号费<span class="ed">✎ 可改</span></th>
+                <th style="width:56px" class="sticky-r sr-3">锁定</th>
+                <th style="width:90px" class="sticky-r sr-4">操作</th>
+              </tr></thead>
+              <tbody>
+                <template v-for="g in groups" :key="g.sheet">
+                <!-- 渠道组头: 折叠 / 展开, 顺便把这个渠道的关键信息摆出来 -->
+                <tr class="ghead" :class="{open: isOpen(g.sheet)}" @click="toggleGroup(g.sheet)">
+                  <td :colspan="colspan">
+                    <span class="gcaret">{{ isOpen(g.sheet) ? '▾' : '▸' }}</span>
+                    <i class="chcolor" :style="{background: chColor(g.sheet)}"></i>
+                    <b>{{ g.sheet }}</b>
+                    <span class="gmeta">{{ g.count }} 档 · {{ g.countries }} 国家<span v-if="g.locked"> · {{ g.locked }} 已锁</span></span>
+                    <span class="grow"></span>
+                    <span class="gprice">最低 ¥{{ Number(g.minPrice).toFixed(2) }}</span>
+                  </td>
+                </tr>
+                <tr v-for="r in (isOpen(g.sheet) ? g.rows : [])" :key="r.id" :class="{locked: r.locked, unsaved: r._dirty}">
+                  <td class="sheetcell" :class="{lockedname: r.locked}" :title="r.sheet">
+                    <i class="chcolor" :style="{background: chColor(r.sheet)}"></i>{{ r.sheet }}
+                  </td>
+                  <td>{{ r.country }}</td>
+                  <td>{{ r.zone && r.zone !== '-' ? r.zone : '–' }}</td>
+                  <td>
+                    <span class="pill" v-if="r.line && r.line !== '-'">{{ r.line }}</span>
+                    <span class="pill" :class="r.attr === '带电' ? 'b' : 'p'" v-if="r.attr">{{ r.attr }}</span>
+                  </td>
+                  <td>{{ MODE_CN[r.mode] || r.mode }}</td>
+                  <td class="num">{{ r.lo }} – {{ r.hi }} kg</td>
+                  <td class="num divcell editable">
+                    <div class="cell">
+                      <input class="divin" type="number" step="1" min="100" max="100000"
+                             :value="r._div"
+                             :class="{dirty: r._dirty, uncertain: r.divUncertain}"
+                             @input="onEdit(r, '_div', $event)"
+                             :title="'体积重除数 (长×宽×高÷这个数, 尺寸单位 cm) · 来源: ' + r.divSrc
+                               + ' · 同组共 ' + r.divTiers + ' 个重量段共用它, 改这里会改掉整组'">
+                    </div>
+                  </td>
+                  <td class="sticky-r sr-1 editable"><div class="cell">
+                    <input class="price" type="number" step="0.01" min="0"
+                      :value="r._price" :class="{dirty: r._dirty}"
+                      @input="onEdit(r, '_price', $event)">
+                  </div></td>
+                  <td class="sticky-r sr-2 editable"><div class="cell">
+                    <input class="fee" type="number" step="0.01" min="0"
+                      :value="r._fee" :class="{dirty: r._dirty}"
+                      @input="onEdit(r, '_fee', $event)">
+                  </div></td>
+                  <td class="sticky-r sr-3">
+                    <button class="lockbtn" :class="{on: r.locked}"
+                      :title="r.locked ? '已锁定: 整表推送时保留这个价 (点击解锁)' : '锁定这个价: 整表推送时不覆盖 (点击锁定)'"
+                      @click="toggleLock(r)"><span class="sw"><span class="knob"></span></span><span class="lt">{{ r.locked ? '已锁' : '锁定' }}</span></button>
+                  </td>
+                  <td class="sticky-r sr-4"><div class="cell">
+                    <button v-if="r._dirty" class="save armed" @click="saveRow(r)">保存</button>
+                    <span class="saved" :class="{err: r._msgErr, dirty: r._dirty, idle: !r._dirty && !r._msg}"
+                      :title="r._msgTitle">{{ r._msg || (r._dirty ? '未保存' : '') }}</span>
+                  </div></td>
+                </tr>
+                </template>
+                <tr v-if="!groups.length">
+                  <td :colspan="colspan">
+                    <div class="blank">
+                      <div class="bh">没有匹配的费率档</div>
+                      <p v-if="chips.length">当前筛选条件下没有结果</p>
+                      <p v-else>这个账号还没有导入渠道价格表</p>
+                      <p v-if="chips.length" style="margin-top:10px">
+                        <button class="primary" @click="clearAllFilters">清除全部筛选</button>
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <Pager
+            :page="page" :pages="pages" :total="total" :size="size" unit="个渠道"
+            @update:page="setPage"
+            @update:size="setSize"
+          />
+
+          <div class="pagehint">
+            <div class="ph-row"><i></i>改价只影响<b>运费单价</b>和<b>挂号费</b>；改<b>体积数</b>会影响<b>同渠道同国家的全部重量段</b>（除数按渠道组算）。</div>
+            <div class="ph-row"><i></i>改完前台会在一分钟内自动同步（或手动刷新）。</div>
+            <div class="ph-row"><i></i>批量导入整张新报价表：在本地跑 <code>脚本\推送报价.py</code>。</div>
+            <div class="ph-row"><i></i>打开「锁定」开关的档位，整表推送时<b>保留不动</b>。</div>
+          </div>
+        </template>
+      </main>
+
+      <div class="toasts">
+        <div class="toast" :class="t.kind" v-for="t in toasts" :key="t.id">{{ t.msg }}</div>
+      </div>
+
+      <PasswordModal :show="showPwd" @close="showPwd = false" />
+    </div>
+  `,
+}).mount('#root');
+</script>
+</body>
+</html>

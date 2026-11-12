@@ -1,0 +1,51 @@
+# 物流报价网站 —— Docker Compose 部署
+#
+#   curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/docker-compose.yml \
+#     -o docker-compose.yml && docker compose up -d
+#
+# 或者 clone 下来:
+#   git clone https://github.com/Berg-E5/logistics-quote.git
+#   cd logistics-quote && docker compose up -d
+#
+# 数据在 ./data (宿主目录), 换镜像/重建容器都不影响。
+# 首次启动自动建 admin 账号, 密码看日志:
+#   docker compose logs quote | grep -A2 'admin'
+# 要指定密码: 在同目录建 .env 写 ADMIN_PASSWORD=xxx
+#
+# 端口只绑本机 127.0.0.1 —— 对外访问用宿主机 nginx 反代 (证书不进容器):
+#   proxy_pass http://127.0.0.1:8792;
+
+services:
+  quote:
+    image: utism/quote:latest
+    container_name: quote-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8792:8792"
+    volumes:
+      - ./data:/app/data
+    environment:
+      PORT: "8792"
+      HOST: "0.0.0.0"
+      NODE_ENV: "production"
+      # ADMIN_PASSWORD: "改成你的密码"   # 不给就随机生成, 看日志
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8792/api/version',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ---- 可选: 让 compose 顺便管 nginx + 证书 ----
+  # 需要在同目录放好证书, 并把 ports 改成 80/443
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: quote-nginx
+  #   restart: unless-stopped
+  #   depends_on: [quote]
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  #     - ./certs:/etc/nginx/certs:ro

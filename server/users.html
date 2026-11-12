@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用户管理 · 报价后台</title>
+<link rel="stylesheet" href="/ui-common.css">
+  <link rel="stylesheet" href="/dash.css">
+<link rel="stylesheet" href="/admin-common.css">
+<style>
+  /* ---------------- 本页专属 ---------------- */
+
+  .role {
+    display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 5px;
+    border: 1px solid var(--line2); white-space: nowrap; font-weight: 590;
+  }
+  .role.admin { border-color: rgba(91,140,255,.42); color: var(--accenthi); background: var(--accentdim); }
+  .role.user  { border-color: var(--line2); color: var(--muted); background: rgba(255,255,255,.03); }
+
+  .delbtn {
+    color: var(--bad); border-color: transparent; background: transparent;
+    font-size: 12.5px; font-weight: 510;
+  }
+  .delbtn:hover { background: var(--baddim); border-color: var(--bad); }
+  .delbtn:disabled { opacity: .3; }
+
+  /* 有数据 / 未上传 */
+  .hasdata { color: var(--good); font-weight: 590; }
+  /* 账号卡片 */
+  .ucards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .ucard {
+    background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 60%), var(--panel);
+    border: 1px solid var(--line-2); border-radius: 10px; padding: 14px 16px 13px;
+    position: relative; overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 18px 40px -30px rgba(0,0,0,.9);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  /* 左侧角色色条: 管理员琥珀, 普通用户蓝 —— 一眼分清 */
+  .ucard::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: var(--accent); opacity: .55; }
+  .ucard:has(.avatar.admin)::before { background: var(--warn); opacity: .7; }
+  .ucard:hover { border-color: var(--line-3); }
+  .uc-top { display: flex; align-items: center; gap: 10px; }
+  .uc-top .avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex: none;
+    background: var(--accent); color: #08111f; font-weight: 700; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center; text-transform: uppercase;
+  }
+  .uc-top .avatar.admin { background: var(--warn); }
+  .uc-id { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+  .uc-id b { font-size: 14px; font-weight: 590; color: var(--fg); }
+  .uc-id .muted { font-size: 11px; }
+  .uc-meta { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 14px; }
+  .uc-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .uc-cell span { font-size: 10px; color: var(--dim); letter-spacing: .3px; }
+  .uc-cell b {
+    font-size: 12.5px; font-weight: 560; color: var(--fg-2);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .uc-cell b.ok { color: var(--good); }
+  .uc-acts { display: flex; gap: 8px; justify-content: flex-end; padding-top: 2px;
+             border-top: 1px solid var(--line); margin-top: -2px; padding-top: 11px; }
+
+  .nodata {
+    display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid rgba(240,166,58,.4); color: var(--warn); background: var(--warndim); font-weight: 590;
+  }
+
+  /* 被锁的 IP 行 */
+  #lockrows tr.locked { background: var(--warndim); box-shadow: inset 3px 0 0 var(--warn); }
+  #lockrows tr.locked td { border-bottom-color: rgba(240,166,58,.16); }
+  #lockrows .ip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; color: var(--fg);
+  }
+  .unlockbtn {
+    color: var(--warn); border-color: rgba(240,166,58,.45); background: var(--warndim); font-weight: 510;
+  }
+  .unlockbtn:hover { background: rgba(240,166,58,.24); border-color: var(--warn); }
+  #unlockall { border-color: rgba(240,166,58,.45); color: var(--warn); }
+  #unlockall:hover { background: var(--warndim); border-color: var(--warn); }
+  .lockcount { font-weight: 590; color: var(--warn); }
+  .lockcount.zero { color: var(--muted); font-weight: 400; }
+
+  /* 有被锁 IP 时, 面板整体变成琥珀色警示 */
+  #lockpane.has-locks {
+    border-color: rgba(240,166,58,.5);
+    box-shadow: 0 0 0 1px rgba(240,166,58,.18), 0 0 24px -8px rgba(240,166,58,.35);
+  }
+  #lockpane.has-locks h3 { color: var(--warn); }
+  .lockbadge {
+    display: inline-block; font-size: 11px; font-weight: 590; padding: 1px 8px; border-radius: 999px;
+    margin-left: 8px; border: 1px solid rgba(240,166,58,.5); color: var(--warn);
+    background: var(--warndim); vertical-align: 2px;
+  }
+  #unlockall.solid { background: var(--warn); border-color: var(--warn); color: #241703; font-weight: 590; }
+  #unlockall.solid:hover { background: #f7bb55; }
+
+  .newgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .newgrid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .newgrid input, .newgrid select { width: 100%; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .tablewrap table { min-width: 520px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="/vue.global.prod.js"></script>
+<script src="/admin-common.js"></script>
+<script>
+const A = window.QuoteAdmin;
+const { createApp, ref, computed, onMounted } = Vue;
+
+createApp({
+  components: {
+    AppHeader: A.AppHeader, LoginGate: A.LoginGate, PasswordModal: A.PasswordModal,
+  },
+  setup() {
+    const { logged, checking, me, afterLogin, reset: resetAuth } = A.useAuth(async () => {
+      await onAuthed();
+    });
+    const version = ref('读取中…');
+    const users = ref([]);
+    const locks = ref([]);
+    const lockErr = ref('');
+    const loadErr = ref('');
+    const showPwd = ref(false);
+    const busy = ref(false);
+
+    // 新增用户表单
+    const nUser = ref('');
+    const nPass = ref('');
+    const nRole = ref('user');
+    const addErr = ref('');
+    const addOk = ref('');
+
+    const countText = computed(() => `共 ${users.value.length} 个账号`);
+    const lockCountText = computed(() => {
+      if (lockErr.value) return '读取失败: ' + lockErr.value;
+      return locks.value.length ? `有 ${locks.value.length} 个 IP 被锁` : '没有被锁的 IP';
+    });
+
+    async function refreshVersion() {
+      try {
+        const v = await A.api('/api/version');
+        version.value = '数据版本 v' + v.rev
+          + (v.updatedAt ? ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN') : '');
+      } catch (e) { version.value = '数据版本读取失败'; }
+    }
+
+    const usersWithData = computed(() => users.value.filter(u => u.hasData));
+    /** 每个账号一根迷你条: 长度按「数据规模」相对最大值缩放,
+        一眼看出谁的数据多、谁基本没在用。 */
+    const userSpark = computed(() => {
+      const a = users.value;
+      if (!a.length) return [];
+      const sz = a.map(u => Number(u.tiers || u.tierCount || 0));
+      const mx = Math.max.apply(null, sz.concat([1]));
+      return a.map(u => Math.round(12 + 88 * (Number(u.tiers || u.tierCount || 0)) / mx));
+    });
+    const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length);
+
+    async function loadUsers() {
+      loadErr.value = '';
+      try {
+        const j = await A.api('/api/users');
+        users.value = j.users || [];
+      } catch (e) {
+        loadErr.value = e.message;
+        users.value = [];
+      }
+      await refreshVersion();
+    }
+
+    async function loadLocks() {
+      lockErr.value = '';
+      try {
+        const j = await A.api('/api/rate-locks');
+        locks.value = j.locks || [];
+      } catch (e) {
+        lockErr.value = e.message;
+        locks.value = [];
+      }
+    }
+
+    function lockRemain(sec) {
+      const m = Math.floor(sec / 60), s = sec % 60;
+      return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+    }
+
+    async function delUser(u) {
+      const isAdmin = u.username.toLowerCase() === 'admin';
+      const canDel = !isAdmin && u.username !== me.value.user;
+      if (!canDel) return;
+      const extra = u.hasData ? `，包括它的 ${u.tiers} 条费率数据和全部改动记录` : '';
+      if (!confirm(`确定删除账号「${u.username}」吗？${extra}\n删了就找不回来了。`)) return;
+      try {
+        await A.api('/api/users/' + encodeURIComponent(u.username), { method: 'DELETE' });
+        await loadUsers();
+      } catch (e) {
+        loadErr.value = '删除失败: ' + e.message;
+      }
+    }
+
+    async function unlockOne(ip) {
+      if (!confirm(`确定解封 ${ip} 吗?`)) return;
+      try {
+        await A.api('/api/rate-locks/' + encodeURIComponent(ip), { method: 'DELETE' });
+        await loadLocks();
+      } catch (e) {
+        lockErr.value = '解封失败: ' + e.message;
+      }
+    }
+
+    async function unlockAll() {
+      if (!confirm('确定把所有被锁的 IP 全部解封吗?')) return;
+      try {
+        const r = await A.api('/api/rate-locks', { method: 'DELETE' });
+        await loadLocks();
+        loadErr.value = '';
+        // 用行内提示代替 alert
+        unlockMsg.value = `已解封 ${r.cleared} 条`;
+      } catch (e) {
+        lockErr.value = '解封失败: ' + e.message;
+      }
+    }
+    const unlockMsg = ref('');
+
+    async function addUser() {
+      addErr.value = ''; addOk.value = '';
+      const username = nUser.value.trim();
+      if (!username || !nPass.value) { addErr.value = '用户名和初始密码都要填'; return; }
+      if (nPass.value.length < 8) { addErr.value = '初始密码至少 8 位'; return; }
+      busy.value = true;
+      try {
+        await A.api('/api/users', { method: 'POST', body: { username, password: nPass.value, role: nRole.value } });
+        addOk.value = `已创建账号「${username}」`;
+        nUser.value = ''; nPass.value = '';
+        await loadUsers();
+      } catch (e) {
+        addErr.value = e.message;
+      } finally {
+        busy.value = false;
+      }
+    }
+
+    /** 登录成功后加载本页数据 (由 useAuth 的回调触发) */
+    async function onAuthed() {
+      await refreshVersion();
+      await loadUsers();
+      await loadLocks();
+    }
+
+    async function logout() {
+      try { await A.api('/api/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+      location.href = '/admin';
+    }
+
+    onMounted(async () => {
+      try { await afterLogin(); }
+      catch (e) { logged.value = false; }
+    });
+
+    return {
+      logged, checking, me, version, users, locks, lockErr, loadErr, showPwd, busy,
+      nUser, nPass, nRole, addErr, addOk, unlockMsg,
+      countText, usersWithData, adminCount, lockCountText, userSpark, loadUsers, loadLocks, lockRemain,
+      delUser, unlockOne, unlockAll, addUser, afterLogin, logout,
+    };
+  },
+  template: `
+    <div>
+      <AppHeader
+        title="用户管理"
+        :version="version"
+        :user="me.user"
+        :role="me.role"
+        :links="[{href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
+        @logout="logout"
+        @password="showPwd = true"
+      />
+
+      <main>
+        <template v-if="checking">
+          <div class="gate"><p class="muted">正在检查登录状态…</p></div>
+        </template>
+
+        <template v-else-if="!logged">
+          <LoginGate msg="用户管理只有管理员能进。请用管理员账号登录。" @login="afterLogin" />
+        </template>
+
+
+        <template v-else>
+          <div class="dash">
+            <div class="dash-inner">
+              <div class="metrics">
+                <div class="metric">
+                  <span class="mk">账号</span><b class="mv">{{ users.length }}</b>
+                  <span class="ms">{{ countText }}</span>
+                </div>
+                <div class="metric k-new">
+                  <span class="mk">已上传价格表</span><b class="mv">{{ usersWithData.length }}</b>
+                  <span class="ms">{{ users.length - usersWithData.length }} 个还没上传</span>
+                </div>
+                <div class="metric k-lock">
+                  <span class="mk">登录锁定</span><b class="mv">{{ locks.length }}</b>
+                  <span class="ms">待管理员解封</span>
+                </div>
+                <div class="metric k-chg">
+                  <span class="mk">管理员</span><b class="mv">{{ adminCount }}</b>
+                  <span class="ms">可管理其它账号</span>
+                </div>
+              </div>
+              <div class="dash-spark" v-if="userSpark.length" title="每个账号的费率档数量 (相对最大值)">
+                <i v-for="(v, i) in userSpark" :key="i" :style="{height: v + '%'}"
+                   :class="{on: v > 40, hot: v > 90}"></i>
+              </div>
+              <div class="grow"></div>
+              <span class="ov-keys"><kbd>/</kbd> 搜索 <kbd>Esc</kbd> 关闭面板</span>
+            </div>
+          </div>
+
+          <div class="bar">
+            <span class="muted">{{ countText }}</span>
+            <span style="flex:1"></span>
+            <span class="err" style="margin:0" v-if="loadErr">{{ loadErr }}</span>
+            <button @click="loadUsers">刷新</button>
+          </div>
+
+          <!-- 账号用卡片, 不用表格: 账号本来就少, 卡片能一眼看全每个账号的状态 -->
+          <div class="ucards" v-if="users.length">
+            <div class="ucard" v-for="u in users" :key="u.username">
+              <div class="uc-top">
+                <span class="avatar" :class="{admin: u.role === 'admin'}">{{ u.username.charAt(0).toUpperCase() }}</span>
+                <div class="uc-id">
+                  <b>{{ u.username }}</b>
+                  <span class="muted" v-if="u.username.toLowerCase() === 'admin'">站主</span>
+                </div>
+                <span class="role" :class="u.role">{{ u.role === 'admin' ? '管理员' : '普通用户' }}</span>
+              </div>
+              <div class="uc-meta">
+                <div class="uc-cell">
+                  <span>价格表</span>
+                  <b v-if="u.hasData" class="ok">{{ u.tiers }} 条</b>
+                  <b v-else class="muted">未上传</b>
+                </div>
+                <div class="uc-cell">
+                  <span>版本</span>
+                  <b>{{ u.hasData ? 'v' + u.rev : '–' }}</b>
+                </div>
+                <div class="uc-cell">
+                  <span>创建</span>
+                  <b>{{ u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '—' }}</b>
+                </div>
+                <div class="uc-cell">
+                  <span>改密码</span>
+                  <b>{{ u.changedAt ? new Date(u.changedAt).toLocaleDateString('zh-CN') : '未改过' }}</b>
+                </div>
+              </div>
+              <div class="uc-acts">
+                <button class="delbtn"
+                  :disabled="u.username.toLowerCase() === 'admin' || u.username === me.user"
+                  :title="u.username.toLowerCase() === 'admin' ? 'admin 账号不能删除'
+                           : (u.username === me.user ? '不能删除当前登录的账号' : '删除这个账号和它的全部数据')"
+                  @click="delUser(u)">删除账号</button>
+              </div>
+            </div>
+          </div>
+          <div class="tablewrap" v-else style="margin-bottom:16px">
+            <div class="empty">还没有任何账号</div>
+          </div>
+
+          <!-- 登录锁定面板 -->
+          <div class="pane" id="lockpane" :class="{'has-locks': locks.length > 0}">
+            <h3>
+              登录锁定（被锁定的 IP）
+              <span class="lockbadge" v-if="locks.length">{{ locks.length }} 个待解封</span>
+            </h3>
+            <p class="muted" style="margin:0 0 10px;font-size:12.5px">
+              同一 IP 登录失败 8 次会锁 5 分钟；同一 IP 一小时注册超过 5 个也会锁。
+              <b>锁了只能由管理员在这里解封</b>，用户自己没法解锁。
+            </p>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <span class="lockcount" :class="{zero: !locks.length}">{{ lockCountText }}</span>
+              <span class="ok" style="font-size:12.5px" v-if="unlockMsg">{{ unlockMsg }}</span>
+              <span style="flex:1"></span>
+              <button id="unlockall" :class="{solid: locks.length > 0}" :disabled="!locks.length" @click="unlockAll">全部解封</button>
+              <button @click="loadLocks">刷新</button>
+            </div>
+            <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th style="width:110px">原因</th>
+                    <th style="width:80px" class="num">失败次数</th>
+                    <th style="width:120px">剩余</th>
+                    <th style="width:80px">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="lockrows">
+                  <tr v-for="l in locks" :key="l.ip" class="locked">
+                    <td class="ip"><code>{{ l.ip }}</code></td>
+                    <td>{{ l.kind === 'login' ? '登录失败' : '注册太频繁' }}</td>
+                    <td class="num">{{ l.count }}</td>
+                    <td class="muted">{{ lockRemain(l.remainSec) }}</td>
+                    <td><button class="unlockbtn" @click="unlockOne(l.ip)">解封</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="lockempty" class="muted" style="padding:14px;text-align:center" v-if="!locks.length">
+              当前没有被锁定的 IP
+            </div>
+          </div>
+
+          <!-- 新增用户 -->
+          <div class="pane">
+            <h3>新增用户</h3>
+            <div class="newgrid">
+              <label>用户名<input v-model="nUser" placeholder="字母数字, 2-32 位"></label>
+              <label>初始密码<input v-model="nPass" type="text" placeholder="至少 8 位"></label>
+              <label>角色<select v-model="nRole">
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select></label>
+              <label style="justify-content:flex-end">
+                <button class="primary" :disabled="busy" @click="addUser">{{ busy ? '创建中…' : '新增' }}</button>
+              </label>
+            </div>
+            <div class="hint">新建的账号数据是空的 —— 需要自己去后台上传渠道价格表。</div>
+            <div class="err" style="margin-top:6px" v-if="addErr">{{ addErr }}</div>
+            <div class="ok" style="font-size:12.5px" v-if="addOk">{{ addOk }}</div>
+          </div>
+        </template>
+      </main>
+
+      <PasswordModal :show="showPwd" @close="showPwd = false" />
+    </div>
+  `,
+}).mount('#root');
+</script>
+</body>
+</html>

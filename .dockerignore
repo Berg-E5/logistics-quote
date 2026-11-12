@@ -1,0 +1,45 @@
+# 不进镜像的东西
+#
+# 注意: Docker 的 .dockerignore 用 Go 的 filepath.Match 语义 ——
+# 「*」不跨目录分隔符! 「*.xlsx」只挡根目录的 xlsx,
+# 「scripts/报价表.xlsx」照样进镜像。必须写「**/*.xlsx」。
+#
+.git
+.gitignore
+data/
+**/后台地址.txt
+**/原表路径.txt
+**/源表路径.txt
+**/源文件路径.txt
+**/secret.key
+**/admin.token
+**/sessions.json
+**/users.json
+
+# 报价表原件 (商业机密) + 价格快照
+**/*.xlsx
+**/*.xls
+**/data_v2.js
+**/data.json
+**/rates_raw.json
+**/expect_calc.json
+报价对账表-*.csv
+
+# 发布包 / 备份 / 产物
+deploy/quote-install-*.tar.gz
+打包/
+**/*.bak
+**/*.bak-*
+**/*.log
+**/*.tmp
+
+# 常规
+**/__pycache__
+**/*.pyc
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+README.md
+使用说明.md
+部署说明.md
