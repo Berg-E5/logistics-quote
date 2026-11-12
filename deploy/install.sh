@@ -123,7 +123,8 @@ copy_dir() {
   fi
 }
 
-for d in server public scripts deploy; do
+# 脚本目录两个名字都试: 发布包里叫 scripts/, GitHub 仓库里叫 脚本/
+for d in server public scripts deploy 脚本; do
   if [ -d "$SRC/$d" ]; then
     copy_dir "$SRC/$d" "$DIR/$d"
     echo "    $d/  已复制"

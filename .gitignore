@@ -56,3 +56,9 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+**/rates_raw.json
+**/后台地址.txt
+**/原表路径.txt
+**/源文件路径.txt
+**/*.bak-*
+**/__pycache__/
