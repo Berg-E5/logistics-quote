@@ -31,6 +31,53 @@
     return j;
   }
 
+  /* ------------------------------------------------------------- 主题
+   * 放在模块级, 不在组件里 —— 后台的 AppHeader 只有登录后才渲染,
+   * 组件级监听器未登录时根本不注册, 系统切主题时 data-theme-effective
+   * 就不会更新 (实测踩过)。CSS 那半边是媒体查询自动的, 这里只补 JS 侧状态。 */
+  const THEME_KEY = 'quote.theme';
+  const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
+  const THEME_SYM = { auto: '◐', light: '☀', dark: '☾' };
+  function themeSystemDark() {
+    try { return !!(global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches); }
+    catch (e) { return true; }
+  }
+  function themeRead() {
+    try { const v = localStorage.getItem(THEME_KEY);
+          return ['auto','light','dark'].indexOf(v) >= 0 ? v : 'auto'; } catch (e) { return 'auto'; }
+  }
+  function themeApply(m) {
+    const el = document.documentElement;
+    if (!el) return;
+    /* auto 也要写属性, 否则 CSS 的 html[data-theme="auto"] 匹配不上 */
+    el.setAttribute('data-theme', m);
+    el.setAttribute('data-theme-effective', m === 'auto' ? (themeSystemDark() ? 'dark' : 'light') : m);
+  }
+  function themeSet(m) {
+    try { localStorage.setItem(THEME_KEY, m); } catch (e) {}
+    themeApply(m);
+  }
+  /* 系统主题变化时更新 data-theme-effective (给 JS 侧读当前实际生效的是哪个) */
+  (function themeWatchSystem() {
+    if (!global.matchMedia) return;
+    try {
+      const mq = global.matchMedia('(prefers-color-scheme: dark)');
+      /* 用事件对象上的 matches, 不要重新查 matchMedia ——
+         change 事件触发时浏览器还没把 matchMedia 的状态更新过来,
+         重新查会拿到**旧值**, 导致 data-theme-effective 慢一拍。 */
+      const on = (e) => {
+        if (themeRead() !== 'auto') return;
+        const dark = (e && typeof e.matches === 'boolean')
+          ? e.matches
+          : themeSystemDark();
+        const el = document.documentElement;
+        if (el) el.setAttribute('data-theme-effective', dark ? 'dark' : 'light');
+      };
+      if (mq.addEventListener) mq.addEventListener('change', on);
+      else if (mq.addListener) mq.addListener(on);
+    } catch (e) {}
+  })();
+
   /* ------------------------------------------------------------- 小工具 */
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -141,12 +188,20 @@
     emits: ['logout', 'password', 'refresh'],
     setup(props, { emit }) {
       const open = ref(false);
+      const themeOpen = ref(false);
       function toggle(e) { e.stopPropagation(); open.value = !open.value; }
-      document.addEventListener('click', () => { open.value = false; });
+      function toggleTheme(e) { e.stopPropagation(); themeOpen.value = !themeOpen.value; }
+      document.addEventListener('click', () => { open.value = false; themeOpen.value = false; });
       onMounted(() => {
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') open.value = false; });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') { open.value = false; themeOpen.value = false; } });
       });
       const roleCn = computed(() => props.role === 'admin' ? '管理员' : '普通用户');
+      /* 主题: 用模块级的工具函数 (那里有系统监听) */
+      const themeMode = ref(themeRead());
+      function themeSetAndSync(m) {
+        themeSet(m);
+        themeMode.value = m;
+      }
       // 导航项: 当前页高亮。
       // 排除两类: 带「←」的是「返回」按钮; 「用户管理」是账号级功能,
       // 放在右上角用户名菜单里, 不占主导航位 (用户明确要求)。
@@ -157,7 +212,8 @@
           .map(l => ({ ...l, on: here === l.href.replace(/\/$/, '') }));
       });
       const back = computed(() => props.links.find(l => /^←/.test(l.text)) || null);
-      return { open, toggle, roleCn, emit, nav, back };
+      return { open, toggle, roleCn, emit, nav, back,
+               themeMode, themeSet: themeSetAndSync, themeOpen, toggleTheme, THEME_LABEL, THEME_SYM };
     },
     template: `
       <header>
@@ -171,6 +227,24 @@
         <span class="tag" v-if="version">{{ version }}</span>
         <span class="badge" :class="{show: badge > 0}">{{ badge > 99 ? '99+' : badge }}</span>
         <button v-if="refresh" @click="emit('refresh')">刷新</button>
+        <span class="thememenu">
+          <button class="themechip" @click="toggleTheme" aria-haspopup="true" aria-expanded="false">
+            <span class="th-sym">{{ THEME_SYM[themeMode] }}</span>
+            <span class="th-cur">{{ THEME_LABEL[themeMode] }}</span>
+            <span class="caret">▾</span>
+          </button>
+          <div class="dropdown themedd" :class="{open: themeOpen}" @click.stop>
+            <div class="dd-item theme-pick">
+              <span class="th-sym">{{ THEME_SYM[themeMode] }}</span>
+              <span class="th-lbl">主题</span>
+              <span class="th-opts">
+                <button v-for="m in ['auto','light','dark']" :key="m"
+                        class="th-opt" :class="{on: themeMode === m}"
+                        @click.stop="themeSet(m)">{{ THEME_LABEL[m] }}</button>
+              </span>
+            </div>
+          </div>
+        </span>
         <span class="usermenu" v-if="user">
           <button class="userchip" @click="toggle">
             <span class="avatar">{{ user.charAt(0) }}</span>

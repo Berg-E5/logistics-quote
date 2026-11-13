@@ -33,21 +33,21 @@
   --fg:    #eef1f6;
   --fg-2:  #b7becb;
   --muted: #7e879a;
-  --dim:   #5b6478;
+  --dim:   #6a758c;
 
   /* 强调色: 全站只有这一个彩色, 但要够亮够有能量 */
-  --accent:     #4f8cff;
+  --accent:     #5190ff;
   --accent-hi:  #7fabff;
-  --accent-dim: rgba(79,140,255,.14);
-  --accent-glow: rgba(79,140,255,.30);
+  --accent-dim: rgba(81,144,255,.14);
+  --accent-glow: rgba(81,144,255,.30);
 
   /* 语义色 */
   --good:     #2fc47a;
   --good-dim: rgba(47,196,122,.12);
   --warn:     #e69a2f;
   --warn-dim: rgba(230,154,47,.13);
-  --bad:      #f4585e;
-  --bad-dim:  rgba(244,88,94,.13);
+  --bad:      #fb5b61;
+  --bad-dim:  rgba(251,91,97,.13);
   --violet:     #9b8cff;
   --violet-dim: rgba(155,140,255,.13);
 
@@ -65,6 +65,148 @@
   --line2: var(--line-2); --fg2: var(--fg-2);
   --accenthi: var(--accent-hi); --accentdim: var(--accent-dim);
   --gooddim: var(--good-dim); --warndim: var(--warn-dim); --baddim: var(--bad-dim);
+
+  /* ---- 半透明叠加 / 遮罩 ----
+     深色下「亮一点」= 白色半透明, 亮色下要反过来 = 黑色半透明。
+     所以这些必须做成变量, 不能在规则里写死 rgba(255,255,255,.04)。 */
+  --ov-1: rgba(255,255,255,.030);   /* 极轻叠加: 面板渐变顶 */
+  --ov-2: rgba(255,255,255,.035);   /* 悬停底 */
+  --ov-3: rgba(255,255,255,.045);   /* 控件底 */
+  --ov-4: rgba(255,255,255,.060);   /* 控件悬停 / 顶部高光 */
+  --ov-5: rgba(255,255,255,.085);   /* 滚动条 */
+  --ov-6: rgba(255,255,255,.170);   /* 滚动条悬停 */
+  --scrim: rgba(0,0,0,.60);         /* 弹层遮罩 */
+  --scrim-strong: rgba(0,0,0,.74);  /* 登录墙遮罩 */
+  --shadow: rgba(0,0,0,.60);         /* 浮层投影 */
+  --shadow-deep: rgba(0,0,0,.95);   /* 面板投影 */
+  --glassy: rgba(13,14,17,.88);      /* 毛玻璃工具栏底 */
+  --head-bg: rgba(8,9,11,.82);       /* 顶栏底 */
+  --grid-line: rgba(255,255,255,.014);
+
+  /* 锁定行的 sticky 底色 —— 必须不透明 (半透明会透出横向滚动的内容) */
+  --lock-cell:    #1f1a16;
+  --lock-cell-hi: #2a231b;
+  /* 强调色底上的文字 / 琥珀色底上的文字 */
+  --on-accent: #08111f;
+  --on-warn:   #241703;
+  --warn-hi:   #f7bb55;
+}
+
+/* ============================================================
+   亮色主题
+   ---------------------------------------------------------
+   跟随系统:  html[data-theme="auto"] 不写任何覆盖,
+   由下面这条媒体查询兜底 —— 系统是浅色就整套换浅色。
+
+   浅色底不是纯白 (#fff) —— 纯白刺眼且显廉价,
+   掺一点冷调 (#f6f7f9) 才像正经工具。 */
+html[data-theme="light"] {
+  --bg:      #f4f6f9;
+  --panel:   #ffffff;
+  --panel-2: #fafbfc;
+  --panel-3: #f1f3f6;
+  --panel-4: #e8ebf0;
+
+  --line:   rgba(16,22,34,.09);
+  --line-2: rgba(16,22,34,.15);
+  --line-3: rgba(16,22,34,.24);
+
+  --fg:    #161b24;
+  --fg-2:  #3d4553;
+  --muted: #6b7484;
+  --dim:   #7f8593;
+
+  --accent:     #2b66cc;
+  --accent-hi:  #1f5ac6;
+  --accent-dim: rgba(43,102,204,.11);
+  --accent-glow: rgba(43,102,204,.26);
+
+  /* 语义色在浅底上要加深, 否则不够醒目 */
+  --good:     #137a42;
+  --good-dim: rgba(19,122,66,.11);
+  --warn:     #955e09;
+  --warn-dim: rgba(149,94,9,.13);
+  --bad:      #c82e37;
+  --bad-dim:  rgba(200,46,55,.11);
+  --violet:     #6f5bd6;
+  --violet-dim: rgba(111,91,214,.12);
+
+  /* 浅色下「亮一点」= 黑色半透明 */
+  --ov-1: rgba(16,22,34,.022);
+  --ov-2: rgba(16,22,34,.035);
+  --ov-3: rgba(16,22,34,.052);
+  --ov-4: rgba(16,22,34,.075);
+  --ov-5: rgba(16,22,34,.14);
+  --ov-6: rgba(16,22,34,.22);
+  --scrim: rgba(28,36,50,.42);
+  --scrim-strong: rgba(28,36,50,.50);
+  --shadow: rgba(28,38,56,.16);
+  --shadow-deep: rgba(28,38,56,.20);
+  --glassy: rgba(255,255,255,.86);
+  --head-bg: rgba(255,255,255,.80);
+  --grid-line: rgba(16,22,34,.028);
+
+  --lock-cell:    #fdf6e8;
+  --lock-cell-hi: #fbeed4;
+  --on-accent: #ffffff;
+  --on-warn:   #241703;
+  --warn-hi:   #c07d10;
+}
+
+/* 跟随系统 —— 浏览器说系统是浅色就用浅色。
+   html[data-theme="auto"] 走这条; 显式选 dark 的不受影响
+   (选择器特异度更高, 且 auto 那条要写成 :not([data-theme="dark"]))。 */
+@media (prefers-color-scheme: light) {
+  html[data-theme="auto"] {
+    --bg:      #f4f6f9;
+    --panel:   #ffffff;
+    --panel-2: #fafbfc;
+    --panel-3: #f1f3f6;
+    --panel-4: #e8ebf0;
+
+    --line:   rgba(16,22,34,.09);
+    --line-2: rgba(16,22,34,.15);
+    --line-3: rgba(16,22,34,.24);
+
+    --fg:    #161b24;
+    --fg-2:  #3d4553;
+    --muted: #6b7484;
+    --dim:   #7f8593;
+
+    --accent:     #2b66cc;
+    --accent-hi:  #1f5ac6;
+    --accent-dim: rgba(43,102,204,.11);
+    --accent-glow: rgba(43,102,204,.26);
+
+    --good:     #137a42;
+    --good-dim: rgba(19,122,66,.11);
+    --warn:     #955e09;
+    --warn-dim: rgba(149,94,9,.13);
+    --bad:      #c82e37;
+    --bad-dim:  rgba(200,46,55,.11);
+    --violet:     #6f5bd6;
+    --violet-dim: rgba(111,91,214,.12);
+
+    --ov-1: rgba(16,22,34,.022);
+    --ov-2: rgba(16,22,34,.035);
+    --ov-3: rgba(16,22,34,.052);
+    --ov-4: rgba(16,22,34,.075);
+    --ov-5: rgba(16,22,34,.14);
+    --ov-6: rgba(16,22,34,.22);
+    --scrim: rgba(28,36,50,.42);
+    --scrim-strong: rgba(28,36,50,.50);
+    --shadow: rgba(28,38,56,.16);
+    --shadow-deep: rgba(28,38,56,.20);
+    --glassy: rgba(255,255,255,.86);
+    --head-bg: rgba(255,255,255,.80);
+    --grid-line: rgba(16,22,34,.028);
+
+    --lock-cell:    #fdf6e8;
+    --lock-cell-hi: #fbeed4;
+    --on-accent: #ffffff;
+    --on-warn:   #241703;
+    --warn-hi:   #c07d10;
+  }
 }
 
 /* ---------------- 基础 ---------------- */
@@ -84,15 +226,15 @@ body {
 body::before {
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
-    radial-gradient(1000px 520px at 16% -10%, rgba(79,140,255,.11), transparent 64%),
-    radial-gradient(760px 420px at 92% 2%, rgba(155,140,255,.055), transparent 62%);
+    radial-gradient(1000px 520px at 16% -10%, var(--accent-dim), transparent 64%),
+    radial-gradient(760px 420px at 92% 2%, var(--violet-dim), transparent 62%);
 }
 /* 细网格叠在光上面, 只在有光的地方能看见 */
 body::after {
   content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(255,255,255,.014) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,.014) 1px, transparent 1px);
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
   background-size: 32px 32px;
   mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
@@ -117,13 +259,13 @@ body > * { position: relative; z-index: 1; }
    纯色面板看着像贴纸, 有高光才像玻璃/金属。 */
 .panel {
   background:
-    linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.006) 42%, transparent 130px),
+    linear-gradient(180deg, var(--ov-2), rgba(255,255,255,.006) 42%, transparent 130px),
     var(--panel);
   border: 1px solid var(--line-2);
   border-radius: 10px;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.06),
-    0 22px 46px -32px rgba(0,0,0,.95);
+    inset 0 1px 0 var(--ov-4),
+    0 22px 46px -32px var(--shadow-deep);
 }
 
 /* ---------------- 统计卡片 ---------------- */
@@ -140,7 +282,7 @@ body > * { position: relative; z-index: 1; }
 /* 统计卡: 数字与说明左右排 —— 数字占主导, 说明退到右边当注解。
    竖排 (数字在上、说明在下) 看着像老式报表。 */
 .stat {
-  background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 62%), var(--panel);
+  background: linear-gradient(180deg, var(--ov-1), transparent 62%), var(--panel);
   padding: 13px 16px 14px; position: relative; overflow: hidden;
   display: flex; flex-direction: column; justify-content: space-between;
   min-height: 78px;
@@ -202,7 +344,7 @@ body > * { position: relative; z-index: 1; }
   position: sticky; top: 53px; z-index: 8;
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
   padding: 9px 11px; margin-bottom: 12px;
-  background: rgba(13,14,17,.88); backdrop-filter: blur(12px) saturate(140%);
+  background: var(--glassy); backdrop-filter: blur(12px) saturate(140%);
   border: 1px solid var(--line); border-radius: var(--r-lg);
 }
 .toolbar input[type=search] { min-width: 200px; }
@@ -212,22 +354,22 @@ body > * { position: relative; z-index: 1; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
-  padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(77,132,255,.30);
-  background: rgba(77,132,255,.07); color: var(--accent-hi);
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--accent-glow);
+  background: var(--accent-dim); color: var(--accent-hi);
   cursor: pointer; font-weight: 510; white-space: nowrap;
 }
-.chip:hover { background: rgba(77,132,255,.16); border-color: rgba(77,132,255,.5); }
+.chip:hover { background: var(--accent-dim); border-color: var(--accent); }
 .chip b { font-weight: 590; }
 .chip .x { opacity: .6; font-size: 12px; line-height: 1; }
 .chip .x:hover { opacity: 1; }
 .chip.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
-.chip.ghost:hover { color: var(--fg-2); background: rgba(255,255,255,.05); }
+.chip.ghost:hover { color: var(--fg-2); background: var(--ov-4); }
 
 /* ---------------- 表格 ---------------- */
 .tablewrap {
   border: 1px solid var(--line-2); border-radius: 10px;
   overflow: auto; background: var(--panel);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow: inset 0 1px 0 var(--ov-3);
 }
 .tablewrap table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .tablewrap thead th {
@@ -236,7 +378,7 @@ body > * { position: relative; z-index: 1; }
   font-size: 10.5px; font-weight: 590; letter-spacing: .5px; text-transform: uppercase;
   text-align: left; padding: 9px 12px; white-space: nowrap;
   border-bottom: 1px solid var(--line-3);
-  box-shadow: 0 1px 0 rgba(255,255,255,.04);
+  box-shadow: 0 1px 0 var(--ov-3);
 }
 .tablewrap thead th.num { text-align: right; }
 .tablewrap tbody td {
@@ -245,7 +387,7 @@ body > * { position: relative; z-index: 1; }
 }
 .tablewrap tbody td.num { text-align: right; }
 .tablewrap tbody tr:last-child td { border-bottom: 0; }
-.tablewrap tbody tr:hover td { background: rgba(255,255,255,.032); }
+.tablewrap tbody tr:hover td { background: var(--ov-2); }
 .tablewrap tbody tr { transition: background .12s ease; }
 
 /* ---------------- 空状态 ---------------- */
@@ -280,9 +422,9 @@ body > * { position: relative; z-index: 1; }
 .saved.dirty { color: var(--warn); }
 
 /* ---------------- 可编辑列 ---------------- */
-td.editable { background: rgba(79,140,255,.075); }
-tbody tr:hover td.editable { background: rgba(79,140,255,.13); }
-th.editable { background: rgba(79,140,255,.17); color: var(--accent-hi); }
+td.editable { background: var(--accent-dim); }
+tbody tr:hover td.editable { background: var(--accent-dim); }
+th.editable { background: var(--accent-dim); color: var(--accent-hi); }
 th.editable .ed { font-size: 10px; opacity: .85; margin-left: 3px; }
 
 /* ---------------- toast ---------------- */
@@ -293,12 +435,12 @@ th.editable .ed { font-size: 10px; opacity: .85; margin-left: 3px; }
 .toast {
   background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r);
   padding: 9px 14px; font-size: 12.5px; color: var(--fg);
-  box-shadow: 0 12px 34px rgba(0,0,0,.6);
+  box-shadow: 0 12px 34px var(--shadow);
   display: flex; align-items: center; gap: 8px;
   animation: toastin .18s ease-out;
 }
-.toast.ok { border-color: rgba(47,196,122,.42); color: var(--good); }
-.toast.err { border-color: rgba(244,88,94,.42); color: var(--bad); }
+.toast.ok { border-color: var(--good); color: var(--good); }
+.toast.err { border-color: var(--bad); color: var(--bad); }
 @keyframes toastin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* ---------------- 元数据 / 等宽小件 ---------------- */
@@ -327,7 +469,7 @@ kbd {
 th { color: var(--fg-2); }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,.09); border-radius: 5px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.17); }
+::-webkit-scrollbar-thumb { background: var(--ov-5); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ov-6); }
 
 /* @ui-common:end */

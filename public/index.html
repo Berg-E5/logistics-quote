@@ -40,7 +40,7 @@
     position: sticky; top: 0; z-index: 40;
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     padding: 11px 0 11px; margin-bottom: 18px;
-    background: rgba(8,9,11,.82); backdrop-filter: blur(14px) saturate(140%);
+    background: var(--head-bg); backdrop-filter: blur(14px) saturate(140%);
     border-bottom: 1px solid var(--line);
   }
   .brand { display: flex; align-items: center; gap: 10px; }
@@ -65,10 +65,22 @@
     margin: 0; color: var(--muted); font-size: 11.5px; font-weight: 400;
     font-family: var(--mono); letter-spacing: -.2px;
   }
+  /* 主题按钮: 符号 + 文字。不用 emoji, 不同系统渲染差异大。 */
+  .themebtn {
+    font: inherit; font-size: 12px; font-weight: 510; padding: 4px 10px 4px 8px;
+    border-radius: var(--r); border: 1px solid var(--line-2);
+    background: var(--ov-3); color: var(--fg-2); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; line-height: 1.5;
+    white-space: nowrap;
+  }
+  .themebtn:hover { background: var(--ov-4); color: var(--fg); border-color: var(--line-3); }
+  .themebtn .tsym { font-size: 13px; color: var(--accent); line-height: 1; }
+  .themebtn .tlab { color: var(--muted); }
+  @media (max-width: 700px) { .themebtn .tlab { display: none; } }
   .loginbtn {
     font: inherit; font-size: 12.5px; font-weight: 510; padding: 5px 13px;
     border-radius: var(--r); border: 1px solid var(--line-2);
-    background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+    background: var(--ov-3); color: var(--fg-2); cursor: pointer;
     transition: border-color .15s, background .15s, color .15s;
   }
   .loginbtn:hover { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-dim); }
@@ -76,7 +88,7 @@
   .userchip {
     font: inherit; font-size: 12.5px; font-weight: 510; padding: 4px 10px;
     border-radius: var(--r); border: 1px solid var(--line-2);
-    background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+    background: var(--ov-3); color: var(--fg-2); cursor: pointer;
     display: inline-flex; align-items: center; gap: 7px;
     transition: border-color .15s, background .15s, color .15s;
   }
@@ -90,7 +102,7 @@
   .dropdown {
     position: absolute; right: 0; top: calc(100% + 7px); min-width: 196px;
     background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r-lg);
-    box-shadow: 0 12px 34px rgba(0,0,0,.6); padding: 5px; z-index: 60; display: none;
+    box-shadow: 0 12px 34px var(--shadow); padding: 5px; z-index: 60; display: none;
   }
   .dropdown.open { display: block; }
   .dd-head { padding: 9px 11px 10px; border-bottom: 1px solid var(--line); margin-bottom: 5px; }
@@ -101,7 +113,7 @@
     border-radius: var(--r-sm); background: transparent; color: var(--fg-2);
     font: inherit; font-size: 12.5px; font-weight: 510; cursor: pointer; text-decoration: none;
   }
-  .dd-item:hover { background: rgba(255,255,255,.06); color: var(--accent-hi); }
+  .dd-item:hover { background: var(--ov-4); color: var(--accent-hi); }
   .dd-item.danger:hover { color: var(--bad); background: var(--bad-dim); }
   .dd-sep { height: 1px; background: var(--line); margin: 5px 0; }
 
@@ -115,7 +127,7 @@
   .gcard {
     background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg);
     padding: 30px 28px; width: min(92vw, 384px); text-align: center;
-    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+    box-shadow: 0 24px 60px var(--shadow);
   }
   .gbrand {
     font-size: 10.5px; font-weight: 590; letter-spacing: 1.4px; color: var(--dim);
@@ -150,12 +162,12 @@
 
   /* ---------------- 登录弹窗 ---------------- */
   .modal {
-    position: fixed; inset: 0; background: rgba(0,0,0,.74); z-index: 100;
+    position: fixed; inset: 0; background: var(--scrim-strong); z-index: 100;
     display: flex; align-items: center; justify-content: center; padding: 20px;
   }
   .mbox {
     background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--r-lg);
-    padding: 22px; width: 340px; max-width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,.6);
+    padding: 22px; width: 340px; max-width: 100%; box-shadow: 0 24px 60px var(--shadow);
   }
   .mbox h3 { margin: 0 0 6px; font-size: 15px; font-weight: 590; letter-spacing: -.2px; }
   .mbox label {
@@ -164,14 +176,14 @@
   }
   .mbox input {
     font: inherit; font-size: 13px; padding: 8px 10px; border-radius: var(--r);
-    border: 1px solid var(--line-2); background: rgba(0,0,0,.25); color: var(--fg); width: 100%;
+    border: 1px solid var(--line-2); background: var(--ov-3); color: var(--fg); width: 100%;
   }
   .mbox input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
   .mbox .err { color: var(--bad); font-size: 12.5px; margin-top: 9px; min-height: 18px; }
   .mbox .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 9px; }
   .mbox .row button {
     font: inherit; font-size: 13px; font-weight: 510; padding: 7px 15px; border-radius: var(--r);
-    border: 1px solid var(--line-2); background: rgba(255,255,255,.04); color: var(--fg-2); cursor: pointer;
+    border: 1px solid var(--line-2); background: var(--ov-3); color: var(--fg-2); cursor: pointer;
   }
   .mbox .row button.primary { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 590; }
   .liother {
@@ -184,13 +196,13 @@
   /* ---------------- 输入面板 ---------------- */
   .panel {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.006) 42%, transparent 130px),
+      linear-gradient(180deg, var(--ov-2), transparent 42%, transparent 130px),
       var(--panel);
     border: 1px solid var(--line-2);
     border-radius: 10px; padding: 0; margin-bottom: 0;
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.06),
-      0 22px 46px -32px rgba(0,0,0,.95);
+      inset 0 1px 0 var(--ov-4),
+    0 22px 46px -32px var(--shadow-deep);
   }
   /* 左栏窄, 组标题改成横排小标题 */
   .grp { display: block; }
@@ -244,7 +256,7 @@
     transition: background .15s, color .15s;
   }
   .seg button + button { border-left: 1px solid var(--line); }
-  .seg button:hover { color: var(--fg-2); background: rgba(255,255,255,.03); }
+  .seg button:hover { color: var(--fg-2); background: var(--ov-1); }
   .seg button.on { background: var(--accent-dim); color: var(--accent-hi); font-weight: 590; }
 
   /* ---------------- 成本对比图 ---------------- */
@@ -259,7 +271,7 @@
   .cmpr { display: grid; grid-template-columns: 210px minmax(0,1fr) 104px; gap: 12px; align-items: center; }
   .cmpr-n { font-size: 11.5px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cmpr-n .sub2 { color: var(--dim); font-size: 10.5px; margin-left: 5px; }
-  .cmpr-b { height: 14px; background: rgba(255,255,255,.035); border-radius: 2px; position: relative; overflow: hidden; }
+  .cmpr-b { height: 14px; background: var(--ov-2); border-radius: 2px; position: relative; overflow: hidden; }
   .cmpr-b i {
     position: absolute; inset: 0 auto 0 0; border-radius: 2px;
     background: var(--accent); opacity: .38; display: block;
@@ -308,14 +320,14 @@
     font-size: 34px; font-weight: 540; letter-spacing: -1.6px;
     margin-top: 7px; line-height: 1;
     /* 极淡的辉光 —— 一点点就够, 太亮就俗了 */
-    text-shadow: 0 0 28px rgba(47,196,122,.24);
+    text-shadow: 0 0 28px var(--good-dim);
   }
   .stat.hero .stat-s { font-size: 12px; margin-top: 7px; }
   /* 主卡右上角一抹极淡的光 */
   .stat.hero::after {
     content: ""; position: absolute; right: -40px; top: -60px;
     width: 190px; height: 190px; border-radius: 50%; pointer-events: none;
-    background: radial-gradient(circle, rgba(47,196,122,.10), transparent 68%);
+    background: radial-gradient(circle, var(--good-dim), transparent 68%);
   }
 
   .bestline { display: none; }
@@ -323,10 +335,10 @@
 
   /* ---------------- 选中渠道 ---------------- */
   /* 专线三线里本组最便宜的那条 —— 中性色, 绿色只留给全局最低价 */
-  .tag.lbest { background: rgba(120,140,170,.16); color: #9fb2cc; border-color: rgba(120,140,170,.34); }
+  .tag.lbest { background: var(--ov-3); color: var(--fg-2); border-color: var(--line-3); }
 
   /* 点了不可发的行: 闪一下提示 */
-  @keyframes flashna { 0%,100% { background: transparent; } 30% { background: rgba(244,88,94,.16); } }
+  @keyframes flashna { 0%,100% { background: transparent; } 30% { background: var(--bad-dim); } }
   tr.flash-na td { animation: flashna .7s ease-out; }
 
   .pickline {
@@ -358,9 +370,9 @@
     font: inherit; font-size: 12.5px; font-weight: 510; padding: 5px 12px; border-radius: var(--r);
     border: 1px solid var(--accent); background: var(--accent-dim); color: var(--accent-hi); cursor: pointer;
   }
-  .pickline button:hover { background: rgba(77,132,255,.24); }
+  .pickline button:hover { background: var(--accent-dim); }
   .pickline button.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
-  .pickline button.ghost:hover { background: rgba(255,255,255,.05); color: var(--fg); }
+  .pickline button.ghost:hover { background: var(--ov-4); color: var(--fg); }
 
   /* ---------------- 工具条 ---------------- */
   .toolbar {
@@ -393,19 +405,19 @@
 
   /* 高亮: 最低价 (绿) */
   tbody tr.best { background: var(--good-dim); box-shadow: inset 3px 0 0 var(--good); }
-  tbody tr.best:hover { background: rgba(47,196,122,.18); }
-  tbody tr.best td { border-bottom-color: rgba(47,196,122,.16); }
+  tbody tr.best:hover { background: var(--good-dim); }
+  tbody tr.best td { border-bottom-color: var(--good-dim); }
   /* 高亮: 当前选中 (蓝 = 我选中的, 与绿色的「最低价」明确区分) */
   tbody tr.picked { background: var(--accent-dim) !important; box-shadow: inset 4px 0 0 var(--accent); }
-  tbody tr.picked td { border-bottom-color: rgba(77,132,255,.22); }
+  tbody tr.picked td { border-bottom-color: var(--accent-dim); }
   .tag.picked {
-    background: rgba(77,132,255,.22); color: #a9c6ff;
-    border-color: rgba(77,132,255,.45); font-weight: 590;
+    background: var(--accent-dim); color: var(--accent-hi);
+    border-color: var(--accent); font-weight: 590;
   }
   /* 不可发 / 超尺寸 */
   tbody tr.na { color: var(--dim); }
   tbody tr.na .ch { color: var(--muted); }
-  tbody tr.na:hover { background: rgba(244,88,94,.05); }
+  tbody tr.na:hover { background: var(--bad-dim); }
 
   .ch { font-weight: 590; color: var(--fg); letter-spacing: -.1px; }
   .sub { color: var(--muted); font-size: 11px; margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
@@ -415,24 +427,26 @@
     white-space: nowrap; border: 1px solid transparent; font-weight: 510;
   }
   .tag.best {
-    background: rgba(47,196,122,.2); color: var(--good);
-    border-color: rgba(47,196,122,.3); font-weight: 590;
+    background: var(--good-dim); color: var(--good);
+    border-color: var(--good); font-weight: 590;
   }
-  .tag.mode { background: rgba(255,255,255,.04); color: var(--muted); border-color: var(--line); }
+  .tag.mode { background: var(--ov-3); color: var(--muted); border-color: var(--line); }
   /* 运输方式标签: 海运用蓝 (交互色系), 空运用中性灰 —— 不占用绿色(最便宜)语义 */
-  .tag.sea { background: rgba(79,140,255,.16); color: var(--accent-hi); border-color: rgba(79,140,255,.34); }
-  .tag.air { background: rgba(255,255,255,.04); color: var(--muted); border-color: var(--line); }
+  .tag.sea { background: var(--accent-dim); color: var(--accent-hi); border-color: var(--accent); }
+  .tag.air { background: var(--ov-3); color: var(--muted); border-color: var(--line); }
 
-  .tag.warn { background: var(--warn-dim); color: var(--warn); border-color: rgba(230,154,47,.28); }
-  .tag.bad  { background: var(--bad-dim);  color: var(--bad);  border-color: rgba(244,88,94,.28); }
+  .tag.warn { background: var(--warn-dim); color: var(--warn); border-color: var(--warn); }
+  .tag.bad  { background: var(--bad-dim);  color: var(--bad);  border-color: var(--bad); }
   .limits { color: var(--muted); font-size: 11px; max-width: 250px; white-space: pre-wrap; word-break: break-word; }
   .note { color: var(--warn); font-size: 11px; }
 
   /* 价格条: 一眼看出谁便宜 (内联固定宽度, 右边缘对齐, 长度可直接比) */
   .costcell { white-space: nowrap; }
+  /* 时效列: "6-12天" 被挤成三行很难扫读, 强制单行 + 给足最小宽度 */
+  td.lead { white-space: nowrap; min-width: 78px; }
   .pbar {
     position: relative; display: inline-block; vertical-align: middle;
-    width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.07);
+    width: 40px; height: 4px; border-radius: 2px; background: var(--ov-4);
     overflow: hidden; margin-right: 9px;
   }
   .pbar i {
@@ -453,11 +467,11 @@
 
   .scopebadge {
     font-size: 11px; font-weight: 590; padding: 2px 9px; border-radius: 999px;
-    border: 1px solid var(--line-2); color: var(--muted); background: rgba(255,255,255,.04);
+    border: 1px solid var(--line-2); color: var(--muted); background: var(--ov-3);
     white-space: nowrap;
   }
   .scopebadge.mine {
-    border-color: rgba(77,132,255,.42); color: var(--accent-hi); background: var(--accent-dim);
+    border-color: var(--accent); color: var(--accent-hi); background: var(--accent-dim);
   }
   .fxtip { display: block; color: var(--dim); font-size: 10.5px; margin-top: 4px; }
   .syncbar { margin-top: 10px; }
@@ -483,8 +497,8 @@
     border: 1px solid var(--line); background: var(--panel); color: var(--fg-2);
   }
   .ctag i { font-style: normal; color: var(--muted); margin-left: 6px; font-size: 11px; }
-  .ctag.b { border-color: rgba(230,154,47,.4); }
-  .ctag.p { border-color: rgba(47,196,122,.4); }
+  .ctag.b { border-color: var(--warn); }
+  .ctag.p { border-color: var(--good); }
 
   /* 体积重除数不确定: 报价表没给, 用兜底值估算, 要提醒人工核对 */
   .uncert { color: var(--warn); font-size: 11.5px; font-weight: 590; }
@@ -523,21 +537,21 @@
     --fg:    #eef1f6;
     --fg-2:  #b7becb;
     --muted: #7e879a;
-    --dim:   #5b6478;
+    --dim:   #6a758c;
 
     /* 强调色: 全站只有这一个彩色, 但要够亮够有能量 */
-    --accent:     #4f8cff;
+    --accent:     #5190ff;
     --accent-hi:  #7fabff;
-    --accent-dim: rgba(79,140,255,.14);
-    --accent-glow: rgba(79,140,255,.30);
+    --accent-dim: rgba(81,144,255,.14);
+    --accent-glow: rgba(81,144,255,.30);
 
     /* 语义色 */
     --good:     #2fc47a;
     --good-dim: rgba(47,196,122,.12);
     --warn:     #e69a2f;
     --warn-dim: rgba(230,154,47,.13);
-    --bad:      #f4585e;
-    --bad-dim:  rgba(244,88,94,.13);
+    --bad:      #fb5b61;
+    --bad-dim:  rgba(251,91,97,.13);
     --violet:     #9b8cff;
     --violet-dim: rgba(155,140,255,.13);
 
@@ -555,6 +569,148 @@
     --line2: var(--line-2); --fg2: var(--fg-2);
     --accenthi: var(--accent-hi); --accentdim: var(--accent-dim);
     --gooddim: var(--good-dim); --warndim: var(--warn-dim); --baddim: var(--bad-dim);
+
+    /* ---- 半透明叠加 / 遮罩 ----
+       深色下「亮一点」= 白色半透明, 亮色下要反过来 = 黑色半透明。
+       所以这些必须做成变量, 不能在规则里写死 rgba(255,255,255,.04)。 */
+    --ov-1: rgba(255,255,255,.030);   /* 极轻叠加: 面板渐变顶 */
+    --ov-2: rgba(255,255,255,.035);   /* 悬停底 */
+    --ov-3: rgba(255,255,255,.045);   /* 控件底 */
+    --ov-4: rgba(255,255,255,.060);   /* 控件悬停 / 顶部高光 */
+    --ov-5: rgba(255,255,255,.085);   /* 滚动条 */
+    --ov-6: rgba(255,255,255,.170);   /* 滚动条悬停 */
+    --scrim: rgba(0,0,0,.60);         /* 弹层遮罩 */
+    --scrim-strong: rgba(0,0,0,.74);  /* 登录墙遮罩 */
+    --shadow: rgba(0,0,0,.60);         /* 浮层投影 */
+    --shadow-deep: rgba(0,0,0,.95);   /* 面板投影 */
+    --glassy: rgba(13,14,17,.88);      /* 毛玻璃工具栏底 */
+    --head-bg: rgba(8,9,11,.82);       /* 顶栏底 */
+    --grid-line: rgba(255,255,255,.014);
+
+    /* 锁定行的 sticky 底色 —— 必须不透明 (半透明会透出横向滚动的内容) */
+    --lock-cell:    #1f1a16;
+    --lock-cell-hi: #2a231b;
+    /* 强调色底上的文字 / 琥珀色底上的文字 */
+    --on-accent: #08111f;
+    --on-warn:   #241703;
+    --warn-hi:   #f7bb55;
+  }
+
+  /* ============================================================
+     亮色主题
+     ---------------------------------------------------------
+     跟随系统:  html[data-theme="auto"] 不写任何覆盖,
+     由下面这条媒体查询兜底 —— 系统是浅色就整套换浅色。
+
+     浅色底不是纯白 (#fff) —— 纯白刺眼且显廉价,
+     掺一点冷调 (#f6f7f9) 才像正经工具。 */
+  html[data-theme="light"] {
+    --bg:      #f4f6f9;
+    --panel:   #ffffff;
+    --panel-2: #fafbfc;
+    --panel-3: #f1f3f6;
+    --panel-4: #e8ebf0;
+
+    --line:   rgba(16,22,34,.09);
+    --line-2: rgba(16,22,34,.15);
+    --line-3: rgba(16,22,34,.24);
+
+    --fg:    #161b24;
+    --fg-2:  #3d4553;
+    --muted: #6b7484;
+    --dim:   #7f8593;
+
+    --accent:     #2b66cc;
+    --accent-hi:  #1f5ac6;
+    --accent-dim: rgba(43,102,204,.11);
+    --accent-glow: rgba(43,102,204,.26);
+
+    /* 语义色在浅底上要加深, 否则不够醒目 */
+    --good:     #137a42;
+    --good-dim: rgba(19,122,66,.11);
+    --warn:     #955e09;
+    --warn-dim: rgba(149,94,9,.13);
+    --bad:      #c82e37;
+    --bad-dim:  rgba(200,46,55,.11);
+    --violet:     #6f5bd6;
+    --violet-dim: rgba(111,91,214,.12);
+
+    /* 浅色下「亮一点」= 黑色半透明 */
+    --ov-1: rgba(16,22,34,.022);
+    --ov-2: rgba(16,22,34,.035);
+    --ov-3: rgba(16,22,34,.052);
+    --ov-4: rgba(16,22,34,.075);
+    --ov-5: rgba(16,22,34,.14);
+    --ov-6: rgba(16,22,34,.22);
+    --scrim: rgba(28,36,50,.42);
+    --scrim-strong: rgba(28,36,50,.50);
+    --shadow: rgba(28,38,56,.16);
+    --shadow-deep: rgba(28,38,56,.20);
+    --glassy: rgba(255,255,255,.86);
+    --head-bg: rgba(255,255,255,.80);
+    --grid-line: rgba(16,22,34,.028);
+
+    --lock-cell:    #fdf6e8;
+    --lock-cell-hi: #fbeed4;
+    --on-accent: #ffffff;
+    --on-warn:   #241703;
+    --warn-hi:   #c07d10;
+  }
+
+  /* 跟随系统 —— 浏览器说系统是浅色就用浅色。
+     html[data-theme="auto"] 走这条; 显式选 dark 的不受影响
+     (选择器特异度更高, 且 auto 那条要写成 :not([data-theme="dark"]))。 */
+  @media (prefers-color-scheme: light) {
+    html[data-theme="auto"] {
+      --bg:      #f4f6f9;
+      --panel:   #ffffff;
+      --panel-2: #fafbfc;
+      --panel-3: #f1f3f6;
+      --panel-4: #e8ebf0;
+
+      --line:   rgba(16,22,34,.09);
+      --line-2: rgba(16,22,34,.15);
+      --line-3: rgba(16,22,34,.24);
+
+      --fg:    #161b24;
+      --fg-2:  #3d4553;
+      --muted: #6b7484;
+      --dim:   #7f8593;
+
+      --accent:     #2b66cc;
+      --accent-hi:  #1f5ac6;
+      --accent-dim: rgba(43,102,204,.11);
+      --accent-glow: rgba(43,102,204,.26);
+
+      --good:     #137a42;
+      --good-dim: rgba(19,122,66,.11);
+      --warn:     #955e09;
+      --warn-dim: rgba(149,94,9,.13);
+      --bad:      #c82e37;
+      --bad-dim:  rgba(200,46,55,.11);
+      --violet:     #6f5bd6;
+      --violet-dim: rgba(111,91,214,.12);
+
+      --ov-1: rgba(16,22,34,.022);
+      --ov-2: rgba(16,22,34,.035);
+      --ov-3: rgba(16,22,34,.052);
+      --ov-4: rgba(16,22,34,.075);
+      --ov-5: rgba(16,22,34,.14);
+      --ov-6: rgba(16,22,34,.22);
+      --scrim: rgba(28,36,50,.42);
+      --scrim-strong: rgba(28,36,50,.50);
+      --shadow: rgba(28,38,56,.16);
+      --shadow-deep: rgba(28,38,56,.20);
+      --glassy: rgba(255,255,255,.86);
+      --head-bg: rgba(255,255,255,.80);
+      --grid-line: rgba(16,22,34,.028);
+
+      --lock-cell:    #fdf6e8;
+      --lock-cell-hi: #fbeed4;
+      --on-accent: #ffffff;
+      --on-warn:   #241703;
+      --warn-hi:   #c07d10;
+    }
   }
 
   /* ---------------- 基础 ---------------- */
@@ -574,15 +730,15 @@
   body::before {
     content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
     background:
-      radial-gradient(1000px 520px at 16% -10%, rgba(79,140,255,.11), transparent 64%),
-      radial-gradient(760px 420px at 92% 2%, rgba(155,140,255,.055), transparent 62%);
+      radial-gradient(1000px 520px at 16% -10%, var(--accent-dim), transparent 64%),
+      radial-gradient(760px 420px at 92% 2%, var(--violet-dim), transparent 62%);
   }
   /* 细网格叠在光上面, 只在有光的地方能看见 */
   body::after {
     content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
     background-image:
-      linear-gradient(to right, rgba(255,255,255,.014) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255,255,255,.014) 1px, transparent 1px);
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
     background-size: 32px 32px;
     mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
     -webkit-mask-image: radial-gradient(ellipse 90% 55% at 22% 0%, #000 0%, transparent 70%);
@@ -607,13 +763,13 @@
      纯色面板看着像贴纸, 有高光才像玻璃/金属。 */
   .panel {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.006) 42%, transparent 130px),
+      linear-gradient(180deg, var(--ov-2), rgba(255,255,255,.006) 42%, transparent 130px),
       var(--panel);
     border: 1px solid var(--line-2);
     border-radius: 10px;
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.06),
-      0 22px 46px -32px rgba(0,0,0,.95);
+      inset 0 1px 0 var(--ov-4),
+      0 22px 46px -32px var(--shadow-deep);
   }
 
   /* ---------------- 统计卡片 ---------------- */
@@ -630,7 +786,7 @@
   /* 统计卡: 数字与说明左右排 —— 数字占主导, 说明退到右边当注解。
      竖排 (数字在上、说明在下) 看着像老式报表。 */
   .stat {
-    background: linear-gradient(180deg, rgba(255,255,255,.03), transparent 62%), var(--panel);
+    background: linear-gradient(180deg, var(--ov-1), transparent 62%), var(--panel);
     padding: 13px 16px 14px; position: relative; overflow: hidden;
     display: flex; flex-direction: column; justify-content: space-between;
     min-height: 78px;
@@ -692,7 +848,7 @@
     position: sticky; top: 53px; z-index: 8;
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding: 9px 11px; margin-bottom: 12px;
-    background: rgba(13,14,17,.88); backdrop-filter: blur(12px) saturate(140%);
+    background: var(--glassy); backdrop-filter: blur(12px) saturate(140%);
     border: 1px solid var(--line); border-radius: var(--r-lg);
   }
   .toolbar input[type=search] { min-width: 200px; }
@@ -702,22 +858,22 @@
   .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .chip {
     display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
-    padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(77,132,255,.30);
-    background: rgba(77,132,255,.07); color: var(--accent-hi);
+    padding: 2px 8px; border-radius: 999px; border: 1px solid var(--accent-glow);
+    background: var(--accent-dim); color: var(--accent-hi);
     cursor: pointer; font-weight: 510; white-space: nowrap;
   }
-  .chip:hover { background: rgba(77,132,255,.16); border-color: rgba(77,132,255,.5); }
+  .chip:hover { background: var(--accent-dim); border-color: var(--accent); }
   .chip b { font-weight: 590; }
   .chip .x { opacity: .6; font-size: 12px; line-height: 1; }
   .chip .x:hover { opacity: 1; }
   .chip.ghost { border-color: var(--line-2); color: var(--muted); background: transparent; }
-  .chip.ghost:hover { color: var(--fg-2); background: rgba(255,255,255,.05); }
+  .chip.ghost:hover { color: var(--fg-2); background: var(--ov-4); }
 
   /* ---------------- 表格 ---------------- */
   .tablewrap {
     border: 1px solid var(--line-2); border-radius: 10px;
     overflow: auto; background: var(--panel);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    box-shadow: inset 0 1px 0 var(--ov-3);
   }
   .tablewrap table { width: 100%; border-collapse: separate; border-spacing: 0; }
   .tablewrap thead th {
@@ -726,7 +882,7 @@
     font-size: 10.5px; font-weight: 590; letter-spacing: .5px; text-transform: uppercase;
     text-align: left; padding: 9px 12px; white-space: nowrap;
     border-bottom: 1px solid var(--line-3);
-    box-shadow: 0 1px 0 rgba(255,255,255,.04);
+    box-shadow: 0 1px 0 var(--ov-3);
   }
   .tablewrap thead th.num { text-align: right; }
   .tablewrap tbody td {
@@ -735,7 +891,7 @@
   }
   .tablewrap tbody td.num { text-align: right; }
   .tablewrap tbody tr:last-child td { border-bottom: 0; }
-  .tablewrap tbody tr:hover td { background: rgba(255,255,255,.032); }
+  .tablewrap tbody tr:hover td { background: var(--ov-2); }
   .tablewrap tbody tr { transition: background .12s ease; }
 
   /* ---------------- 空状态 ---------------- */
@@ -770,9 +926,9 @@
   .saved.dirty { color: var(--warn); }
 
   /* ---------------- 可编辑列 ---------------- */
-  td.editable { background: rgba(79,140,255,.075); }
-  tbody tr:hover td.editable { background: rgba(79,140,255,.13); }
-  th.editable { background: rgba(79,140,255,.17); color: var(--accent-hi); }
+  td.editable { background: var(--accent-dim); }
+  tbody tr:hover td.editable { background: var(--accent-dim); }
+  th.editable { background: var(--accent-dim); color: var(--accent-hi); }
   th.editable .ed { font-size: 10px; opacity: .85; margin-left: 3px; }
 
   /* ---------------- toast ---------------- */
@@ -783,12 +939,12 @@
   .toast {
     background: var(--panel-3); border: 1px solid var(--line-2); border-radius: var(--r);
     padding: 9px 14px; font-size: 12.5px; color: var(--fg);
-    box-shadow: 0 12px 34px rgba(0,0,0,.6);
+    box-shadow: 0 12px 34px var(--shadow);
     display: flex; align-items: center; gap: 8px;
     animation: toastin .18s ease-out;
   }
-  .toast.ok { border-color: rgba(47,196,122,.42); color: var(--good); }
-  .toast.err { border-color: rgba(244,88,94,.42); color: var(--bad); }
+  .toast.ok { border-color: var(--good); color: var(--good); }
+  .toast.err { border-color: var(--bad); color: var(--bad); }
   @keyframes toastin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* ---------------- 元数据 / 等宽小件 ---------------- */
@@ -817,8 +973,8 @@
   th { color: var(--fg-2); }
   ::-webkit-scrollbar { width: 9px; height: 9px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.09); border-radius: 5px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.17); }
+  ::-webkit-scrollbar-thumb { background: var(--ov-5); border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--ov-6); }
   /* @ui-common:inline:end */
   /* ============================================================
      以下由 脚本/sync_ui_css.py 从 public/ui-common.css 自动注入,
@@ -838,6 +994,21 @@
   td .sub, td .dimtext { color: var(--muted); }
   td .tag.mode { color: var(--muted); border-color: var(--line-2); }
 </style>
+<script>
+/* 主题: 首帧前定好, 否则会闪一下白/黑。内容见 public/theme.js */
+(function () {
+  var KEY = 'quote.theme', MODES = ['auto','light','dark'];
+  var mode = 'auto';
+  try { var v = localStorage.getItem(KEY); if (MODES.indexOf(v) >= 0) mode = v; } catch (e) {}
+  var el = document.documentElement;
+  el.setAttribute('data-theme', mode);
+  /* data-theme-effective = 当前实际生效的是哪个 (auto 时问系统) */
+  var sysDark = true;
+  try { sysDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) {}
+  el.setAttribute('data-theme-effective', mode === 'auto' ? (sysDark ? 'dark' : 'light') : mode);
+  window.__THEME_KEY = KEY; window.__THEME_MODES = MODES;
+})();
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -868,6 +1039,10 @@
       <button class="dd-item danger" id="logout"><span>退出登录</span></button>
     </div>
   </span>
+  <button class="themebtn" id="themebtn" title="切换主题" aria-label="切换主题">
+    <span class="tsym" id="themeSym">◐</span>
+    <span class="tlab" id="themeLab">跟随系统</span>
+  </button>
   <button class="loginbtn" id="loginbtn">登录</button>
 </header>
 
@@ -1093,6 +1268,71 @@ let DATA = window.DATA;
 let DATA_REV = null, DATA_UPDATED = null, DATA_FROM = 'offline';
 let DATA_SCOPE = null, DATA_MINE = false;   // 数据归属: scope=用户名, mine=是否本人
 const $ = id => document.getElementById(id);
+
+/* ---------------- 主题 (跟随系统 / 浅色 / 深色) ----------------
+   head 里那段脚本已经把 data-theme 写到 <html> 上了, 这里只管交互。
+   选「跟随系统」时, 系统主题变了要立刻跟上 —— CSS 那边是媒体查询自动的,
+   这里只需要更新按钮上的文字/符号。 */
+const THEME_MODES = ['auto', 'light', 'dark'];
+const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
+const THEME_SYM = { auto: '◐', light: '☀', dark: '☾' };
+
+function themeRead() {
+  try { const v = localStorage.getItem(window.__THEME_KEY || 'quote.theme');
+        return THEME_MODES.indexOf(v) >= 0 ? v : 'auto'; } catch (e) { return 'auto'; }
+}
+function themeApply(mode) {
+  const el = document.documentElement;
+  /* auto 时也要写 data-theme="auto" —— 不能 remove。
+     CSS 里的选择器是 html[data-theme="auto"], 属性没了选择器就匹配不上,
+     媒体查询那套浅色令牌永远不生效 (实测踩过: 匹配成功但 --bg 仍是深色)。 */
+  el.setAttribute('data-theme', mode);
+  el.setAttribute('data-theme-effective', mode === 'auto' ? (themeSystemDark() ? 'dark' : 'light') : mode);
+  const lab = $('themeLab'), sym = $('themeSym');
+  if (lab) lab.textContent = THEME_LABEL[mode];
+  if (sym) sym.textContent = THEME_SYM[mode];
+  const btn = $('themebtn');
+  if (btn) btn.title = '主题: ' + THEME_LABEL[mode] + ' (点击切换)';
+}
+function themeSystemDark() {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+  catch (e) { return true; }
+}
+function themeSet(mode) {
+  try { localStorage.setItem(window.__THEME_KEY || 'quote.theme', mode); } catch (e) {}
+  themeApply(mode);
+}
+function themeCycle() {
+  const order = ['auto', 'light', 'dark'];
+  const next = order[(order.indexOf(themeRead()) + 1) % order.length];
+  themeSet(next);
+}
+/* 跟系统时, 系统主题变了要更新按钮文字 (配色本身由 CSS 媒体查询自动切) */
+function themeWatchSystem() {
+  if (!window.matchMedia) return;
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const on = (e) => {
+      if (themeRead() !== 'auto') return;
+      /* CSS 那半边浏览器自动切了, 这里只把 data-theme-effective 更新一下
+         (它是给 JS 读「当前实际生效的是哪个」用的)
+
+         用事件对象上的 matches, 不要重新查 matchMedia ——
+         change 事件触发时浏览器还没把 matchMedia 状态更新过来,
+         重新查会拿到**旧值**, 导致 data-theme-effective 慢一拍。 */
+      const dark = (e && typeof e.matches === 'boolean') ? e.matches : themeSystemDark();
+      document.documentElement.setAttribute('data-theme-effective', dark ? 'dark' : 'light');
+    };
+    if (mq.addEventListener) mq.addEventListener('change', on);
+    else if (mq.addListener) mq.addListener(on);
+  } catch (e) {}
+}
+(function initTheme() {
+  themeApply(themeRead());
+  themeWatchSystem();
+  const btn = $('themebtn');
+  if (btn) btn.addEventListener('click', themeCycle);
+})();
 
 /** 从后端拉数据; 失败就继续用内嵌快照 (双击打开也能用) */
 async function loadRemoteData() {
@@ -1656,7 +1896,7 @@ function render() {
       `<td class="num">${ok ? fmt(r.sells.custom) : '–'}</td>` +
       `<td class="num">${ok && r.fx > 0 ? fmt(r.locals.custom) : '–'}</td>` +
       `<td class="num ${ok ? (r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '') : ''}">${ok ? fmt(r.profit) : '–'}</td>` +
-      `<td>${r.lead ? esc(leadText(r.lead)) : '<span class="dimtext">未提供</span>'}</td>` +
+      `<td class="lead">${r.lead ? esc(leadText(r.lead)) : '<span class="dimtext">未提供</span>'}</td>` +
       `<td class="limits">${esc(limText(r.lim) || (r.limits && String(r.limits).length > 6
         ? String(r.limits).slice(0, 110) : '')) || '–'}</td>`;
     tr.addEventListener('click', () => {
