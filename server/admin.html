@@ -86,7 +86,7 @@
     white-space: nowrap; }
   .progsteps span.done { color: var(--fg); background: var(--panel3); }
   .progsteps span.on { color: var(--accent-hi); border-color: var(--accent);
-    background: rgba(79,140,255,.10); }
+    background: var(--accent-dim); }
 
   /* ---------------- 右侧固定列 ---------------- */
   th.sticky-r, td.sticky-r { position: sticky; background: var(--panel); z-index: 2; }
@@ -100,8 +100,8 @@
   .sr-3 { right: 90px; }    /* 锁定 */
   .sr-4 { right: 0; }       /* 操作 */
   /* 固定列左边缘加阴影, 横向滚动时看得出「这里是钉住的」 */
-  .tablewrap th.sticky-r, .tablewrap td.sticky-r { box-shadow: -8px 0 12px -8px rgba(0,0,0,.65); }
-  .tablewrap th.sticky-r { box-shadow: -8px 0 12px -8px rgba(0,0,0,.65), inset 0 -1px 0 var(--line2); }
+  .tablewrap th.sticky-r, .tablewrap td.sticky-r { box-shadow: -8px 0 12px -8px var(--shadow); }
+  .tablewrap th.sticky-r { box-shadow: -8px 0 12px -8px var(--shadow), inset 0 -1px 0 var(--line2); }
 
   /* ---------------- 行内编辑 ---------------- */
 
@@ -110,11 +110,11 @@
   td.sheetcell { font-weight: 590; color: var(--fg); }
   td.sheetcell.lockedname { padding-right: 30px; }
   /* 编辑列左侧一条细蓝线, 一眼分出只读区/编辑区 */
-  td.editable:first-of-type, th.editable:first-of-type { box-shadow: inset 2px 0 0 rgba(91,140,255,.55); }
+  td.editable:first-of-type, th.editable:first-of-type { box-shadow: inset 2px 0 0 var(--accent); }
   /* 保存按钮降权: 只有这一行有改动时才变主色 */
   .save { background: transparent; border-color: var(--line-2); color: var(--muted); font-weight: 510; }
   .save:disabled { opacity: .28; }
-  .save.armed { background: var(--accent); border-color: var(--accent); color: #08111f; font-weight: 590; }
+  .save.armed { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 590; }
   .save.armed:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
   /* 锁定: 开关 + 文字 (纯文字按钮太像老式后台) */
   .lockbtn { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; }
@@ -128,7 +128,7 @@
     border-radius: 50%; background: var(--muted); display: block;
     transition: transform .2s cubic-bezier(.3,1.5,.5,1), background .18s;
   }
-  .lockbtn.on .sw { background: var(--warn-dim); border-color: rgba(230,154,47,.55); }
+  .lockbtn.on .sw { background: var(--warn-dim); border-color: var(--warn); }
   .lockbtn.on .knob { transform: translateX(12px); background: var(--warn); }
   .lockbtn .lt { font-size: 10.5px; font-weight: 590; }
   .lockbtn.on .lt { color: var(--warn); }
@@ -138,7 +138,7 @@
   .ovbar {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     padding: 9px 14px; margin-bottom: 10px;
-    background: linear-gradient(180deg, rgba(255,255,255,.028), transparent 70%), var(--panel);
+    background: linear-gradient(180deg, var(--ov-1), transparent 70%), var(--panel);
     border: 1px solid var(--line); border-radius: var(--r-lg);
     font-size: 12px; color: var(--muted);
   }
@@ -205,27 +205,27 @@
   /* 输入框比所在单元格亮一档 —— 不然在非 sticky 列里看不出这是个可改的框 */
   .cell input {
     width: 86px; padding: 4px 6px; text-align: right;
-    background: var(--panel-4); border-color: rgba(79,140,255,.30);
+    background: var(--panel-4); border-color: var(--accent);
     transition: border-color .15s, background .15s, box-shadow .15s;
   }
-  .cell input:hover { border-color: rgba(79,140,255,.55); background: #2a3140; }
+  .cell input:hover { border-color: var(--accent); background: var(--panel-4); }
   .cell input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
   .cell input.fee { width: 70px; }
-  .cell input.dirty { border-color: var(--warn); background: rgba(240,166,58,.08); box-shadow: 0 0 0 3px var(--warndim); }
+  .cell input.dirty { border-color: var(--warn); background: var(--warn-dim); box-shadow: 0 0 0 3px var(--warndim); }
   .saved { color: var(--good); font-weight: 590; font-size: 11px; min-width: 44px; }
   .saved.err { color: var(--bad); }
   .saved.dirty { color: var(--warn); }
 
   /* ---------------- 锁定行 ---------------- */
   tbody tr.locked { background: var(--warndim); box-shadow: inset 3px 0 0 var(--warn); }
-  tbody tr.locked:hover { background: rgba(240,166,58,.2); }
-  tbody tr.locked td { border-bottom-color: rgba(240,166,58,.16); }
+  tbody tr.locked:hover { background: var(--warn-dim); }
+  tbody tr.locked td { border-bottom-color: var(--warn-dim); }
   /* 固定列的底色必须不透明 (否则横向滚动时内容会透出来),
      用 panel 打底 + 琥珀色叠出来的实色, 让锁定感连到最右边 */
-  tbody tr.locked td.sticky-r { background: #1f1a16; }
-  tbody tr.locked:hover td.sticky-r { background: #2a231b; }
+  tbody tr.locked td.sticky-r { background: var(--lock-cell); }
+  tbody tr.locked:hover td.sticky-r { background: var(--lock-cell-hi); }
   tbody tr.locked .price, tbody tr.locked .fee {
-    border-color: rgba(240,166,58,.4); background: rgba(240,166,58,.06);
+    border-color: var(--warn); background: var(--warn-dim);
   }
   tbody tr.locked td:first-child { position: relative; }
   tbody tr.locked td:first-child::before {
@@ -236,9 +236,9 @@
   .tablewrap table { min-width: 1130px; }
   /* 体积数 (可改, 渠道组级别 —— 跟运费/挂号费一样的编辑体验) */
   td.divcell input.divin { width: 78px; }
-  td.divcell input.divin.uncertain { color: var(--bad); border-color: rgba(255,107,107,.45); }
+  td.divcell input.divin.uncertain { color: var(--bad); border-color: var(--bad); }
   /* 锁定行里体积数也跟着标成琥珀, 跟运费/挂号费一致 */
-  tbody tr.locked .divin { border-color: rgba(240,166,58,.4); background: rgba(240,166,58,.06); }
+  tbody tr.locked .divin { border-color: var(--warn); background: var(--warn-dim); }
   th .ed { font-size: 10px; font-weight: 510; color: var(--accent-hi); margin-left: 4px; opacity: .85; }
   .lockbtn {
     font-size: 15px; line-height: 1; padding: 3px 7px; border-radius: var(--r-sm);
@@ -249,8 +249,8 @@
     box-shadow: 0 0 0 2px var(--warndim); }
 
   /* ---------------- 属性徽章 (带电用紫色, 避开琥珀色的「锁定」) ---------------- */
-  .pill.p { border-color: rgba(91,140,255,.4); color: var(--accenthi); background: var(--accentdim); }
-  .pill.b { border-color: rgba(192,132,252,.42); color: #d8b4fe; background: rgba(192,132,252,.14); }
+  .pill.p { border-color: var(--accent); color: var(--accenthi); background: var(--accentdim); }
+  .pill.b { border-color: var(--violet); color: var(--violet); background: var(--violet-dim); }
 
   /* ---------------- 面板 / 引导 ---------------- */
   .welcome {
@@ -286,6 +286,20 @@
   .badge.show { display: inline-block; }
   .dd-item .badge { margin-left: 6px; }
 </style>
+<script>
+/* 主题: 首帧前定好, 否则会闪一下。跟随系统由 CSS 媒体查询接管, JS 只记选择。 */
+(function () {
+  try {
+    var v = localStorage.getItem('quote.theme');
+    if (v !== 'light' && v !== 'dark') v = 'auto';
+    var el = document.documentElement;
+    el.setAttribute('data-theme', v);
+    var sysDark = true;
+    try { sysDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) {}
+    el.setAttribute('data-theme-effective', v === 'auto' ? (sysDark ? 'dark' : 'light') : v);
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>

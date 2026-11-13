@@ -14,12 +14,12 @@
     border-radius: 5px; border: 1px solid var(--line2); white-space: nowrap; font-weight: 590;
   }
   .kind .kico { font-size: 10px; opacity: .9; }
-  .kind.update { border-color: rgba(91,140,255,.4); color: var(--accenthi); background: var(--accentdim); }
-  .kind.add    { border-color: rgba(53,208,127,.4); color: var(--good); background: var(--gooddim); }
-  .kind.del, .kind.delete, .kind.remove { border-color: rgba(255,107,107,.4); color: var(--bad); background: var(--baddim); }
-  .kind.import { border-color: rgba(240,166,58,.4); color: var(--warn); background: var(--warndim); }
-  .kind.lock   { border-color: rgba(240,166,58,.45); color: var(--warn); background: var(--warndim); }
-  .kind.unlock { border-color: rgba(255,255,255,.14); color: #9aa1ac; background: rgba(255,255,255,.04); }
+  .kind.update { border-color: var(--accent); color: var(--accenthi); background: var(--accentdim); }
+  .kind.add    { border-color: var(--good); color: var(--good); background: var(--gooddim); }
+  .kind.del, .kind.delete, .kind.remove { border-color: var(--bad); color: var(--bad); background: var(--baddim); }
+  .kind.import { border-color: var(--warn); color: var(--warn); background: var(--warndim); }
+  .kind.lock   { border-color: var(--warn); color: var(--warn); background: var(--warndim); }
+  .kind.unlock { border-color: var(--line2); color: var(--muted); background: var(--ov-3); }
 
   /* 价格变化: 旧价删除线 -> 新价 -> 涨红跌绿 */
 
@@ -35,11 +35,11 @@
   /* 幅度大的改动单独标出来 */
   .bigtag {
     display: inline-block; font-size: 10px; font-weight: 590; padding: 1px 5px; border-radius: 4px;
-    margin-left: 5px; border: 1px solid rgba(240,166,58,.45); color: var(--warn);
+    margin-left: 5px; border: 1px solid var(--warn); color: var(--warn);
     background: var(--warndim); white-space: nowrap; vertical-align: 1px;
   }
   tr.big { box-shadow: inset 3px 0 0 var(--warn); }
-  tr.big td { background: rgba(240,166,58,.05); }
+  tr.big td { background: var(--warn-dim); }
   tr.big td:nth-child(1) { color: var(--muted); }
 
   /* 时间范围分段控件 */
@@ -53,7 +53,7 @@
     transition: background .15s, color .15s; white-space: nowrap;
   }
   .seg2 button + button { border-left: 1px solid var(--line); }
-  .seg2 button:hover { color: var(--fg-2); background: rgba(255,255,255,.04); }
+  .seg2 button:hover { color: var(--fg-2); background: var(--ov-3); }
   .seg2 button.on { background: var(--accent-dim); color: var(--accent-hi); font-weight: 590; }
 
   .at { white-space: nowrap; color: var(--muted); }
@@ -66,6 +66,20 @@
   .lbl { color: var(--fg); min-width: 320px; word-break: break-word; line-height: 1.45; }
   .tablewrap table { min-width: 1000px; }
 </style>
+<script>
+/* 主题: 首帧前定好, 否则会闪一下。跟随系统由 CSS 媒体查询接管, JS 只记选择。 */
+(function () {
+  try {
+    var v = localStorage.getItem('quote.theme');
+    if (v !== 'light' && v !== 'dark') v = 'auto';
+    var el = document.documentElement;
+    el.setAttribute('data-theme', v);
+    var sysDark = true;
+    try { sysDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) {}
+    el.setAttribute('data-theme-effective', v === 'auto' ? (sysDark ? 'dark' : 'light') : v);
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>
