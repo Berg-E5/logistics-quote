@@ -108,10 +108,25 @@ if [ -d "$DIR/data" ]; then
   echo "    数据目录已存在, 保留不动: $DIR/data"
 else
   mkdir -p "$DIR/data"
-  # 端口: 8792 被占就往后找 —— 装到已经跑着别的服务的机器上不能直接失败。
-  # 挑好的端口写进 data/port, 验收脚本靠它知道该查哪个端口。
+  # 端口: 优先沿用上次装过的那个 —— install.sh 是幂等的, 重跑不该每次都换端口。
+  #
+  # 端口被占时怎么判断"占的是不是我们自己": 不能靠进程名 —— systemd 单元跑的是
+  # node, 进程名 (comm) 里根本没有 quote-server。改读 systemd 单元里记的端口来比对。
+  # 不停服务, 所以重装期间站点不会断。
+  OWN_PORT=""
+  if systemctl cat "$SVC" 2>/dev/null | grep -qE '^Environment=PORT='; then
+    OWN_PORT="$(systemctl cat "$SVC" 2>/dev/null | sed -n 's/^Environment=PORT=\([0-9][0-9]*\).*/\1/p' | head -1)"
+  fi
+  if [ -f "$DIR/data/port" ]; then
+    PREV="$(cat "$DIR/data/port" 2>/dev/null || true)"
+    if echo "$PREV" | grep -Eq '^[0-9]+$' && [ "$PREV" -ge 8792 ] && [ "$PREV" -le 8899 ]; then
+      PORT="$PREV"
+    fi
+  fi
   if command -v ss >/dev/null 2>&1; then
     while ss -Hltn "sport = :$PORT" 2>/dev/null | grep -q .; do
+      # 占用者就是我们自己的服务 -> 沿用这个端口, 不换
+      if [ -n "$OWN_PORT" ] && [ "$PORT" = "$OWN_PORT" ]; then break; fi
       PORT=$((PORT + 1))
       [ "$PORT" -le 8899 ] || { echo "找不到可用端口 (8792-8899)" >&2; exit 1; }
     done
