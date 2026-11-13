@@ -108,6 +108,15 @@ if [ -d "$DIR/data" ]; then
   echo "    数据目录已存在, 保留不动: $DIR/data"
 else
   mkdir -p "$DIR/data"
+  # 端口: 8792 被占就往后找 —— 装到已经跑着别的服务的机器上不能直接失败。
+  # 挑好的端口写进 data/port, 验收脚本靠它知道该查哪个端口。
+  if command -v ss >/dev/null 2>&1; then
+    while ss -Hltn "sport = :$PORT" 2>/dev/null | grep -q .; do
+      PORT=$((PORT + 1))
+      [ "$PORT" -le 8899 ] || { echo "找不到可用端口 (8792-8899)" >&2; exit 1; }
+    done
+  fi
+  echo "$PORT" > "$DIR/data/port"
 fi
 
 copy_dir() {
@@ -234,7 +243,18 @@ server {
 EOF
   mkdir -p /etc/nginx/sites-enabled
   ln -sf /etc/nginx/sites-available/quote.byberg.store /etc/nginx/sites-enabled/quote.byberg.store
-  nginx -t && systemctl reload nginx && echo "    nginx 已配好 (80 端口)"
+  nginx -t
+  # nginx 可能是"装了但没启动"(云镜像 / 容器里很常见), 而 reload 对一个
+  # 停止的服务是无效的 —— 结果配置写好了, 站点却打不开。
+  # 这里 enable + restart: 保证一定在跑, 而且重启机器后会自动拉起。
+  systemctl enable nginx >/dev/null 2>&1 || true
+  systemctl restart nginx
+  systemctl is-active --quiet nginx || {
+    echo "    nginx 启动失败" >&2
+    systemctl status nginx --no-pager -n 20 >&2
+    exit 1
+  }
+  echo "    nginx 已配好 (80 端口)"
 else
   echo
   echo "==> [4/7] 跳过 nginx (没装)"
