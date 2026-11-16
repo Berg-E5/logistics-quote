@@ -57,14 +57,30 @@
     font-size: 15px; font-weight: 590; margin: 0; letter-spacing: -.2px;
     color: var(--fg); white-space: nowrap;
   }
-  header h1::after {
-    content: ""; display: inline-block; width: 1px; height: 12px;
-    background: var(--line-2); margin-left: 11px; vertical-align: -2px;
+  /* 分隔竖线画在「品牌 | 统计」之间, 而不是塞在标题字后面 ——
+     后者那根线离标题太近, 看起来像标题的一部分。 */
+  header p { position: relative; padding-left: 15px; }
+  header p::before {
+    content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 1px; height: 13px; background: var(--line-2);
   }
-  header p {
-    margin: 0; color: var(--muted); font-size: 11.5px; font-weight: 400;
-    font-family: var(--mono); letter-spacing: -.2px;
+  /* 顶部统计条: 数字和单位分层, 数字用等宽+前景色, 单位用小字灰。
+     原来整行用 mono+muted 一次渲染, 扫读时数字和说明混成一片 —— 这就是
+     「像把后端统计直接拼进导航栏」的来源。 */
+  header p { margin: 0; }   /* margin 由上面 padding-left 让出分隔线位置 */
+  .mstats { display: flex; align-items: baseline; gap: 0 14px; flex-wrap: wrap; }
+  .mstats .ms { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+  .mstats .ms b {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+    color: var(--fg); font-variant-numeric: tabular-nums; letter-spacing: -.2px;
   }
+  .mstats .ms span { font-size: 11px; color: var(--muted); }
+  .mstats .mnote {
+    font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .mstats .mnote::before { content: "·"; margin-right: 8px; color: var(--line-3); }
+  @media (max-width: 900px) { .mstats .mnote { display: none; } }
   /* 主题按钮: 符号 + 文字。不用 emoji, 不同系统渲染差异大。 */
   .themebtn {
     font: inherit; font-size: 12px; font-weight: 510; padding: 4px 10px 4px 8px;
@@ -212,16 +228,20 @@
     flex-direction: row; gap: 8px; align-items: baseline; background: transparent;
   }
   .grp-b { padding: 12px 14px 13px; }
-  /* 组标题: 序号 + 名称, 像参数面板的分区标 */
+  /* 组标题: 序号徽记 + 名称。
+     原来整块用 --dim (在 panel 底上只有 3.98:1, 低于正文 4.5:1), 加上
+     uppercase + 字距 —— 中文没有大小写, 字距只会让字发虚。 */
   .grp-h {
-    font-size: 10.5px; font-weight: 590; letter-spacing: .6px;
-    color: var(--dim); text-transform: uppercase; white-space: nowrap;
-    display: flex; gap: 8px; align-items: baseline;
+    font-size: 11.5px; font-weight: 600;
+    color: var(--fg-2); white-space: nowrap;
+    display: flex; gap: 7px; align-items: center;
   }
-  .grp-h b { color: var(--fg-2); font-weight: 590; font-size: 11px; letter-spacing: .3px; }
+  .grp-h b { color: var(--fg); font-weight: 600; font-size: 12px; }
   .grp-h i {
-    font-style: normal; font-family: var(--mono); font-size: 10px;
-    color: var(--dim); letter-spacing: 0;
+    font-style: normal; font-family: var(--mono); font-size: 9.5px; font-weight: 600;
+    color: var(--accent-hi); background: var(--accent-dim);
+    border: 1px solid var(--line-2); border-radius: 3px;
+    padding: 1px 4px; line-height: 1.35; letter-spacing: 0;
   }
   .grp-b { padding: 13px 16px; }
   .inputs {
@@ -266,11 +286,11 @@
     padding: 11px 16px 10px; border-bottom: 1px solid var(--line); background: var(--panel-2);
   }
   .cmp-h b { font-size: 11.5px; font-weight: 590; color: var(--fg-2); }
-  .cmp-h span { font-size: 11px; color: var(--dim); }
+  .cmp-h span { font-size: 11px; color: var(--muted); }
   .cmp-rows { padding: 10px 16px 13px; display: flex; flex-direction: column; gap: 5px; }
   .cmpr { display: grid; grid-template-columns: 210px minmax(0,1fr) 104px; gap: 12px; align-items: center; }
   .cmpr-n { font-size: 11.5px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cmpr-n .sub2 { color: var(--dim); font-size: 10.5px; margin-left: 5px; }
+  .cmpr-n .sub2 { color: var(--muted); font-size: 10.5px; margin-left: 5px; }
   .cmpr-b { height: 14px; background: var(--ov-2); border-radius: 2px; position: relative; overflow: hidden; }
   .cmpr-b i {
     position: absolute; inset: 0 auto 0 0; border-radius: 2px;
@@ -288,8 +308,8 @@
   }
   .cmpr.is-best .cmpr-v { color: var(--good); }
   .cmpr.is-picked .cmpr-v { color: var(--accent-hi); }
-  .cmpr-d { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .cmp-empty { padding: 22px 16px; text-align: center; color: var(--dim); font-size: 12px; }
+  .cmpr-d { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .cmp-empty { padding: 22px 16px; text-align: center; color: var(--muted); font-size: 12px; }
 
   /* ---------------- 结果区标题 ---------------- */
   .rescap {
@@ -415,7 +435,7 @@
     border-color: var(--accent); font-weight: 590;
   }
   /* 不可发 / 超尺寸 */
-  tbody tr.na { color: var(--dim); }
+  tbody tr.na { color: var(--muted); }
   tbody tr.na .ch { color: var(--muted); }
   tbody tr.na:hover { background: var(--bad-dim); }
 
@@ -437,7 +457,13 @@
 
   .tag.warn { background: var(--warn-dim); color: var(--warn); border-color: var(--warn); }
   .tag.bad  { background: var(--bad-dim);  color: var(--bad);  border-color: var(--bad); }
-  .limits { color: var(--muted); font-size: 11px; max-width: 250px; white-space: pre-wrap; word-break: break-word; }
+  /* 尺寸限制列: 原来 white-space:pre-wrap 让长说明换行, 把整行行高撑爆,
+     整张表的节奏就毁了。改成最多两行 (line-clamp), 完整内容挂 title 悬停看。 */
+  .limits {
+    color: var(--muted); font-size: 11px; max-width: 190px; line-height: 1.45;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    overflow: hidden; word-break: break-word; cursor: help;
+  }
   .note { color: var(--warn); font-size: 11px; }
 
   /* 价格条: 一眼看出谁便宜 (内联固定宽度, 右边缘对齐, 长度可直接比) */
@@ -756,6 +782,17 @@
     outline: none;
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 3px var(--accent-dim) !important;
+  }
+
+  /* 动效降级: 系统里开了「减少动态效果」的用户, 不该再看到位移动画。
+     改价后的闪烁提示 (flashna) 也一并收敛 —— 用背景色变化代替整行动画。 */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 
   /* ---------------- 面板材质 ----------------
@@ -1275,7 +1312,7 @@ const $ = id => document.getElementById(id);
    这里只需要更新按钮上的文字/符号。 */
 const THEME_MODES = ['auto', 'light', 'dark'];
 const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
-const THEME_SYM = { auto: '◐', light: '☀', dark: '☾' };
+const THEME_SYM = { auto: '◐', light: '○', dark: '●' };
 
 function themeRead() {
   try { const v = localStorage.getItem(window.__THEME_KEY || 'quote.theme');
@@ -1658,6 +1695,12 @@ function fmtKg(n) {
   if (n === null || n === undefined || isNaN(n)) return '–';
   return (Math.round(n * 100) / 100).toString();
 }
+/** 统计数字: 强制成整数再输出, 避免 meta 里出现非数字时把 HTML 弄坏 */
+function num(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.round(n)) : '0';
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1873,6 +1916,8 @@ function render() {
     if (r.blocked) note = `<div class="note"><span class="tag bad">不可发</span>${esc(r.note)}</div>`;
     else if (r.oversize) note = `<div class="note"><span class="tag warn">超尺寸</span>${esc(r.note)}（仍可发，加收超尺寸费）</div>`;
 
+    const limTxt = limText(r.lim) || (r.limits && String(r.limits).length > 6
+      ? String(r.limits).slice(0, 110) : '') || '';
     tr.innerHTML =
       `<td><div class="ch">${esc(r.sheet)}</div>` +
         `<div class="sub">` +
@@ -1897,8 +1942,7 @@ function render() {
       `<td class="num">${ok && r.fx > 0 ? fmt(r.locals.custom) : '–'}</td>` +
       `<td class="num ${ok ? (r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '') : ''}">${ok ? fmt(r.profit) : '–'}</td>` +
       `<td class="lead">${r.lead ? esc(leadText(r.lead)) : '<span class="dimtext">未提供</span>'}</td>` +
-      `<td class="limits">${esc(limText(r.lim) || (r.limits && String(r.limits).length > 6
-        ? String(r.limits).slice(0, 110) : '')) || '–'}</td>`;
+      `<td class="limits" title="${esc(limTxt)}">${esc(limTxt) || '–'}</td>`;
     tr.addEventListener('click', () => {
       // 不可发的渠道不让选中 —— 选了也没法报价, 还容易让人以为「就差一点点」
       if (!ok) { flashRow(tr, 'flash-na'); return; }
@@ -2111,9 +2155,14 @@ function init() {
     ATTR = '带电';
     for (const x of $('attr').children) x.classList.toggle('on', x.dataset.v === '带电');
   }
-  $('meta').textContent =
-    `${DATA.meta.channels} 个渠道 · ${DATA.meta.groups} 条报价 · ${DATA.meta.tiers} 条费率档` +
-    `（报价表覆盖 ${DATA.meta.countriesAll || DATA.meta.countries} 个国家/地区, 列表只列常用 ${DATA.meta.countries} 个）`;
+  $('meta').innerHTML =
+    '<span class="mstats">' +
+      '<span class="ms"><b>' + num(DATA.meta.channels) + '</b><span>个渠道</span></span>' +
+      '<span class="ms"><b>' + num(DATA.meta.groups) + '</b><span>条报价</span></span>' +
+      '<span class="ms"><b>' + num(DATA.meta.tiers) + '</b><span>条费率档</span></span>' +
+      '<span class="mnote">覆盖 ' + num(DATA.meta.countriesAll || DATA.meta.countries) +
+        ' 个国家/地区 · 列表列常用 ' + num(DATA.meta.countries) + ' 个</span>' +
+    '</span>';
   const sync = $('sync');
   if (sync) {
     if (DATA_FROM === 'server' && DATA_REV) {

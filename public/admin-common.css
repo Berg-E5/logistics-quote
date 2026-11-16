@@ -318,3 +318,6 @@ tr.open > td { border-bottom-color: transparent; }
 .dropdown.themedd {
   min-width: 210px; right: 0; left: auto;
 }
+
+/* 主题选项里的符号: 跟 11px 的按钮文字配平, 不要比文字大一号 */
+.th-opt .th-sym { font-size: 11px; margin-right: 4px; vertical-align: -1px; }

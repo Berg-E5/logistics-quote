@@ -254,6 +254,17 @@ body > * { position: relative; z-index: 1; }
   box-shadow: 0 0 0 3px var(--accent-dim) !important;
 }
 
+/* 动效降级: 系统里开了「减少动态效果」的用户, 不该再看到位移动画。
+   改价后的闪烁提示 (flashna) 也一并收敛 —— 用背景色变化代替整行动画。 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ---------------- 面板材质 ----------------
    关键在 inset 0 1px 0 那条高光: 面板顶部有一道亮边, 看起来是「浮起来」的。
    纯色面板看着像贴纸, 有高光才像玻璃/金属。 */
