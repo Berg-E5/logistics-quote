@@ -37,7 +37,7 @@
    * 就不会更新 (实测踩过)。CSS 那半边是媒体查询自动的, 这里只补 JS 侧状态。 */
   const THEME_KEY = 'quote.theme';
   const THEME_LABEL = { auto: '跟随系统', light: '浅色', dark: '深色' };
-  const THEME_SYM = { auto: '◐', light: '☀', dark: '☾' };
+  const THEME_SYM = { auto: '◐', light: '○', dark: '●' };
   function themeSystemDark() {
     try { return !!(global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches); }
     catch (e) { return true; }
@@ -240,7 +240,7 @@
               <span class="th-opts">
                 <button v-for="m in ['auto','light','dark']" :key="m"
                         class="th-opt" :class="{on: themeMode === m}"
-                        @click.stop="themeSet(m)">{{ THEME_LABEL[m] }}</button>
+                        @click.stop="themeSet(m)"><span class="th-sym">{{ THEME_SYM[m] }}</span>{{ THEME_LABEL[m] }}</button>
               </span>
             </div>
           </div>
