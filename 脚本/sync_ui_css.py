@@ -48,6 +48,37 @@ def read_common():
     return '\n'.join(lines).strip('\n')
 
 
+
+def check_braces(css, label):
+    """括号配平检查。
+
+    为什么必须有: CSS 里少一个右花括号, 浏览器会把后面所有规则当成
+    某个块的内容吞掉 —— 不报错, 规则静默失效 (2026-11-16 就这么踩过:
+    表头少个 '}', 结果 no-zone 自动隐藏列、空状态样式等一批规则全失效)。
+    """
+    depth = 0
+    line = 1
+    opened = []
+    i = 0
+    n = len(css)
+    while i < n:
+        ch = css[i]
+        if ch == '\n':
+            line += 1
+        elif ch == '{':
+            depth += 1
+            opened.append(line)
+        elif ch == '}':
+            depth -= 1
+            if opened:
+                opened.pop()
+        i += 1
+    if depth != 0:
+        raise SystemExit(
+            f'[错误] {label} 花括号不配平 (多 {depth} 个未闭合, 起始行 {opened[-1] if opened else "?"})\n'
+            f'       浏览器会把这条之后的规则静默吞掉, 必须先修好再同步。')
+    return True
+
 def sync(path, body, check):
     if not os.path.exists(path):
         print(f'  跳过（不存在）: {os.path.relpath(path, ROOT)}')
