@@ -205,41 +205,73 @@
   }
   /* 作者样式的 display:flex 会压过浏览器默认的 [hidden]{display:none}, 必须显式盖回去 */
   .gate[hidden] { display: none !important; }
+  /* 登录墙: 两栏卡片 —— 左边讲清楚这是什么工具, 右边直接登录。
+     原来是一张居中的窄卡片 + 纯装饰图标, 而且要点「登录」才弹窗 (两步)。 */
   .gcard {
+    position: relative;
+    display: grid; grid-template-columns: 1.12fr .88fr;
     background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg);
-    padding: 30px 28px; width: min(92vw, 384px); text-align: center;
-    box-shadow: 0 24px 60px var(--shadow);
+    width: min(94vw, 740px); overflow: hidden;
+    box-shadow: 0 24px 60px var(--shadow-deep);
   }
+  /* 主题切换按钮放在墙上 —— 顶栏被登录墙盖住, 未登录时点不到顶栏那个 */
+  .gtheme {
+    position: absolute; right: 13px; top: 13px; z-index: 3;
+    height: 28px; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px;
+    border-radius: var(--r-sm); border: 1px solid var(--line-2);
+    background: var(--ov-3); color: var(--fg-2); cursor: pointer; font: inherit; font-size: 11.5px;
+  }
+  .gtheme:hover { background: var(--ov-4); color: var(--fg); }
+  .gtheme .tsym { font-size: 13px; line-height: 1; color: var(--accent); }
+  .gtheme .tlab { white-space: nowrap; }
+  .gintro { padding: 34px 30px 32px; border-right: 1px solid var(--line); }
   .gbrand {
-    font-size: 10.5px; font-weight: 590; letter-spacing: 1.4px; color: var(--dim);
-    text-transform: uppercase; margin-bottom: 18px; font-family: var(--mono);
+    font-size: 11px; font-weight: 600; letter-spacing: .2px; color: var(--accent-hi);
+    margin-bottom: 15px;
   }
-  /* 几何标记代替 emoji 图标 */
-  .gicon {
-    width: 34px; height: 34px; margin: 0 auto 16px; position: relative;
-    border: 1px solid var(--line-3); border-radius: var(--r-sm);
+  .gintro h2 {
+    margin: 0 0 11px; font-size: 21px; font-weight: 620; letter-spacing: -.5px;
+    line-height: 1.35; color: var(--fg);
   }
-  .gicon::before {
-    content: ""; position: absolute; left: 50%; top: 9px; transform: translateX(-50%);
-    width: 12px; height: 9px; border: 1.5px solid var(--accent);
-    border-radius: 2px; border-bottom-width: 2.5px;
+  .gmuted { margin: 0; font-size: 13px; line-height: 1.85; color: var(--muted); }
+  .glist { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 9px; }
+  .glist li {
+    position: relative; padding-left: 19px; font-size: 12.5px; color: var(--fg-2); line-height: 1.5;
   }
-  .gicon::after {
-    content: ""; position: absolute; left: 50%; top: 20px; transform: translateX(-50%);
-    width: 16px; height: 1.5px; background: var(--accent); opacity: .55;
+  .glist li::before {
+    content: ""; position: absolute; left: 2px; top: 7px;
+    width: 6px; height: 6px; border-radius: 2px; background: var(--accent);
   }
-  .gcard h2 { margin: 0 0 8px; font-size: 17px; font-weight: 590; letter-spacing: -.3px; }
-  .gcard p { margin: 0; font-size: 12.5px; line-height: 1.75; color: var(--muted); }
-  .gcard strong { color: var(--fg); font-weight: 590; }
-  .gacts { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 20px; }
-  .gacts button {
-    font: inherit; font-size: 13px; font-weight: 590; padding: 8px 22px; border-radius: var(--r);
-    border: 1px solid var(--accent); background: var(--accent); color: #08111f; cursor: pointer;
+  .gform { padding: 34px 26px 26px; display: flex; flex-direction: column; background: var(--panel-2); }
+  .gfield { margin-bottom: 13px; }
+  .gfield label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+  .gfield input {
+    font: inherit; font-size: 13.5px; padding: 9px 11px; border-radius: var(--r);
+    border: 1px solid var(--line-2); background: var(--ov-2); color: var(--fg); width: 100%;
   }
-  .gacts button:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
-  .gacts a { font-size: 12.5px; color: var(--accent-hi); text-decoration: none; }
-  .gacts a:hover { text-decoration: underline; }
-  .ghint { margin-top: 16px !important; font-size: 11.5px !important; color: var(--dim) !important; }
+  .gfield input::placeholder { color: var(--dim); }
+  .gfield input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .gform .err { color: var(--bad); font-size: 12px; min-height: 17px; margin-bottom: 6px; }
+  .gform button.primary {
+    font: inherit; font-size: 13.5px; font-weight: 590; padding: 10px; border-radius: var(--r);
+    border: 1px solid var(--accent); background: var(--accent); color: #08111f;
+    cursor: pointer; width: 100%;
+  }
+  .gform button.primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .gform button.primary:disabled { opacity: .55; cursor: default; }
+  .gfoot {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); line-height: 1.85;
+  }
+  .gfoot a { color: var(--accent-hi); text-decoration: none; }
+  .gfoot a:hover { text-decoration: underline; }
+  .ghint { color: var(--dim); font-size: 11.5px; }
+  @media (max-width: 700px) {
+    .gcard { grid-template-columns: 1fr; }
+    .gintro { border-right: 0; border-bottom: 1px solid var(--line); padding: 28px 22px 22px; }
+    .gintro h2 { font-size: 19px; }
+    .gform { padding: 22px; }
+  }
 
   /* ---------------- 登录弹窗 ---------------- */
   .modal {
@@ -1171,18 +1203,42 @@
   <button class="loginbtn" id="loginbtn">登录</button>
 </header>
 
-<!-- 登录墙: 未登录时挡住计算区 -->
+<!-- 登录墙: 未登录时挡住计算区。
+     原来要点「登录」再弹一次窗, 两步; 现在表单直接放在墙上。
+     主题切换按钮也放在这里 —— 顶栏被登录墙盖住, 之前未登录时切不了主题。 -->
 <div class="gate" id="gate" hidden>
   <div class="gcard">
-    <div class="gbrand">物流报价查询</div>
-    <div class="gicon"></div>
-    <h2>请先登录</h2>
-    <p class="muted">报价数据只对登录用户开放。<br>登录后自动显示<strong>你自己上传的</strong>渠道价格表。</p>
-    <div class="gacts">
-      <button class="primary" id="gateLogin">登录</button>
-      <a href="/admin" target="_blank">注册新账号</a>
+    <button class="gtheme" id="gThemeBtn" title="切换主题" aria-label="切换主题">
+      <span class="tsym" id="gThemeSym">◐</span>
+      <span class="tlab" id="gThemeLab">跟随系统</span>
+    </button>
+    <div class="gintro">
+      <div class="gbrand">物流报价查询</div>
+      <h2>按你自己的价格表<br>算到手价</h2>
+      <p class="gmuted">登录后用你上传的渠道报价表比价 —— 运费、挂号费、附加费、体积重一次算清，直接给出最低价和该收多少。</p>
+      <ul class="glist">
+        <li>多渠道实时比价，自动标出最低价</li>
+        <li>体积重按各渠道除数自动换算</li>
+        <li>汇率取中行现汇卖出价</li>
+        <li>时效、尺寸限制、附加费逐行提示</li>
+      </ul>
     </div>
-    <p class="ghint">注册后上传自己的价格表就能用；也可以让管理员在后台给你建账号。</p>
+    <div class="gform">
+      <div class="gfield">
+        <label for="gUser">用户名</label>
+        <input id="gUser" type="text" autocomplete="username" placeholder="你的账号">
+      </div>
+      <div class="gfield">
+        <label for="gPass">密码</label>
+        <input id="gPass" type="password" autocomplete="current-password" placeholder="密码">
+      </div>
+      <div class="err" id="gErr"></div>
+      <button class="primary" id="gGo">登录</button>
+      <div class="gfoot">
+        还没有账号？<a href="/admin" target="_blank">去后台注册</a><br>
+        <span class="ghint">注册后上传自己的价格表就能用；也可以让管理员在后台给你建账号。</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1432,6 +1488,12 @@ function themeApply(mode) {
   if (sym) sym.textContent = THEME_SYM[mode];
   const btn = $('themebtn');
   if (btn) btn.title = '主题: ' + THEME_LABEL[mode] + ' (点击切换)';
+  /* 登录墙上的主题按钮 (顶栏被登录墙盖住, 未登录时只能切这一个) */
+  const gsym = $('gThemeSym'), glab = $('gThemeLab');
+  if (gsym) gsym.textContent = THEME_SYM[mode];
+  if (glab) glab.textContent = THEME_LABEL[mode];
+  const gbtn = $('gThemeBtn');
+  if (gbtn) gbtn.title = '主题: ' + THEME_LABEL[mode] + ' (点击切换)';
 }
 function themeSystemDark() {
   try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
@@ -1471,6 +1533,9 @@ function themeWatchSystem() {
   themeWatchSystem();
   const btn = $('themebtn');
   if (btn) btn.addEventListener('click', themeCycle);
+  /* 登录墙上的主题按钮 */
+  const gbtn = $('gThemeBtn');
+  if (gbtn) gbtn.addEventListener('click', themeCycle);
 })();
 
 /** 从后端拉数据; 失败就继续用内嵌快照 (双击打开也能用) */
@@ -1615,29 +1680,40 @@ $('loginmodal').onclick = (e) => { if (e.target === $('loginmodal')) closeLoginM
 $('liUser').onkeydown = e => { if (e.key === 'Enter') $('liPass').focus(); };
 $('liPass').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
 
-async function doLogin() {
-  const username = $('liUser').value.trim();
-  const password = $('liPass').value;
-  if (!username || !password) { $('liErr').textContent = '用户名和密码都要填'; return; }
-  $('liGo').disabled = true;
-  $('liErr').textContent = '';
+/* 登录提交: 登录墙上的表单和右上角弹窗的表单共用这一套。
+   两处字段 id 不同, 所以传元素进来而不是写死 id。 */
+async function submitLogin(userEl, passEl, errEl, btnEl) {
+  const username = userEl.value.trim();
+  const password = passEl.value;
+  if (!username || !password) { errEl.textContent = '用户名和密码都要填'; return; }
+  btnEl.disabled = true;
+  errEl.textContent = '';
   try {
-    const j = await apiPost('/api/login', { username, password });
+    await apiPost('/api/login', { username, password });
     closeLoginModal();
-    $('liPass').value = '';
+    passEl.value = '';
     await refreshLoginState();
     // 重载页面: cookie 已经带上, 页面会拉到这个用户自己的数据
     // (不重调 init(), 免得重复绑定事件)
     location.reload();
   } catch (e) {
-    $('liErr').textContent = e.message;
+    errEl.textContent = e.message;
+    try { passEl.select(); } catch (_) {}
   } finally {
-    $('liGo').disabled = false;
+    btnEl.disabled = false;
   }
 }
+async function doLogin() {
+  return submitLogin($('liUser'), $('liPass'), $('liErr'), $('liGo'));
+}
 $('liGo').onclick = doLogin;
-const gateLogin = $('gateLogin');
-if (gateLogin) gateLogin.onclick = () => { openLoginModal(); };
+/* 登录墙上的表单: 直接在墙上登录, 不用再点一次弹窗 */
+const gGo = $('gGo');
+if (gGo) {
+  gGo.onclick = () => submitLogin($('gUser'), $('gPass'), $('gErr'), gGo);
+  $('gUser').onkeydown = e => { if (e.key === 'Enter') $('gPass').focus(); };
+  $('gPass').onkeydown = e => { if (e.key === 'Enter') gGo.click(); };
+}
 
 $('logout').onclick = async () => {
   closeUserMenu();
