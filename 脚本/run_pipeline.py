@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 import time
+import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = sys.executable
@@ -65,6 +66,32 @@ def main():
     if not os.path.exists(src):
         print(f"报价表不存在: {src}", file=sys.stderr)
         return 3
+
+    # XLSX 是 ZIP。先检查解压后总大小，避免压缩炸弹把 openpyxl/磁盘拖死。
+    try:
+        max_uncompressed_mb = max(
+            1, int(os.environ.get("QUOTE_IMPORT_MAX_UNCOMPRESSED_MB", "500") or "500")
+        )
+    except ValueError:
+        print("QUOTE_IMPORT_MAX_UNCOMPRESSED_MB 必须是整数", file=sys.stderr)
+        return 2
+    try:
+        with zipfile.ZipFile(src) as zf:
+            infos = zf.infolist()
+            total_size = sum(max(0, i.file_size) for i in infos)
+            if any(i.flag_bits & 0x1 for i in infos):
+                print("不支持加密的 XLSX 文件", file=sys.stderr)
+                return 8
+    except zipfile.BadZipFile:
+        print("文件不是有效的 XLSX/ZIP", file=sys.stderr)
+        return 8
+    if total_size > max_uncompressed_mb * 1024 * 1024:
+        print(
+            f"XLSX 解压后超过限制 {max_uncompressed_mb} MB "
+            f"(实际 {total_size / 1024 / 1024:.1f} MB)",
+            file=sys.stderr,
+        )
+        return 9
 
     # 告诉各抽取脚本数据源在哪
     with open(os.path.join(HERE, "源文件路径.txt"), "w", encoding="utf-8") as f:

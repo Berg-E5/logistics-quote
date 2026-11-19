@@ -17,7 +17,8 @@ const SECRET = path.join(DATA_DIR, 'secret.key');
 const SESSION_HOURS = 12;
 
 function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(DATA_DIR, 0o700); } catch (e) { /* Windows 忽略 */ }
 }
 
 /** 读取签名密钥, 没有就生成 */
@@ -42,8 +43,24 @@ function hashPassword(password, salt) {
 function verifyPassword(password, user) {
   if (!user || !user.salt || !user.hash) return false;
   const { hash } = hashPassword(password, user.salt);
+  return hashesEqual(hash, user.hash);
+}
+
+/** 异步校验，避免 scrypt 阻塞整个 Node 事件循环。 */
+function verifyPasswordAsync(password, user) {
+  if (!user || !user.salt || !user.hash) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password), user.salt, 64,
+      { N: 16384, r: 8, p: 1 }, (err, derived) => {
+        if (err) return reject(err);
+        resolve(hashesEqual(derived.toString('hex'), user.hash));
+      });
+  });
+}
+
+function hashesEqual(hash, expected) {
   const a = Buffer.from(hash, 'hex');
-  const b = Buffer.from(user.hash, 'hex');
+  const b = Buffer.from(expected, 'hex');
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
@@ -63,7 +80,8 @@ function loadUsers() {
 function saveUsers(users) {
   ensureDir();
   const tmp = USERS + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(users, null, 2), 'utf8');
+  fs.writeFileSync(tmp, JSON.stringify(users, null, 2), { encoding: 'utf8', mode: 0o600 });
+  try { fs.chmodSync(tmp, 0o600); } catch (e) { /* Windows 忽略 */ }
   fs.renameSync(tmp, USERS);
   try { fs.chmodSync(USERS, 0o600); } catch (e) { /* Windows 忽略 */ }
 }
@@ -88,6 +106,7 @@ function createUser(username, password, role) {
   const u = {
     username: name, salt, hash,
     role: role || 'admin',
+    sessionVersion: 0,
     createdAt: new Date().toISOString(),
   };
   users.push(u);
@@ -121,9 +140,21 @@ function setPassword(username, password) {
   if (!u) throw new Error('用户不存在: ' + username);
   const { salt, hash } = hashPassword(password);
   u.salt = salt; u.hash = hash;
+  u.sessionVersion = Number(u.sessionVersion || 0) + 1;
   u.changedAt = new Date().toISOString();
   saveUsers(users);
   return u;
+}
+
+/** 撤销某个用户的全部无状态会话。 */
+function revokeSessions(username) {
+  const users = loadUsers();
+  const u = users.find(x => x.username.toLowerCase() === String(username).toLowerCase());
+  if (!u) return false;
+  u.sessionVersion = Number(u.sessionVersion || 0) + 1;
+  u.sessionsRevokedAt = new Date().toISOString();
+  saveUsers(users);
+  return true;
 }
 
 function deleteUser(username) {
@@ -151,8 +182,11 @@ function sign(payload) {
 
 /** 生成会话 cookie 值 */
 function makeSession(username) {
+  const user = findUser(username);
+  const sessionVersion = user ? Number(user.sessionVersion || 0) : 0;
   const payload = Buffer.from(JSON.stringify({
     u: username,
+    sv: sessionVersion,
     exp: Date.now() + SESSION_HOURS * 3600 * 1000,
   }), 'utf8').toString('base64url');
   return payload + '.' + sign(payload);
@@ -173,6 +207,8 @@ function readSession(cookieValue) {
   try {
     const obj = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     if (!obj.exp || obj.exp < Date.now()) return null;
+    const user = obj.u ? findUser(obj.u) : null;
+    if (!user || Number(obj.sv) !== Number(user.sessionVersion || 0)) return null;
     return obj.u;
   } catch (e) {
     return null;
@@ -275,7 +311,8 @@ function clearAllRates() {
 }
 
 module.exports = {
-  createUser, registerUser, setPassword, deleteUser, listUsers, findUser, verifyPassword,
+  createUser, registerUser, setPassword, revokeSessions, deleteUser, listUsers, findUser,
+  verifyPassword, verifyPasswordAsync,
   hashPassword, loadUsers, saveUsers,
   makeSession, readSession, cookieHeader,
   checkRate, noteFail, clearFail,

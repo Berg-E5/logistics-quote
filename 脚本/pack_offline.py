@@ -93,7 +93,7 @@ def main():
             f"· 打包时间: {time.strftime('%Y-%m-%d %H:%M')}\n"
             f"· 费率档: {len(d.get('tiers') or [])} 条, 渠道组 {len(gs)} 个\n\n"
             "注意: 离线版用的是打包那一刻的汇率, 用之前记得改汇率框。\n"
-            "线上 https://quote.byberg.store 的汇率每 3 小时自动刷新, 更准。\n"
+            "线上 https://quote.byberg.store 的汇率每 60 秒自动刷新, 更准。\n"
         )
     zip_path = os.path.join(out_dir, "物流报价查询-离线版-" + stamp + ".zip")
     if os.path.exists(zip_path):

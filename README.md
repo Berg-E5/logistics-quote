@@ -2,8 +2,10 @@
 
 按渠道 / 国家 / 重量 / 尺寸算运费、毛利和建议售价的物流报价系统。
 
-前端纯原生 JS + 后端 Node 原生 http，**零第三方运行时依赖**（不需要 `npm install`），
+前端纯原生 JS + 后端 Node 原生 http，**Node 端零第三方依赖**（不需要 `npm install`），
 数据用 JSON 文件存，支持多用户各自独立的价格表。
+
+整表导入额外需要 Python 3 和 `openpyxl`；Docker 镜像和一键安装脚本会自动安装。
 
 ---
 
@@ -121,6 +123,30 @@ cd logistics-quote && docker compose up -d
 | `脚本/verify_rates.js` | 报价表口径交叉验证（401 组，独立实现） |
 | `脚本/sync_copies.py` | 多副本同步 + 一致性检查 |
 | `脚本/run_pipeline.py` | 整表导入的七步管道 |
+
+## 测试
+
+不需要商业报价数据或第三方 Node 模块；集成测试会调用系统 Python 3 和内置的假导入管道：
+
+```bash
+node --test
+```
+
+测试覆盖起收重量边界、并发导入的数据隔离，以及管理令牌是否真正写入 `admin` 作用域。
+
+## 安全相关环境变量
+
+| 变量 | 默认值 | 作用 |
+|---|---|---|
+| `QUOTE_REGISTRATION_OPEN` | `1` | 设为 `0` 关闭公开注册，仅管理员可建号 |
+| `QUOTE_IMPORT_CONCURRENCY` | `2` | 同时运行的导入任务数 |
+| `QUOTE_IMPORT_MAX_MB` | `40` | 单个 XLSX 文件大小上限 |
+| `QUOTE_IMPORT_MAX_UNCOMPRESSED_MB` | `500` | XLSX 解压后总大小上限 |
+| `QUOTE_IMPORT_TIMEOUT_MS` | `600000` | 单次导入超时时间 |
+| `QUOTE_IMPORT_MAX_TIERS` | `200000` | JSON 导入的最大费率档数量 |
+
+公开部署前必须确认 `admin` 密码没有出现在源码、脚本或 Git 历史中。密码一旦泄露，
+除了改密码，还应轮换生产环境的 `data/secret.key`，否则已经签发的会话仍可继续使用。
 
 ## 关于这个仓库
 

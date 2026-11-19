@@ -71,7 +71,7 @@ tar czf '$RELEASE_DIR/$PKG' \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='*.bak' \
   --exclude='后台地址.txt' --exclude='admin.token' \
   --exclude='sessions.json' --exclude='deploy/quote-install-*.tar.gz' \
-  server public scripts deploy index.html \
+  server public scripts deploy index.html LICENSE \
   data/users.json data/secret.key data/fx.json data/users \
   使用说明.md 部署说明.md
 ls -la '$RELEASE_DIR/$PKG'
