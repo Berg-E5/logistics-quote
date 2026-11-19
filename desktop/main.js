@@ -424,6 +424,17 @@ function installMenu() {
     {
       label: '文件',
       submenu: [
+        {
+          label: '前台报价',
+          accelerator: 'CmdOrCtrl+1',
+          click: () => { if (mainWindow) mainWindow.loadURL(baseUrl + '/'); },
+        },
+        {
+          label: '后台管理',
+          accelerator: 'CmdOrCtrl+2',
+          click: () => { if (mainWindow) mainWindow.loadURL(baseUrl + '/admin'); },
+        },
+        { type: 'separator' },
         { label: '打开数据目录', click: () => shell.openPath(dataDir()) },
         { label: '打开日志目录', click: () => shell.openPath(logDir()) },
         { type: 'separator' },

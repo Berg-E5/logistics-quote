@@ -44,3 +44,13 @@ test('首次启动要求用户创建管理员账户', () => {
   assert.match(main, /创建管理员账户/);
   assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
 });
+
+test('后台和桌面菜单都提供前台报价入口', () => {
+  assert.match(main, /label: '前台报价'/);
+  const adminCommon = fs.readFileSync(path.join(root, 'public', 'admin-common.js'), 'utf8');
+  assert.match(adminCommon, /href="\/"><span>前台报价/);
+  for (const file of ['admin.html', 'changes.html', 'users.html']) {
+    const html = fs.readFileSync(path.join(root, 'server', file), 'utf8');
+    assert.match(html, /href:'\/', text:'前台报价'/);
+  }
+});
