@@ -80,7 +80,7 @@ function checkDims(dims, L, W, H) {
 
 /** 重量是否在渠道允许范围内 */
 function checkWeight(minKg, maxKg, kg) {
-  if (minKg != null && kg <= minKg) return { ok: false, reason: '低于起收重量 ' + minKg + 'kg' };
+  if (minKg != null && kg < minKg) return { ok: false, reason: '低于起收重量 ' + minKg + 'kg' };
   if (maxKg != null && kg > maxKg) return { ok: false, reason: '超过最大重量 ' + maxKg + 'kg' };
   return { ok: true };
 }
@@ -275,13 +275,17 @@ function feeByBand(bands, kg) {
  * @param {object} rule 可选的定价规则 (来自《物流定价计算器》)
  */
 function quote(q, lib, inp, rule, preferRates) {
-  const kg = Number(inp.kg) || 0;
-  const L = Number(inp.L) || 0, W = Number(inp.W) || 0, H = Number(inp.H) || 0;
+  const kg = Math.max(0, Number(inp.kg) || 0);
+  const L = Math.max(0, Number(inp.L) || 0);
+  const W = Math.max(0, Number(inp.W) || 0);
+  const H = Math.max(0, Number(inp.H) || 0);
   const attr = inp.attr || '普货';
-  const buy = Number(inp.buy) || 0;
-  const recv = Number(inp.recv) || 0;
-  const margin = inp.margin == null ? 0.35 : Number(inp.margin);
-  const extra = Number(inp.extra) || 0.85;   // 平台佣金/成本加成系数
+  const buy = Math.max(0, Number(inp.buy) || 0);
+  const recv = Math.max(0, Number(inp.recv) || 0);
+  const marginRaw = Number(inp.margin);
+  const margin = isFinite(marginRaw) && marginRaw >= 0 && marginRaw < 1 ? marginRaw : 0.35;
+  const extraRaw = Number(inp.extra);
+  const extra = isFinite(extraRaw) && extraRaw > 0 ? extraRaw : 0.85;   // 平台佣金/成本加成系数
 
   const out = {
     freight: 0, fee: 0, total: 0, chargeKg: 0, volKg: 0,

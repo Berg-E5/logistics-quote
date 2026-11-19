@@ -23,10 +23,15 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const USERS_DIR = path.join(DATA_DIR, 'users');
 const TOKEN_FILE = path.join(DATA_DIR, 'admin.token');
 const DEFAULT_SCOPE = 'admin';
+const COUNTRY_CURRENCY = {
+  '美国': 'USD', '加拿大': 'CAD', '墨西哥': 'MXN', '澳大利亚': 'AUD',
+  '英国': 'GBP', '沙特阿拉伯': 'SAR', '阿联酋': 'AED',
+};
 
 function ensureDir(dir) {
   const d = dir || DATA_DIR;
-  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(d, 0o700); } catch (e) { /* Windows 忽略 */ }
 }
 
 /** 用户名 -> 安全的目录名 */
@@ -46,7 +51,8 @@ function divsPath(scope) { return path.join(scopeDir(scope), 'divs.json'); }
 function atomicWrite(file, text) {
   ensureDir(path.dirname(file));
   const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, text, 'utf8');
+  fs.writeFileSync(tmp, text, { encoding: 'utf8', mode: 0o600 });
+  try { fs.chmodSync(tmp, 0o600); } catch (e) { /* Windows 忽略 */ }
   fs.renameSync(tmp, file);
 }
 
@@ -311,6 +317,11 @@ function addRate(scope, spec, by) {
       throw new Error('缺少必填字段: ' + k);
     }
   }
+  const mode = String(spec.mode || 'band');
+  if (!['band', 'firstnext', 'divider'].includes(mode)) {
+    throw new Error('不支持的计费方式: ' + mode);
+  }
+
   const price = Number(spec.price);
   if (!isFinite(price) || price < 0) throw new Error('价格必须是 ≥0 的数字');
   const fee = spec.fee === undefined || spec.fee === null || spec.fee === '' ? 0 : Number(spec.fee);
@@ -320,26 +331,42 @@ function addRate(scope, spec, by) {
   const hi = spec.hi === undefined || spec.hi === null || spec.hi === '' ? 999 : Number(spec.hi);
   if (!isFinite(lo) || !isFinite(hi) || hi < lo) throw new Error('重量段不对');
 
+  let firstKg = null, nextKg = null, nextPrice = null;
+  if (mode === 'firstnext') {
+    firstKg = Number(spec.first_kg);
+    nextKg = Number(spec.next_kg);
+    nextPrice = Number(spec.nextkg);
+    if (!isFinite(firstKg) || firstKg <= 0) throw new Error('首重必须 >0 kg');
+    if (!isFinite(nextKg) || nextKg <= 0) throw new Error('续重单位必须 >0 kg');
+    if (!isFinite(nextPrice) || nextPrice < 0) throw new Error('续重价必须是 ≥0 的数字');
+  }
+
+  const sheet = String(spec.sheet).trim();
+  const country = String(spec.country).trim();
+  if (!sheet || !country) throw new Error('渠道和国家不能为空');
+
   const tier = {
-    sheet: String(spec.sheet).trim(),
-    country: String(spec.country).trim(),
+    sheet,
+    country,
     zone: spec.zone || '-',
     line: spec.line || '-',
     attr: spec.attr || '',
-    mode: spec.mode || 'band',
+    mode,
     lo, hi,
     price: Math.round(price * 100) / 100,
     fee: Math.round(fee * 100) / 100,
-    nextkg: null, first_kg: null, next_kg: null,
+    nextkg: nextPrice == null ? null : Math.round(nextPrice * 100) / 100,
+    first_kg: firstKg,
+    next_kg: nextKg,
   };
 
   const tiers = cur.data.tiers || (cur.data.tiers = []);
-  // 同一渠道/国家/重量段 不允许重复
+  // 同一计费方式下的重量段不允许重叠，否则一个计费重会同时命中多条并重复收费。
   const dup = tiers.find(x => x.sheet === tier.sheet && x.country === tier.country
     && (x.zone || '-') === tier.zone && (x.line || '-') === tier.line
     && (x.attr || '') === tier.attr && x.mode === tier.mode
-    && Number(x.lo) === lo && Number(x.hi) === hi);
-  if (dup) throw new Error('这个渠道/国家/重量段已经存在了, 直接改那一行就行');
+    && Number(x.lo) <= hi + 1e-9 && Number(x.hi) >= lo - 1e-9);
+  if (dup) throw new Error('这个重量段和已有档位重叠了, 直接改已有那一行');
 
   ensureIds(cur.data);
   const usedIds = new Set(tiers.map(x => x.id).filter(Boolean));
@@ -348,11 +375,14 @@ function addRate(scope, spec, by) {
 
   // 渠道组也要建一个, 否则前端取不到这个渠道
   const groups = cur.data.groups || (cur.data.groups = []);
-  const gk = [tier.sheet, tier.country, tier.zone, tier.line, tier.attr].join('|');
-  if (!groups.some(g => [g.sheet, g.country, g.zone || '-', g.line || '-', g.attr || ''].join('|') === gk)) {
+  const gk = [tier.sheet, tier.country, tier.zone, tier.line, tier.attr, tier.mode].join('|');
+  const existingGroup = groups.find(g => [g.sheet, g.country, g.zone || '-', g.line || '-',
+    g.attr || '', g.mode || ''].join('|') === gk);
+  if (!existingGroup) {
+    const currency = COUNTRY_CURRENCY[country] || 'EUR';
     groups.push({
       sheet: tier.sheet, country: tier.country, zone: tier.zone, line: tier.line,
-      attr: tier.attr, mode: tier.mode, div: 6000, cur: 'EUR',
+      attr: tier.attr, mode: tier.mode, div: 6000, cur: currency, currency,
       lead: '', limits: '',
     });
   }
@@ -727,6 +757,17 @@ function countChanges(scope, filter) {
 /** 管理令牌: 首次启动生成, 之后从文件读 */
 function getToken() {
   ensureDir();
+  const envToken = String(process.env.QUOTE_TOKEN || '').trim();
+  if (envToken) {
+    let current = '';
+    try { current = fs.readFileSync(TOKEN_FILE, 'utf8').trim(); }
+    catch (e) { /* 文件不存在 */ }
+    if (current !== envToken) {
+      atomicWrite(TOKEN_FILE, envToken);
+      try { fs.chmodSync(TOKEN_FILE, 0o600); } catch (e) { /* Windows 忽略 */ }
+    }
+    return envToken;
+  }
   if (fs.existsSync(TOKEN_FILE)) {
     return fs.readFileSync(TOKEN_FILE, 'utf8').trim();
   }

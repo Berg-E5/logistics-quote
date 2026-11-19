@@ -2208,7 +2208,7 @@ function limText(lim) {
 
 /** 行的唯一标识 (同一渠道可能有多条产品线/分区) */
 function rowKey(r) {
-  return [r.sheet, r.zone || '-', r.line || '-', r.attr || ''].join('|');
+  return [r.sheet, r.country || '', r.zone || '-', r.line || '-', r.attr || '', r.mode || ''].join('|');
 }
 
 /** 渲染「已选渠道」面板 */
@@ -2344,7 +2344,13 @@ function init() {
   buildRuleMap();
   buildCurMap();
   const sel = $('country');
-  sel.innerHTML = DATA.countries.map(c => `<option value="${c.name}">${c.label}</option>`).join('');
+  sel.replaceChildren();
+  for (const c of DATA.countries) {
+    const option = document.createElement('option');
+    option.value = String(c.name);
+    option.textContent = String(c.label == null ? c.name : c.label);
+    sel.appendChild(option);
+  }
 
   // 支持 URL 参数预填: ?country=德国&kg=8&L=45&W=35&H=25&attr=带电&buy=490&recv=1500
   const qp = new URLSearchParams(location.search);

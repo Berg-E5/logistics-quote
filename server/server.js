@@ -15,13 +15,14 @@
  *   PORT        监听端口 (默认 8080)
  *   HOST        监听地址 (默认 127.0.0.1, 由 nginx 反代)
  *   QUOTE_TOKEN 管理令牌 (不给就用 data/admin.token)
+ *   QUOTE_IMPORT_CONCURRENCY 同时运行的整表导入数 (默认 2)
  */
 const http = require('http');
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const db = require('./db');
 const users = require('./users');
 
@@ -36,6 +37,23 @@ const SCRIPTS = (() => {
   return path.join(__dirname, '..', 'scripts');
 })();
 const UPLOAD_DIR = path.join(os.tmpdir(), 'quote-import');   // 用 os.tmpdir() 而不是硬编码 /tmp (Windows 下 /tmp 不是有效路径)
+const MAX_CONCURRENT_IMPORTS = Math.max(
+  1,
+  Number.parseInt(process.env.QUOTE_IMPORT_CONCURRENCY || '2', 10) || 2
+);
+const MAX_IMPORT_BYTES = Math.max(
+  1,
+  Number.parseInt(process.env.QUOTE_IMPORT_MAX_MB || '40', 10) || 40
+) * 1024 * 1024;
+const IMPORT_TIMEOUT_MS = Math.max(
+  30000,
+  Number.parseInt(process.env.QUOTE_IMPORT_TIMEOUT_MS || '600000', 10) || 600000
+);
+const MAX_IMPORT_TIERS = Math.max(
+  1000,
+  Number.parseInt(process.env.QUOTE_IMPORT_MAX_TIERS || '200000', 10) || 200000
+);
+let activeImportCount = 0;
 // 每个用户一个导入任务, 互不干扰
 const importJobs = new Map();
 function getJob(scope) {
@@ -59,6 +77,7 @@ function findScript(name) {
 const FX_SCRIPT = findScript('fetch_fx.py');
 const FX_INTERVAL_MS = 60 * 1000;            // 每 60 秒抓一次中行牌价 (牌价几分钟就变一次)
 const FX_MIN_AGE_MS = 5 * 60 * 1000;         // 超过 5 分钟就算过期 (启动时立刻刷新)
+let fxRefreshInProgress = false;
 
 function readFx() {
   try {
@@ -76,6 +95,11 @@ function fxAgeMs() {
 
 /** 抓一次汇率 (后台跑, 不阻塞请求) */
 function refreshFx(reason) {
+  if (fxRefreshInProgress) {
+    console.log('[fx] 上一次刷新尚未结束，跳过本次任务');
+    return;
+  }
+  fxRefreshInProgress = true;
   const py = (process.env.QUOTE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'));
   console.log(`[fx] 开始刷新汇率 (${reason})`);
   const child = spawn(py, [FX_SCRIPT], { cwd: path.dirname(FX_SCRIPT) });
@@ -84,8 +108,10 @@ function refreshFx(reason) {
   child.stderr.on('data', d => { out += d; });
   child.on('error', e => {
     console.error('[fx] 刷新失败 (启动进程出错):', e.message);
+    fxRefreshInProgress = false;
   });
   child.on('close', code => {
+    fxRefreshInProgress = false;
     if (code === 0) {
       const j = readFx();
       console.log(`[fx] 汇率已更新: 取数日 ${j && j.date} · ${j && j.source}`
@@ -110,19 +136,87 @@ function startFxWatcher() {
   refreshFx('启动检查');
 }
 
-function startImport(scope, filePath) {
+function cleanupImportWorkspace(workDir) {
+  if (!workDir) return;
+  const rel = path.relative(UPLOAD_DIR, workDir);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return;
+  try { fs.rmSync(workDir, { recursive: true, force: true }); }
+  catch (e) { console.error('[import] 清理临时目录失败:', e.message); }
+}
+
+function syncOfflineSnapshot(scriptsDir) {
+  const snap = path.join(scriptsDir, 'data_v2.js');
+  if (!fs.existsSync(snap)) return false;
+  const buf = fs.readFileSync(snap);
+  for (const dst of [path.join(ROOT, 'data_v2.js'), path.join(PUBLIC, 'data_v2.js')]) {
+    try { fs.writeFileSync(dst, buf); } catch (e) { /* ignore */ }
+  }
+  return true;
+}
+
+function killImportTree(child) {
+  if (!child || !child.pid) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    return;
+  }
+  try { process.kill(-child.pid, 'SIGKILL'); }
+  catch (e) { try { child.kill('SIGKILL'); } catch (e2) { /* already exited */ } }
+}
+
+function startImport(scope, filename, fileBuffer) {
   const importJob = getJob(scope);
   if (importJob.state === 'running') {
     const e = new Error('已经有一个导入任务在跑了, 等它结束');
     e.status = 409;
     throw e;
   }
+  if (activeImportCount >= MAX_CONCURRENT_IMPORTS) {
+    const e = new Error(`当前已有 ${MAX_CONCURRENT_IMPORTS} 个导入任务在跑, 请稍后再试`);
+    e.status = 429;
+    throw e;
+  }
+
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  const workDir = fs.mkdtempSync(path.join(
+    UPLOAD_DIR,
+    `job-${db.sanitizeScope(scope)}-`
+  ));
+  const jobScripts = path.join(workDir, 'scripts');
+  const inputPath = path.join(workDir, filename);
+  let slotHeld = false;
+  let cleaned = false;
+  const releaseSlot = () => {
+    if (!slotHeld) return;
+    slotHeld = false;
+    activeImportCount = Math.max(0, activeImportCount - 1);
+  };
+  const cleanup = () => {
+    releaseSlot();
+    if (cleaned) return;
+    cleaned = true;
+    cleanupImportWorkspace(workDir);
+  };
+
+  try {
+    // 管道里有多个写死的中间文件。每个任务复制一份脚本目录,
+    // 让不同用户同时导入时也不会互相覆盖配置、中间产物或结果。
+    fs.cpSync(SCRIPTS, jobScripts, { recursive: true });
+    fs.writeFileSync(inputPath, fileBuffer);
+  } catch (e) {
+    cleanup();
+    e.status = e.status || 500;
+    throw e;
+  }
+
+  activeImportCount++;
+  slotHeld = true;
   importJob.state = 'running';
   importJob.log = [];
   importJob.result = null;
   importJob.error = null;
   importJob.startedAt = new Date().toISOString();
-  importJob.file = path.basename(filePath);
+  importJob.file = filename;
   // ---- 进度条 ----
   importJob.step = 0;          // 当前第几步 (1 起)
   importJob.stepTotal = 0;     // 总步数, 第一次收到 STEP 标记才知道
@@ -134,11 +228,20 @@ function startImport(scope, filePath) {
   importJob.doneMs = 0;        // 已完成步骤实测耗时之和
   importJob.stepMs = 0;        // 当前步骤已用时
   const py = (process.env.QUOTE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'));
-  const outJson = path.join(UPLOAD_DIR, 'result.json');
-  const child = spawn(py, [path.join(SCRIPTS, 'run_pipeline.py'), filePath, outJson],
-                      { cwd: SCRIPTS, env: Object.assign({}, process.env, {
-                        PYTHONHASHSEED: '0' }) });
+  const outJson = path.join(workDir, 'result.json');
+  const child = spawn(py, [path.join(jobScripts, 'run_pipeline.py'), inputPath, outJson],
+                      { cwd: jobScripts, env: Object.assign({}, process.env, {
+                        PYTHONHASHSEED: '0' }),
+                        detached: process.platform !== 'win32' });
   const t0 = Date.now();
+  let timedOut = false;
+  let spawnFailed = false;
+  const killTimer = setTimeout(() => {
+    timedOut = true;
+    importJob.error = `导入超过 ${Math.round(IMPORT_TIMEOUT_MS / 1000)} 秒，已终止`;
+    importJob.log.push('! ' + importJob.error);
+    killImportTree(child);
+  }, IMPORT_TIMEOUT_MS);
   const timer = setInterval(() => {
     importJob.elapsed = Math.round((Date.now() - t0) / 1000);
     importJob.log.push(`处理中 ${importJob.elapsed} 秒…`);
@@ -167,10 +270,13 @@ function startImport(scope, filePath) {
   // 就能把整站搞挂。必须兜住。
   child.on('error', e => {
     clearInterval(timer);
+    clearTimeout(killTimer);
+    spawnFailed = true;
     importJob.state = 'failed';
     importJob.error = `无法启动抽取进程: ${e.message}`;
     importJob.log.push('! 启动失败: ' + e.message);
     console.error('[import] 启动抽取进程失败:', e.message);
+    cleanup();
   });
   child.stdout.on('data', d => {
     String(d).split('\n').filter(Boolean).forEach(l => {
@@ -216,11 +322,13 @@ function startImport(scope, filePath) {
   });
   child.on('close', code => {
     clearInterval(timer);
-    // 上传的 xlsx 有十几 MB, 用完就删, 不然每次导入都在 /tmp 攒一份
-    try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+    clearTimeout(killTimer);
     if (code !== 0) {
       importJob.state = 'failed';
-      importJob.error = `抽取失败 (退出码 ${code}), 详见日志`;
+      importJob.error = timedOut || spawnFailed
+        ? importJob.error
+        : `抽取失败 (退出码 ${code}), 详见日志`;
+      cleanup();
       return;
     }
     try {
@@ -238,23 +346,20 @@ function startImport(scope, filePath) {
         report,
       };
       importJob.log.push(`完成 · 数据版本 v${r.rev} · 锁定保留 ${r.lockedPreserved || 0} 档`);
-      try { fs.unlinkSync(outJson); } catch (e) { /* ignore */ }
       // ---- 同步离线版数据文件 ----
       // 管道产出的是 脚本/data_v2.js, 但双击 index.html 用的离线快照在站点根目录,
       // 没同步的话离线打开是空壳 (线上没事, 线上走后端 /api/data)。
+      // 离线快照是全站共享的, 只允许站主数据写入; 普通用户的数据不能落到公共文件。
       try {
-        const snap = path.join(SCRIPTS, 'data_v2.js');
-        if (fs.existsSync(snap)) {
-          const buf = fs.readFileSync(snap);
-          for (const dst of [path.join(ROOT, 'data_v2.js'), path.join(PUBLIC, 'data_v2.js')]) {
-            try { fs.writeFileSync(dst, buf); } catch (e) { /* ignore */ }
-          }
+        if (scope === db.DEFAULT_SCOPE && syncOfflineSnapshot(jobScripts)) {
           importJob.log.push('离线快照已同步到站点根目录');
         }
       } catch (e) { /* ignore */ }
     } catch (e) {
       importJob.state = 'failed';
       importJob.error = '应用数据失败: ' + e.message;
+    } finally {
+      cleanup();
     }
   });
 }
@@ -360,10 +465,9 @@ function readBody(req, limit) {
   });
 }
 
-function tokenFrom(req, q) {
+function tokenFrom(req) {
   const h = req.headers['x-admin-token'];
   if (h) return String(h);
-  if (q && q.token) return String(q.token);
   const auth = req.headers.authorization || '';
   if (auth.startsWith('Bearer ')) return auth.slice(7);
   return '';
@@ -392,20 +496,39 @@ function cookies(req) {
   return out;
 }
 
-/** 当前登录用户 (会话 cookie); 令牌也认, 方便脚本调用 */
-function currentUser(req, q) {
+function requestIsHttps(req) {
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return proto ? proto === 'https' : (req.socket.encrypted === true);
+}
+
+function setSessionCookie(req, res, username) {
+  const sess = users.makeSession(username);
+  res.setHeader('Set-Cookie', users.cookieHeader(sess, 12 * 3600, requestIsHttps(req)));
+}
+
+/** 当前身份 (会话 cookie 或管理令牌) */
+function currentIdentity(req) {
   const byCookie = users.readSession(cookies(req).quote_session);
-  if (byCookie && users.findUser(byCookie)) return byCookie;
-  if (db.checkToken(tokenFrom(req, q))) return 'api-token';
+  if (byCookie && users.findUser(byCookie)) {
+    return { user: byCookie, via: 'session' };
+  }
+  if (db.checkToken(tokenFrom(req))) {
+    // 管理令牌代表站主, 不能创建虚构的 api-token 数据目录。
+    return { user: db.DEFAULT_SCOPE, via: 'token' };
+  }
   return null;
+}
+
+/** 当前登录用户 */
+function currentUser(req) {
+  const ident = currentIdentity(req);
+  return ident ? ident.user : null;
 }
 
 /** 是不是管理员 (角色 admin) */
 function isAdmin(req) {
-  const u = currentUser(req, {});
+  const u = currentUser(req);
   if (!u) return false;
-  // 管理令牌 (data/admin.token, 只有 root 能读) 等同管理员
-  if (u === 'api-token') return true;
   const rec = users.findUser(u);
   return !!(rec && rec.role === 'admin');
 }
@@ -444,8 +567,10 @@ const server = http.createServer(async (req, res) => {
   try {
     // ---------- 公开 ----------
     // 已登录 -> 看自己的数据; 未登录 -> 看站主的 (公开页还能用)
-    const viewer = currentUser(req, q);
+    const identity = currentIdentity(req);
+    const viewer = identity ? identity.user : null;
     const scope = viewer || db.DEFAULT_SCOPE;
+    const actor = scope;
 
     if (pathname === '/api/data' && req.method === 'GET') {
       // 未登录不给数据 —— 前台必须登录才能看报价
@@ -483,38 +608,27 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/login' && req.method === 'POST') {
       const ip = clientIp(req);
+      if (!users.checkRate(ip)) {
+        return sendErr(res, 429, '登录失败次数过多, 请 5 分钟后再试, 或联系管理员在后台解封');
+      }
       let body;
       try { body = JSON.parse((await readBody(req, 8192)) || '{}'); }
       catch (e) { return sendErr(res, 400, '请求格式不对'); }
       const u = users.findUser(body.username);
-      const ok = !!u && users.verifyPassword(body.password || '', u);
-
-      if (!users.checkRate(ip)) {
-        // IP 被锁了。只有管理员能用【正确的密码】进来 (顺便解锁这个 IP),
-        // 否则管理员自己被锁在门外就没法给别人解封了。
-        if (ok && u.role === 'admin') {
-          users.clearFail(ip);
-          console.log(`[login] 管理员 ${u.username} 用正确密码解锁了 IP ${ip}`);
-        } else {
-          return sendErr(res, 429, '登录失败次数过多, 请 5 分钟后再试, 或联系管理员在后台解封');
-        }
-      } else if (!ok) {
+      const ok = u ? await users.verifyPasswordAsync(body.password || '', u) : false;
+      if (!ok) {
         users.noteFail(ip);
         return sendErr(res, 401, '用户名或密码不对');
       }
       users.clearFail(ip);
-      const sess = users.makeSession(u.username);
-      // nginx 终止 TLS 时会带 X-Forwarded-Proto: https
-      const proto = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
-      const isHttps = proto ? proto === 'https' : (req.socket.encrypted === true);
-      res.setHeader('Set-Cookie', users.cookieHeader(sess, 12 * 3600, isHttps));
+      setSessionCookie(req, res, u.username);
       return sendJson(res, 200, { ok: true, user: u.username, role: u.role });
     }
 
     if (pathname === '/api/logout' && req.method === 'POST') {
-      const proto0 = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
-      const isHttps0 = proto0 ? proto0 === 'https' : (req.socket.encrypted === true);
-      res.setHeader('Set-Cookie', users.cookieHeader('', 0, isHttps0));
+      // 无状态 Cookie 只能通过版本号撤销；这里采用“退出即注销该账号所有会话”的安全口径。
+      if (identity && identity.via === 'session') users.revokeSessions(identity.user);
+      res.setHeader('Set-Cookie', users.cookieHeader('', 0, requestIsHttps(req)));
       return sendJson(res, 200, { ok: true });
     }
 
@@ -529,24 +643,30 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/password' && req.method === 'POST') {
-      const u = currentUser(req, q);
-      if (!u) return sendErr(res, 401, '请先登录');
-      if (u === 'api-token') return sendErr(res, 400, '令牌不能改密码, 请用用户名登录');
+      const ident = currentIdentity(req);
+      if (!ident) return sendErr(res, 401, '请先登录');
+      if (ident.via === 'token') return sendErr(res, 400, '令牌不能改密码, 请用用户名登录');
+      const u = ident.user;
       let body;
       try { body = JSON.parse((await readBody(req, 8192)) || '{}'); }
       catch (e) { return sendErr(res, 400, '请求格式不对'); }
       const me = users.findUser(u);
-      if (!users.verifyPassword(body.oldPassword || '', me)) {
+      if (!await users.verifyPasswordAsync(body.oldPassword || '', me)) {
         return sendErr(res, 401, '原密码不对');
       }
       try {
         users.setPassword(u, body.newPassword || '');
       } catch (e) { return sendErr(res, 400, e.message); }
+      // 其他设备上的旧会话已因 sessionVersion 变化失效；当前设备换发新会话。
+      setSessionCookie(req, res, u);
       return sendJson(res, 200, { ok: true });
     }
 
     // ---------- 注册 (公开) ----------
     if (pathname === '/api/register' && req.method === 'POST') {
+      if (process.env.QUOTE_REGISTRATION_OPEN === '0') {
+        return sendErr(res, 403, '公开注册已关闭，请联系管理员创建账号');
+      }
       const ip = clientIp(req);
       if (!users.checkRegRate(ip)) {
         return sendErr(res, 429, '这个 IP 注册太频繁了, 一小时后再试');
@@ -559,11 +679,7 @@ const server = http.createServer(async (req, res) => {
         users.noteRegistration(ip);
         console.log(`[register] 新用户 ${u.username} (${clientIp(req)})`);
         // 注册完直接给会话, 免得再输一次
-        const sess = users.makeSession(u.username);
-        const proto = req.headers['x-forwarded-proto'];
-        const isHttps = proto ? proto.split(',')[0].trim() === 'https'
-          : (req.socket.encrypted === true);
-        res.setHeader('Set-Cookie', users.cookieHeader(sess, 12 * 3600, isHttps));
+        setSessionCookie(req, res, u.username);
         return sendJson(res, 200, { ok: true, user: u.username });
       } catch (e) {
         return sendErr(res, 400, e.message);
@@ -714,7 +830,7 @@ const server = http.createServer(async (req, res) => {
       catch (e) { return sendErr(res, 400, '请求格式不对'); }
       try {
         // div=null / '' 表示恢复自动取值
-        const r = db.setDiv(scope, body.key, body.div, body.by || scope);
+        const r = db.setDiv(scope, body.key, body.div, actor);
         return sendJson(res, 200, { ok: true, ...r });
       } catch (e) {
         return sendErr(res, 400, e.message);
@@ -726,7 +842,7 @@ const server = http.createServer(async (req, res) => {
       const id = pathname.slice('/api/rates/'.length);
       const body = JSON.parse((await readBody(req)) || '{}');
       try {
-        const r = db.updateRate(scope, id, body, q.by || scope);
+        const r = db.updateRate(scope, id, body, actor);
         return sendJson(res, 200, { ok: true, ...r });
       } catch (e) {
         return sendErr(res, 400, e.message);
@@ -739,8 +855,11 @@ const server = http.createServer(async (req, res) => {
       try { payload = JSON.parse(raw); } catch (e) { return sendErr(res, 400, 'JSON 解析失败: ' + e.message); }
       const data = payload.data || payload;
       if (!data || !Array.isArray(data.tiers)) return sendErr(res, 400, '缺少 tiers');
+      if (data.tiers.length > MAX_IMPORT_TIERS) {
+        return sendErr(res, 413, `费率档过多，最多 ${MAX_IMPORT_TIERS} 条`);
+      }
       db.ensureIds(data);
-      const r = db.saveAll(scope, data, payload.note || '整表导入', q.by || scope);
+      const r = db.saveAll(scope, data, payload.note || '整表导入', actor);
       console.log(`[import] rev=${r.rev} tiers=${data.tiers.length}` +
                   ` lockedPreserved=${r.lockedPreserved || 0}` +
                   ` locksMissing=${r.locksMissing || 0}`);
@@ -754,10 +873,15 @@ const server = http.createServer(async (req, res) => {
       const name = String(body.filename || 'quote.xlsx').replace(/[^\w.\-一-龥]/g, '_');
       if (!/\.xlsx$/i.test(name)) return sendErr(res, 400, '只支持 .xlsx 文件');
       try {
-        if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-        const file = path.join(UPLOAD_DIR, 'upload-' + Date.now() + '-' + name);
-        fs.writeFileSync(file, Buffer.from(body.data, 'base64'));
-        startImport(scope, file);
+        const fileBuffer = Buffer.from(body.data, 'base64');
+        // xlsx 本质是 zip, 先检查魔数, 避免任意二进制进入解析管道。
+        if (fileBuffer.length < 4 || fileBuffer[0] !== 0x50 || fileBuffer[1] !== 0x4b) {
+          return sendErr(res, 400, '文件不是有效的 .xlsx');
+        }
+        if (fileBuffer.length > MAX_IMPORT_BYTES) {
+          return sendErr(res, 413, `文件太大，最大 ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)} MB`);
+        }
+        startImport(scope, name, fileBuffer);
         return sendJson(res, 200, { ok: true, started: true });
       } catch (e) {
         return sendErr(res, e.status || 500, e.message);
@@ -789,7 +913,7 @@ const server = http.createServer(async (req, res) => {
       const id = pathname.slice('/api/rates/'.length, -'/lock'.length);
       const body = JSON.parse((await readBody(req)) || '{}');
       try {
-        const r = db.setLock(scope, id, body.locked !== false, q.by || scope);
+        const r = db.setLock(scope, id, body.locked !== false, actor);
         return sendJson(res, 200, { ok: true, ...r });
       } catch (e) {
         return sendErr(res, 400, e.message);
@@ -805,7 +929,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/rates' && req.method === 'POST') {
       const body = JSON.parse((await readBody(req)) || '{}');
       try {
-        const r = db.addRate(scope, body, q.by || scope);
+        const r = db.addRate(scope, body, actor);
         return sendJson(res, 200, { ok: true, ...r });
       } catch (e) {
         return sendErr(res, 400, e.message);
@@ -900,7 +1024,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/token-check' && req.method === 'GET') {
-      return sendJson(res, 200, { ok: db.checkToken(tokenFrom(req, q)) });
+      return sendJson(res, 200, { ok: db.checkToken(tokenFrom(req)) });
     }
 
     // ---------- 静态 ----------
@@ -941,8 +1065,15 @@ const server = http.createServer(async (req, res) => {
     }
     let p = pathname === '/' ? '/index.html' : pathname;
     const filePath = path.join(PUBLIC, path.normalize(p).replace(/^([/\\])+/, ''));
-    if (!filePath.startsWith(PUBLIC)) {
+    const relativeFile = path.relative(PUBLIC, filePath);
+    if (relativeFile.startsWith('..') || path.isAbsolute(relativeFile)) {
       res.writeHead(403); res.end('403'); return;
+    }
+    // 调试页、隐藏文件不允许通过公开静态路由访问。
+    if (relativeFile.split(path.sep).some(part => part.startsWith('.') || part.startsWith('_'))) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found');
+      return;
     }
     return serveStatic(res, filePath);
   } catch (e) {
@@ -952,6 +1083,13 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  // 管理令牌必须在启动时可用, 否则新装站点的 CLI / 自动化第一次调用会找不到文件。
+  try {
+    db.getToken();
+  } catch (e) {
+    console.error('[startup] 初始化管理令牌失败:', e.message);
+  }
+
   // 旧版是全局一份数据, 现在按用户分开 —— 把旧的挪到 admin 名下
   try { db.migrateLegacy(); }
   catch (e) { console.error('[startup] 迁移旧数据失败:', e.message); }

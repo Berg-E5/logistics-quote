@@ -25,7 +25,7 @@ services:
       PORT: "8792"
       HOST: "0.0.0.0"
       NODE_ENV: "production"
-      # ADMIN_PASSWORD: "改成你的密码"   # 不给就随机生成, 看日志
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8792/api/version',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s

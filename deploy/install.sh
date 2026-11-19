@@ -29,6 +29,7 @@ DIR="${2:-/var/www/quote.byberg.store}"
 SKIP_SSL="${3:-}"
 PORT=8792
 SVC=quote-server
+SVC_USER=quote
 
 if [ -z "$DOMAIN" ]; then
   echo "用法: sudo bash install.sh <域名> [安装目录] [skip-ssl]"
@@ -154,7 +155,7 @@ for d in server public scripts deploy 脚本; do
     echo "    $d/  已复制"
   fi
 done
-for f in index.html engine.js data_v2.js; do
+for f in index.html engine.js data_v2.js LICENSE; do
   [ -f "$SRC/$f" ] || continue
   # 安装目录 == 解包目录时会撞上 "are the same file" 并让 set -e 掐断整个脚本
   if [ -e "$DIR/$f" ] && [ "$SRC/$f" -ef "$DIR/$f" ]; then
@@ -191,6 +192,21 @@ if [ ! -f "$DIR/data/users.json" ]; then
 fi
 chmod 700 "$DIR/data" 2>/dev/null || true
 
+if ! id -u "$SVC_USER" >/dev/null 2>&1; then
+  useradd --system --home-dir "$DIR" --shell /usr/sbin/nologin "$SVC_USER"
+fi
+chown -R "$SVC_USER:$SVC_USER" "$DIR/data"
+touch "$DIR/data_v2.js" "$DIR/public/data_v2.js"
+chown "$SVC_USER:$SVC_USER" "$DIR/data_v2.js" "$DIR/public/data_v2.js"
+
+# 先在服务启动前建账号，随机密码会直接打印在安装输出里，而不是只进 journal。
+cd "$DIR"
+if ! runuser -u "$SVC_USER" -- node server/user.js list 2>/dev/null | grep -q 'admin'; then
+  echo
+  echo "==> 建 admin 账号"
+  runuser -u "$SVC_USER" -- node server/user.js add admin
+fi
+
 # ---------------------------------------------------------------- 3. systemd
 echo
 echo "==> [3/7] 装 systemd 单元"
@@ -202,7 +218,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=$SVC_USER
+Group=$SVC_USER
 WorkingDirectory=$DIR
 ExecStart=$NODE_BIN server/server.js
 Restart=always
@@ -210,8 +227,12 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=$PORT
 Environment=HOST=127.0.0.1
-StandardOutput=append:/var/log/${SVC}.log
-StandardError=append:/var/log/${SVC}.err.log
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=$DIR/data $DIR/data_v2.js $DIR/public/data_v2.js
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -224,8 +245,7 @@ if systemctl is-active --quiet ${SVC}; then
   echo "    ${SVC} 已启动"
 else
   echo "!! ${SVC} 没起来, 看日志:"
-  tail -20 /var/log/${SVC}.err.log 2>/dev/null || true
-  tail -20 /var/log/${SVC}.log 2>/dev/null || true
+  journalctl -u "$SVC" -n 30 --no-pager 2>/dev/null || true
   exit 1
 fi
 
@@ -253,6 +273,11 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 120s;
+        client_max_body_size 64m;
+
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
     }
 }
 EOF
@@ -280,9 +305,9 @@ echo
 echo "==> [5/7] 建 admin 账号"
 cd "$DIR"
 if node server/user.js list 2>/dev/null | grep -q 'admin'; then
-  echo "    admin 已存在, 跳过 (要改密码: node server/user.js passwd admin)"
+  echo "    admin 已存在, 跳过 (要改密码: runuser -u $SVC_USER -- node server/user.js passwd admin)"
 else
-  node server/user.js add admin || true
+  runuser -u "$SVC_USER" -- node server/user.js add admin || true
 fi
 
 # ---------------------------------------------------------------- 6. SSL
@@ -317,8 +342,7 @@ echo "    /api/data        $code  (401 = 登录墙正常)"
 if [ "$FAIL" = "1" ]; then
   echo
   echo "!! 有页面没起来, 查日志:"
-  tail -20 "/var/log/${SVC}.err.log" 2>/dev/null || true
-  tail -20 "/var/log/${SVC}.log" 2>/dev/null || true
+    journalctl -u "$SVC" -n 30 --no-pager 2>/dev/null || true
   exit 1
 fi
 echo
@@ -339,7 +363,7 @@ echo
 echo "   后台地址: http://$DOMAIN/admin  (配了 SSL 就是 https://$DOMAIN/admin)"
 echo "   账号:     admin"
 echo "   密码:     见上面 'node server/user.js add admin' 打印的那一行"
-echo "            (忘了就: cd $DIR && node server/user.js passwd admin)"
+    echo "            (忘了就: cd $DIR && runuser -u $SVC_USER -- node server/user.js passwd admin)"
 echo
 echo "   改价记录:  http://$DOMAIN/admin/changes"
 echo "   用户管理:  http://$DOMAIN/admin/users"

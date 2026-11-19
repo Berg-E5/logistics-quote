@@ -21,16 +21,21 @@ FROM node:22-bookworm-slim
 # python3 + openpyxl 只有「整表导入」需要 (读报价表 xlsx),
 # 但一起装进镜像, 目标服务器就不用另外配环境了。
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-pip tini \
+ && apt-get install -y --no-install-recommends python3 python3-pip tini gosu \
  && pip3 install --no-cache-dir --break-system-packages openpyxl \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# 应用会解析上传的 XLSX，不用 root 运行。
+RUN groupadd --system --gid 10001 quote \
+ && useradd --system --uid 10001 --gid quote --home-dir /app --shell /usr/sbin/nologin quote
+
 # 只拷程序 —— 报价表原件、账号、价格数据一律不进镜像
 COPY server/ ./server/
 COPY public/ ./public/
-COPY scripts/ ./scripts/
+COPY 脚本/ ./scripts/
+COPY LICENSE ./
 # 站点根目录没有 engine.js / data_v2.js, 从 public/ 取 (离线双击 index.html 用)
 COPY index.html ./
 COPY public/engine.js ./engine.js
@@ -38,7 +43,9 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # 数据目录 (运行时由 volume 覆盖, 这里只是给个默认位置)
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data \
+ && touch /app/data_v2.js /app/public/data_v2.js \
+ && chown -R quote:quote /app/data /app/data_v2.js /app/public/data_v2.js
 
 # 容器里必须监听 0.0.0.0, 127.0.0.1 的话端口映射出去连不上
 ENV NODE_ENV=production \

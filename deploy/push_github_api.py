@@ -94,6 +94,9 @@ def sh(*args, binary=False, env=None):
 
 
 def get_token():
+    env_token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if env_token:
+        return env_token
     global GH
     GH = GH or find_gh()
     try:
@@ -215,7 +218,7 @@ def main():
     if a.dry_run:
         print("\n(--dry-run, 没有更新分支)")
         return
-    g.call("PATCH", "/git/refs/heads/" + a.branch, {"sha": c["sha"], "force": True})
+    g.call("PATCH", "/git/refs/heads/" + a.branch, {"sha": c["sha"], "force": False})
     print("\n完成: https://github.com/%s/tree/%s" % (a.repo, a.branch))
     print("  commit:", c["sha"])
     print("  文件数:", len(items))

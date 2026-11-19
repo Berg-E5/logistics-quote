@@ -422,7 +422,8 @@ createApp({
 
     // 新增费率档
     const n = reactive({ sheet:'', country:'', zone:'', line:'', attr:'', mode:'band',
-                        lo:0, hi:999, price:'', fee:0 });
+                        lo:0, hi:999, price:'', fee:0,
+                        first_kg:0.5, next_kg:0.5, nextkg:'' });
     const addMsg = ref(''), addErr = ref('');
 
     /** 当前页有几个渠道是展开的 */
@@ -925,12 +926,15 @@ createApp({
         attr: n.attr, mode: n.mode,
         lo: Number(n.lo || 0), hi: Number(n.hi || 999),
         price: n.price, fee: n.fee || 0,
+        first_kg: n.mode === 'firstnext' ? Number(n.first_kg) : null,
+        next_kg: n.mode === 'firstnext' ? Number(n.next_kg) : null,
+        nextkg: n.mode === 'firstnext' ? Number(n.nextkg) : null,
       };
       if (!body.sheet || !body.country) { addErr.value = '渠道和国家都要填'; return; }
       try {
         const r = await A.api('/api/rates', { method: 'POST', body });
         addMsg.value = `已新增 · 数据版本 v${r.rev}`;
-        n.sheet = ''; n.country = ''; n.price = '';
+        n.sheet = ''; n.country = ''; n.price = ''; n.nextkg = '';
         await loadAll();
         await fillFilters();
       } catch (e) { addErr.value = e.message; }
@@ -1209,7 +1213,12 @@ createApp({
               </select></label>
               <label>重量下限 kg<input v-model.number="n.lo" type="number" step="0.001"></label>
               <label>重量上限 kg<input v-model.number="n.hi" type="number" step="0.001"></label>
-              <label>运费 ¥/kg<input v-model="n.price" type="number" step="0.01" min="0"></label>
+              <template v-if="n.mode === 'firstnext'">
+                <label>首重 kg<input v-model.number="n.first_kg" type="number" step="0.1" min="0.1"></label>
+                <label>续重单位 kg<input v-model.number="n.next_kg" type="number" step="0.1" min="0.1"></label>
+              </template>
+              <label>{{ n.mode === 'firstnext' ? '首重价 ¥' : '运费 ¥/kg' }}<input v-model="n.price" type="number" step="0.01" min="0"></label>
+              <label v-if="n.mode === 'firstnext'">续重价 ¥<input v-model="n.nextkg" type="number" step="0.01" min="0"></label>
               <label>挂号费<input v-model.number="n.fee" type="number" step="0.01" min="0"></label>
             </div>
             <div class="row" style="margin-top:10px">

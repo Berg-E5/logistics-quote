@@ -5,7 +5,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=quote
+Group=quote
 WorkingDirectory=/var/www/quote.byberg.store
 ExecStart=/usr/bin/node server/server.js
 Restart=always
@@ -13,8 +14,12 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=8792
 Environment=HOST=127.0.0.1
-StandardOutput=append:/var/log/quote-server.log
-StandardError=append:/var/log/quote-server.err.log
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/www/quote.byberg.store/data /var/www/quote.byberg.store/data_v2.js /var/www/quote.byberg.store/public/data_v2.js
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

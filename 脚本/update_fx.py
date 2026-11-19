@@ -9,7 +9,7 @@
 失败退回 open.er-api.com / frankfurter.app 补缺)
 换算:   1 外币 = ? 人民币  ->  fx = 1 / (1 CNY = ? 外币)
 
-注: 线上网站的汇率由服务器自动刷新 (每 3 小时), 不需要跑这个脚本。
+注: 线上网站的汇率由服务器自动刷新 (每 60 秒), 不需要跑这个脚本。
 """
 import datetime
 import json
@@ -19,7 +19,8 @@ import subprocess
 import sys
 import urllib.request
 
-SITE = r"D:\Desktop\物流报价查询网站"
+HERE = os.path.dirname(os.path.abspath(__file__))
+SITE = os.path.dirname(HERE)
 TARGETS = [os.path.join(SITE, "index.html"),
            os.path.join(SITE, "public", "index.html")]
 FX_JSON = os.path.join(SITE, "data", "fx.json")
@@ -52,13 +53,13 @@ def fetch():
 
 def main():
     if "--show" in sys.argv:
-        r = subprocess.run([sys.executable, os.path.join(SITE, "脚本", "fetch_fx.py"), "--stdout"],
+        r = subprocess.run([sys.executable, os.path.join(HERE, "fetch_fx.py"), "--stdout"],
                            capture_output=True, text=True)
         print(r.stdout or r.stderr)
         return r.returncode
 
     # 抓汇率 (fetch_fx.py 会写 data/fx.json)
-    r = subprocess.run([sys.executable, os.path.join(SITE, "脚本", "fetch_fx.py")],
+    r = subprocess.run([sys.executable, os.path.join(HERE, "fetch_fx.py")],
                        capture_output=True, text=True)
     print(r.stdout or "", end="")
     if r.returncode != 0:
