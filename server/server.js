@@ -69,7 +69,7 @@ function getJob(scope) {
 }
 
 // ---- 汇率: 服务端自动抓取 ----
-const FX_FILE = path.join(__dirname, '..', 'data', 'fx.json');
+const FX_FILE = path.join(db.DATA_DIR, 'fx.json');
 // 脚本目录: 服务器上叫 scripts, 本地项目里叫 脚本 —— 两个都认
 function findScript(name) {
   const cands = [
@@ -107,7 +107,7 @@ function refreshFx(reason) {
   fxRefreshInProgress = true;
   const py = (process.env.QUOTE_PYTHON || (process.platform === 'win32' ? 'python' : 'python3'));
   console.log(`[fx] 开始刷新汇率 (${reason})`);
-  const child = spawn(py, [FX_SCRIPT], { cwd: path.dirname(FX_SCRIPT) });
+  const child = spawn(py, [FX_SCRIPT], { cwd: path.dirname(FX_SCRIPT), windowsHide: true });
   let out = '';
   child.stdout.on('data', d => { out += d; });
   child.stderr.on('data', d => { out += d; });
@@ -168,6 +168,7 @@ function cleanupStaleImportWorkspaces() {
 }
 
 function syncOfflineSnapshot(scriptsDir) {
+  if (process.env.QUOTE_DESKTOP === '1') return false;
   const snap = path.join(scriptsDir, 'data_v2.js');
   if (!fs.existsSync(snap)) return false;
   const buf = fs.readFileSync(snap);
@@ -255,7 +256,8 @@ function startImport(scope, filename, fileBuffer) {
   const child = spawn(py, [path.join(jobScripts, 'run_pipeline.py'), inputPath, outJson],
                       { cwd: jobScripts, env: Object.assign({}, process.env, {
                         PYTHONHASHSEED: '0' }),
-                        detached: process.platform !== 'win32' });
+                        detached: process.platform !== 'win32',
+                        windowsHide: true });
   const t0 = Date.now();
   let timedOut = false;
   let spawnFailed = false;
@@ -1149,7 +1151,9 @@ server.listen(PORT, HOST, () => {
       console.log('=============================================');
       console.log(' 已创建管理员账号:');
       console.log('   用户名: admin');
-      console.log('   密码  : ' + pw);
+      console.log('   密码  : ' + (process.env.QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG === '1'
+        ? '(由桌面客户端安全保存)'
+        : pw));
       console.log('   (改密码: node server/user.js passwd admin)');
       console.log('=============================================');
     }
@@ -1180,6 +1184,8 @@ server.listen(PORT, HOST, () => {
               `  rev=${cur.rev}`);
   const ul = users.listUsers();
   console.log(`  用户数: ${ul.length}  (管理: node server/user.js list)`);
-  console.log(`  公开注册: 开启 (新用户数据为空, 需自己上传价格表)`);
+  console.log(`  公开注册: ${process.env.QUOTE_REGISTRATION_OPEN === '0'
+    ? '关闭'
+    : '开启 (新用户数据为空, 需自己上传价格表)'}`);
   console.log(`  后台: http://${HOST}:${PORT}/admin`);
 });

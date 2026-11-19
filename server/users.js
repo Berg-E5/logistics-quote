@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = path.resolve(process.env.QUOTE_DATA_DIR || path.join(__dirname, '..', 'data'));
 const USERS = path.join(DATA_DIR, 'users.json');
 const SECRET = path.join(DATA_DIR, 'secret.key');
 const SESSION_HOURS = 12;

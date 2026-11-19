@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = path.resolve(process.env.QUOTE_DATA_DIR || path.join(__dirname, '..', 'data'));
 const USERS_DIR = path.join(DATA_DIR, 'users');
 const TOKEN_FILE = path.join(DATA_DIR, 'admin.token');
 const DEFAULT_SCOPE = 'admin';

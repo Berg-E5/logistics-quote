@@ -1,0 +1,82 @@
+{
+  "name": "logistics-quote-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "物流报价 Windows 桌面客户端",
+  "main": "main.js",
+  "author": "Berg-E5",
+  "license": "MIT",
+  "scripts": {
+    "prepare:python": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-python.ps1",
+    "start": "npm run prepare:python && electron .",
+    "dist": "npm run prepare:python && electron-builder --win nsis",
+    "dist:dir": "npm run prepare:python && electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.berg.logisticsquote",
+    "productName": "物流报价",
+    "executableName": "LogisticsQuote",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../server",
+        "to": "app/server"
+      },
+      {
+        "from": "../public",
+        "to": "app/public"
+      },
+      {
+        "from": "../脚本",
+        "to": "app/scripts"
+      },
+      {
+        "from": "../engine.js",
+        "to": "app/engine.js"
+      },
+      {
+        "from": "../index.html",
+        "to": "app/index.html"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "app/LICENSE"
+      },
+      {
+        "from": "resources/python",
+        "to": "python"
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "LogisticsQuote-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    }
+  }
+}
