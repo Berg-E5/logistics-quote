@@ -93,6 +93,8 @@ function saveAdminPassword(password) {
   }
   settings.password = password;
   settings.saved.encryptedPassword = safeStorage.encryptString(password).toString('base64');
+  settings.saved.adminSetupVersion = 1;
+  settings.saved.adminSetupAt = new Date().toISOString();
   persistSettings(settings.saved);
 }
 
@@ -319,9 +321,10 @@ ipcMain.on('admin-setup:cancel', event => {
 
 async function ensureAdminAccount() {
   const hasAdmin = adminUserExists();
-  if (hasAdmin && settings.password) return;
+  const setupComplete = Number(settings.saved.adminSetupVersion || 0) >= 1;
+  if (hasAdmin && settings.password && setupComplete) return;
 
-  if (hasAdmin && !settings.password) {
+  if (hasAdmin && (!settings.password || !setupComplete)) {
     while (true) {
       const value = await showAdminSetup(true);
       try {
@@ -334,7 +337,7 @@ async function ensureAdminAccount() {
     }
   }
 
-  if (!hasAdmin && settings.password) {
+  if (!hasAdmin && settings.password && setupComplete) {
     await runAdminCli(['add', 'admin', settings.password], 'LogisticsQuote Admin Creation');
     return;
   }
