@@ -8,11 +8,11 @@
 #       sudo bash install.sh quote.example.com /var/www/quote.example.com skip-ssl
 #
 # 做的事:
-#   1. 检查 node / python3 / nginx
-#   2. 装 python 依赖 (openpyxl, 整表导入用)
-#   3. 把程序文件复制到安装目录
-#   4. 装 systemd 单元并启动
-#   5. 装 nginx 反代 (80 端口, HTTPS 可选)
+#   1. 自动安装 Node 18+ / nginx / python3 / openpyxl / certbot
+#   2. 把程序文件复制到安装目录
+#   3. 装 systemd 单元并启动
+#   4. 装 nginx 反代并申请 HTTPS 证书
+#   5. 启用证书自动续签
 #   6. 建 admin 账号 (密码随机, 打印在最后)
 #   7. 自检
 #
@@ -24,12 +24,19 @@
 #
 set -euo pipefail
 
+if [ "$(id -u)" != "0" ]; then
+  echo "!! 请用 root 运行，例如: sudo bash deploy/install.sh <域名>" >&2
+  exit 1
+fi
+
 DOMAIN="${1:-}"
-DIR="${2:-/var/www/quote.byberg.store}"
+DIR="${2:-}"
 SKIP_SSL="${3:-}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 PORT=8792
 SVC=quote-server
 SVC_USER=quote
+SSL_OK=0
 
 if [ -z "$DOMAIN" ]; then
   echo "用法: sudo bash install.sh <域名> [安装目录] [skip-ssl]"
@@ -39,6 +46,9 @@ fi
 if ! echo "$DOMAIN" | grep -Eq '^[A-Za-z0-9.-]+$'; then
   echo "域名不合法: $DOMAIN"
   exit 1
+fi
+if [ -z "$DIR" ]; then
+  DIR="/var/www/$DOMAIN"
 fi
 
 # 部署包的根目录 (install.sh 在 deploy/ 下, 上一级就是根)
@@ -60,45 +70,87 @@ echo "==> 安装目录: $DIR"
 echo
 
 # ---------------------------------------------------------------- 1. 依赖
-echo "==> [1/7] 检查依赖"
-need_node=0
-if command -v node >/dev/null 2>&1; then
-  NV=$(node -v | sed 's/v//' | cut -d. -f1)
-  if [ "$NV" -ge 18 ]; then
-    echo "    node $(node -v)  OK"
-  else
-    echo "    node $(node -v) 版本太低, 需要 18+"
-    need_node=1
+echo "==> [1/7] 检测并安装系统依赖"
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  local major
+  major="$(node -v | sed 's/^v//' | cut -d. -f1)"
+  [ "${major:-0}" -ge 18 ]
+}
+
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  export NEEDRESTART_MODE=a
+  echo "    包管理器: apt"
+  apt-get update
+  apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg tar nginx python3 python3-pip
+  apt-get install -y --no-install-recommends certbot python3-certbot-nginx
+  if ! python3 -c "import openpyxl" 2>/dev/null; then
+    apt-get install -y --no-install-recommends python3-openpyxl \
+      || python3 -m pip install --quiet --break-system-packages openpyxl \
+      || python3 -m pip install --quiet openpyxl
+  fi
+  if ! node_ok; then
+    echo "    安装 Node.js 22 LTS (NodeSource)"
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    apt-get install -y nodejs
+  fi
+elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
+  if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
+  echo "    包管理器: $PKG"
+  $PKG install -y ca-certificates curl tar nginx python3 python3-pip
+  if ! $PKG install -y certbot python3-certbot-nginx; then
+    echo "    补充 EPEL 源后重试 certbot"
+    $PKG install -y epel-release || true
+    $PKG install -y certbot python3-certbot-nginx
+  fi
+  if ! python3 -c "import openpyxl" 2>/dev/null; then
+    $PKG install -y python3-openpyxl \
+      || python3 -m pip install --quiet --break-system-packages openpyxl \
+      || python3 -m pip install --quiet openpyxl
+  fi
+  if ! node_ok; then
+    echo "    安装 Node.js 22 LTS (NodeSource)"
+    curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+    $PKG install -y nodejs
+  fi
+  if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce)" = "Enforcing" ]; then
+    $PKG install -y policycoreutils-python-utils || true
+    setsebool -P httpd_can_network_connect 1 2>/dev/null || true
   fi
 else
-  echo "    没装 node"
-  need_node=1
-fi
-if [ "$need_node" = "1" ]; then
-  echo
-  echo "!! 请先装 Node.js 18+:"
-  echo "     Debian/Ubuntu: curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs"
-  echo "     RHEL/CentOS:   dnf install -y nodejs"
+  echo "!! 暂不支持当前系统：找不到 apt-get、dnf 或 yum" >&2
   exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "!! 没装 python3, 整表导入会不可用 (其它功能正常)"
-  echo "     apt-get install -y python3 python3-pip"
-else
-  echo "    python3 $(python3 -V 2>&1 | cut -d' ' -f2)  OK"
-  if ! python3 -c "import openpyxl" 2>/dev/null; then
-    echo "    装 openpyxl (整表导入要读报价表 xlsx)"
-    python3 -m pip install --quiet openpyxl 2>/dev/null \
-      || pip3 install --quiet openpyxl 2>/dev/null \
-      || apt-get install -y python3-openpyxl 2>/dev/null \
-      || echo "    !! openpyxl 装不上, 整表导入不可用 (其它功能正常)"
-  fi
-  python3 -c "import openpyxl" 2>/dev/null && echo "    openpyxl OK" || true
+hash -r
+node_ok || { echo "!! Node.js 安装后仍不是 18+" >&2; exit 1; }
+command -v nginx >/dev/null 2>&1 || { echo "!! nginx 安装失败" >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "!! python3 安装失败" >&2; exit 1; }
+python3 -c "import openpyxl" 2>/dev/null || {
+  echo "!! openpyxl 安装失败，整表导入无法工作" >&2
+  exit 1
+}
+if [ "$SKIP_SSL" != "skip-ssl" ]; then
+  command -v certbot >/dev/null 2>&1 || { echo "!! certbot 安装失败" >&2; exit 1; }
 fi
+echo "    node    $(node -v)"
+echo "    python3 $(python3 -V 2>&1 | awk '{print $2}')"
+echo "    nginx   $(nginx -v 2>&1 | sed 's#nginx version: ##')"
+[ "$SKIP_SSL" = "skip-ssl" ] || echo "    certbot $(certbot --version 2>&1 | awk '{print $2}')"
+HAVE_NGINX=1
 
-HAVE_NGINX=0
-command -v nginx >/dev/null 2>&1 && { HAVE_NGINX=1; echo "    nginx OK"; } || echo "    没装 nginx (装不了就只能用 IP+端口直连)"
+# 证书申请需要 80/443 可达；只放行 Web 端口，不碰 SSH。
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  ufw allow 'Nginx Full' >/dev/null 2>&1 || true
+  echo "    ufw 已放行 HTTP/HTTPS"
+elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+  firewall-cmd --permanent --add-service=http >/dev/null
+  firewall-cmd --permanent --add-service=https >/dev/null
+  firewall-cmd --reload >/dev/null
+  echo "    firewalld 已放行 HTTP/HTTPS"
+fi
 
 # ---------------------------------------------------------------- 2. 目录
 echo
@@ -253,7 +305,20 @@ fi
 if [ "$HAVE_NGINX" = "1" ]; then
   echo
   echo "==> [4/7] 配 nginx"
-  cat > /etc/nginx/sites-available/quote.byberg.store <<EOF
+  if [ -d /etc/nginx/sites-available ]; then
+    if [ -f "/etc/nginx/sites-available/${DOMAIN}" ]; then
+      NGINX_SITE="/etc/nginx/sites-available/${DOMAIN}"
+      NGINX_ENABLED="/etc/nginx/sites-enabled/${DOMAIN}"
+    else
+      NGINX_SITE="/etc/nginx/sites-available/${DOMAIN}.conf"
+      NGINX_ENABLED="/etc/nginx/sites-enabled/${DOMAIN}.conf"
+    fi
+  else
+    mkdir -p /etc/nginx/conf.d
+    NGINX_SITE="/etc/nginx/conf.d/quote-${DOMAIN}.conf"
+    NGINX_ENABLED=""
+  fi
+  cat > "$NGINX_SITE" <<EOF
 # 物流报价网站 —— $DOMAIN
 server {
     listen 80;
@@ -281,8 +346,10 @@ server {
     }
 }
 EOF
-  mkdir -p /etc/nginx/sites-enabled
-  ln -sf /etc/nginx/sites-available/quote.byberg.store /etc/nginx/sites-enabled/quote.byberg.store
+  if [ -n "$NGINX_ENABLED" ]; then
+    mkdir -p /etc/nginx/sites-enabled
+    ln -sf "$NGINX_SITE" "$NGINX_ENABLED"
+  fi
   nginx -t
   # nginx 可能是"装了但没启动"(云镜像 / 容器里很常见), 而 reload 对一个
   # 停止的服务是无效的 —— 结果配置写好了, 站点却打不开。
@@ -315,13 +382,33 @@ if [ "$HAVE_NGINX" = "1" ] && [ "$SKIP_SSL" != "skip-ssl" ]; then
   echo
   echo "==> [6/7] 申请 HTTPS 证书"
   echo "    需要: 域名已解析到这台机器, 防火墙/安全组已放行 80 和 443"
-  if command -v certbot >/dev/null 2>&1; then
-    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email \
-      --redirect || echo "!! certbot 失败, 可以之后手动跑: certbot --nginx -d $DOMAIN"
+  CERTBOT_ARGS=(--nginx -d "$DOMAIN" --non-interactive --agree-tos --redirect)
+  if [ -n "$CERTBOT_EMAIL" ]; then
+    CERTBOT_ARGS+=(--email "$CERTBOT_EMAIL")
   else
-    echo "    没装 certbot"
-    echo "     apt-get install -y certbot python3-certbot-nginx"
-    echo "     certbot --nginx -d $DOMAIN"
+    CERTBOT_ARGS+=(--register-unsafely-without-email)
+  fi
+  if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+    CERTBOT_ARGS+=(--reinstall)
+  fi
+  if certbot "${CERTBOT_ARGS[@]}"; then
+    SSL_OK=1
+    echo "    HTTPS 证书已申请并配置自动跳转"
+  else
+    echo "!! HTTPS 申请失败。请确认 $DOMAIN 已解析到本机，80/443 已放行。"
+    echo "   修复后可重跑: certbot --nginx -d $DOMAIN --redirect"
+  fi
+
+  # Certbot 的 systemd timer 是首选；没有 timer 时补一个系统 cron。
+  if systemctl enable --now certbot.timer >/dev/null 2>&1 \
+      && systemctl is-active --quiet certbot.timer; then
+    echo "    自动续签: certbot.timer 已启用"
+  else
+    cat > /etc/cron.d/certbot-quote <<'EOF'
+17 3 * * * root certbot renew --quiet --deploy-hook "systemctl reload nginx"
+EOF
+    chmod 644 /etc/cron.d/certbot-quote
+    echo "    自动续签: 已安装每日 certbot renew cron"
   fi
 else
   echo
@@ -360,13 +447,22 @@ done
 echo "=========================================================="
 echo " 装好了。"
 echo
-echo "   后台地址: http://$DOMAIN/admin  (配了 SSL 就是 https://$DOMAIN/admin)"
+if [ "$SSL_OK" = "1" ]; then
+  echo "   后台地址: https://$DOMAIN/admin"
+else
+  echo "   后台地址: http://$DOMAIN/admin"
+fi
 echo "   账号:     admin"
 echo "   密码:     见上面 'node server/user.js add admin' 打印的那一行"
     echo "            (忘了就: cd $DIR && runuser -u $SVC_USER -- node server/user.js passwd admin)"
 echo
-echo "   改价记录:  http://$DOMAIN/admin/changes"
-echo "   用户管理:  http://$DOMAIN/admin/users"
+if [ "$SSL_OK" = "1" ]; then
+  echo "   改价记录:  https://$DOMAIN/admin/changes"
+  echo "   用户管理:  https://$DOMAIN/admin/users"
+else
+  echo "   改价记录:  http://$DOMAIN/admin/changes"
+  echo "   用户管理:  http://$DOMAIN/admin/users"
+fi
 # 脚本目录名: 仓库里叫 脚本/, 发布包里叫 scripts/ —— 实际找一下
 SDIR=""
 for d in "$DIR/scripts" "$DIR/脚本"; do

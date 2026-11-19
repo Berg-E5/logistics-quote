@@ -11,14 +11,14 @@
 #   1. 从发布服务器 (/root/quote-release/) 拉 quote-install-latest.tar.gz
 #   2. 校验 SHA256
 #   3. 解到 /opt/quote
-#   4. 调 install.sh 完成安装 (systemd + nginx + 证书 + admin 账号)
+#   4. 调 install.sh 完成安装 (自动依赖 + systemd + nginx + 证书续签 + admin)
 #
-# 需要: 能 ssh 到发布服务器 (有密钥或用密码), 以及 node/nginx/python3
+# 需要: 能 ssh 到发布服务器 (有密钥或用密码)；运行依赖由 install.sh 自动安装
 #
 set -euo pipefail
 
 DOMAIN="${1:-}"
-DIR="${2:-/var/www/quote.byberg.store}"
+DIR="${2:-}"
 SKIP_SSL="${3:-}"
 SRC="${QUOTE_RELEASE_HOST:-root@169.40.117.164}"
 RELEASE_DIR="/root/quote-release"

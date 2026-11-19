@@ -11,11 +11,9 @@
 #   1. 从发布服务器 (/root/quote-release/) 取最新安装包 (本地有就用本地)
 #   2. scp 传到目标服务器
 #   3. 在目标服务器上解压 + 跑 install.sh
-#      (装 systemd + nginx + 证书 + 建 admin 账号 + 自检)
+#      (自动装依赖 + systemd + nginx + 证书续签 + admin + 自检)
 #
-# 目标服务器要做的准备: node 18+ / nginx / python3, 以及能 ssh 回来的密钥
-#
-# 目标服务器要准备: node 18+、nginx、python3, 以及能 ssh 回来的密钥
+# 目标服务器只需支持 systemd、能联网，以及能从本机 SSH 登录。
 #
 set -euo pipefail
 

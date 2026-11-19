@@ -6,9 +6,8 @@
 #     | sudo bash -s -- <你的域名> [安装目录] [skip-ssl]
 #
 # 做的事:
-#   1. 检查依赖 (node 18+ / nginx / python3)
-#   2. 从 GitHub 下载程序包 (公开仓库, 不需要登录)
-#   3. 跑 install.sh: 装 systemd + nginx + 证书 + 建 admin 账号 + 自检
+#   1. 从 GitHub 下载程序包 (公开仓库, 不需要登录)
+#   2. 跑 install.sh: 自动装 Node/nginx/Python/证书 + 建 admin 账号 + 自检
 #
 # 数据说明:
 #   这个脚本装的是**程序**, GitHub 仓库里不含报价数据 (报价表和账号数据都不在公开仓库里)。
@@ -24,6 +23,11 @@
 #   docker compose up -d
 #
 set -euo pipefail
+
+if [ "$(id -u)" != "0" ]; then
+  echo "!! 请用 sudo 运行这条安装命令" >&2
+  exit 1
+fi
 
 DOMAIN="${1:-}"
 DIR="${2:-}"
@@ -48,15 +52,21 @@ if command -v docker >/dev/null 2>&1; then
   echo "    (第二个参数 = 安装目录; 留空用 /var/www/<域名>)"
 fi
 
-# ---------- 1. 下载程序 + 安装 ----------
+# ---------- 1. 下载程序 ----------
 echo
-echo "[1/3] 检查依赖 (需要 node 18+ / nginx / python3)"
-command -v node >/dev/null 2>&1 || {
-  echo "!! 没装 node。先装:"
-  echo "   apt-get update && apt-get install -y nginx python3 python3-pip"
-  echo "   curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs"
-  exit 1
-}
+echo "[1/3] 下载程序"
+if ! command -v tar >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update && apt-get install -y tar
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y tar
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y tar
+  else
+    echo "!! 缺少 tar，且无法识别包管理器" >&2
+    exit 1
+  fi
+fi
 
 echo "    下载程序包..."
 mkdir -p "$WORK"
@@ -70,7 +80,7 @@ PKGDIR="$WORK/logistics-quote-main"
 echo "    解到了: $PKGDIR"
 
 echo
-echo "[2/3] 安装"
+echo "[2/3] 安装（会自动安装 Node 18+、nginx、Python、openpyxl 和 certbot）"
 cd "$PKGDIR"
 if [ -n "$DIR" ]; then
   bash deploy/install.sh "$DOMAIN" "$DIR" "$SKIP_SSL"
