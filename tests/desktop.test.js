@@ -17,6 +17,9 @@ test('Electron 桌面配置会携带 Web、Node 和 Python 资源', () => {
   }
   assert.equal(pkg.build.win.icon, 'assets/icon.ico');
   assert.ok(fs.existsSync(path.join(desktop, 'assets', 'icon.ico')));
+  for (const file of ['setup.html', 'setup.js', 'preload.js']) {
+    assert.ok(pkg.build.files.includes(file), `missing packaged file: ${file}`);
+  }
 });
 
 test('桌面窗口只使用本地服务并保持渲染进程隔离', () => {
@@ -31,5 +34,12 @@ test('桌面窗口只使用本地服务并保持渲染进程隔离', () => {
 test('桌面管理员凭据使用 safeStorage 加密', () => {
   assert.match(main, /safeStorage\.encryptString/);
   assert.match(main, /safeStorage\.decryptString/);
-  assert.match(main, /ADMIN_PASSWORD: settings\.password/);
+  assert.match(main, /env\.ADMIN_PASSWORD = settings\.password/);
+});
+
+test('首次启动要求用户创建管理员账户', () => {
+  assert.match(main, /showAdminSetup/);
+  assert.match(main, /\['add', 'admin', value\.password\]/);
+  assert.match(main, /创建管理员账户/);
+  assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
 });
