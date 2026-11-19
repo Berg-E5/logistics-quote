@@ -35,6 +35,7 @@ test('桌面管理员凭据使用 safeStorage 加密', () => {
   assert.match(main, /safeStorage\.encryptString/);
   assert.match(main, /safeStorage\.decryptString/);
   assert.match(main, /env\.ADMIN_PASSWORD = settings\.password/);
+  assert.match(main, /adminSetupVersion = 1/);
 });
 
 test('首次启动要求用户创建管理员账户', () => {
