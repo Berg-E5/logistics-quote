@@ -51,6 +51,27 @@ git clone https://github.com/Berg-E5/logistics-quote.git
 cd logistics-quote && docker compose up -d
 ```
 
+### Windows 桌面客户端
+
+`desktop/` 下是 Electron + Node + Python 的桌面版。窗口启动本地随机端口服务，
+不会打开浏览器；首次运行会自动创建管理员并进入价格表导入页。
+
+```powershell
+cd desktop
+npm install
+npm start
+```
+
+构建 Windows 安装程序：
+
+```powershell
+cd desktop
+npm run dist
+```
+
+安装包输出到 `desktop/dist/LogisticsQuote-Setup-*.exe`。随包携带 Python 3.12
+和 openpyxl，客户电脑不需要另外安装 Node、Python 或 nginx。
+
 ---
 
 ## 功能
