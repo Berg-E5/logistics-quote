@@ -1,6 +1,6 @@
 {
   "name": "logistics-quote-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "物流报价 Windows 桌面客户端",
   "main": "main.js",
@@ -26,6 +26,9 @@
     },
     "files": [
       "main.js",
+      "preload.js",
+      "setup.html",
+      "setup.js",
       "package.json",
       "assets/**/*"
     ],

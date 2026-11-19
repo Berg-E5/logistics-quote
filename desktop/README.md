@@ -30,5 +30,5 @@ npm run dist
 - 日志：`%APPDATA%\物流报价\logs`
 - 设置：`%APPDATA%\物流报价\settings.json`
 
-本地管理员凭据使用 Electron `safeStorage`（Windows DPAPI）加密保存。
-客户端首次启动时自动创建管理员并登录，不显示登录页。
+首次启动会显示管理员账户创建页，由用户设置 `admin` 密码。密码使用 Electron
+`safeStorage`（Windows DPAPI）加密保存；后续启动自动登录，不重复显示设置页。
