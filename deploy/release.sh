@@ -67,13 +67,13 @@ echo "[2/4] 在服务器上打包"
 ssh $SSH_OPTS "$HOST" "
 set -e
 cd '$SITE'
+FILES='server public scripts deploy index.html LICENSE data/fx.json'
+[ -d data/users/admin ] && FILES=\"\$FILES data/users/admin\"
 tar czf '$RELEASE_DIR/$PKG' \
   --exclude='__pycache__' --exclude='*.pyc' --exclude='*.bak' \
   --exclude='后台地址.txt' --exclude='admin.token' \
   --exclude='sessions.json' --exclude='deploy/quote-install-*.tar.gz' \
-  server public scripts deploy index.html LICENSE \
-  data/users.json data/secret.key data/fx.json data/users \
-  使用说明.md 部署说明.md
+  \$FILES 使用说明.md 部署说明.md
 ls -la '$RELEASE_DIR/$PKG'
 "
 
@@ -102,9 +102,10 @@ cat > /tmp/quote-release-README.txt <<EOF
     tar xzf quote-install-latest.tar.gz -C /opt/quote
     cd /opt/quote && sudo bash deploy/install.sh <你的域名>
 
-带数据装 (原来的账号直接能用):
-    包里已经带了 data/users.json + data/secret.key + 各账号的价格数据。
-    想装空站就: cd /opt/quote && rm -rf data/users.json data/secret.key data/users
+带数据装:
+    包里带站主 admin 的价格数据和当前汇率, 不包含账号库、密码哈希或会话密钥。
+    新站首次启动会生成全新的 admin 账号和 secret.key。
+    想装空站就: cd /opt/quote && rm -rf data/users/admin
 
 校验:
     sha256sum -c SHA256SUMS

@@ -237,20 +237,41 @@ function cookieHeader(value, maxAgeSec, secure) {
 
 const attempts = new Map();     // ip -> {count, until}
 const registrations = new Map(); // ip -> {count, until}  注册限流: 1 小时最多 5 个
+const RATE_MAP_LIMIT = 10000;
+const REGISTER_WINDOW_MS = 60 * 60 * 1000;
+
+function trimRateMap(map) {
+  if (map.size <= RATE_MAP_LIMIT) return;
+  for (const [ip, a] of map) {
+    if (map.size <= RATE_MAP_LIMIT) break;
+    if (a.until && Date.now() > a.until) map.delete(ip);
+  }
+  for (const ip of map.keys()) {
+    if (map.size <= RATE_MAP_LIMIT) break;
+    map.delete(ip);
+  }
+}
 
 /** 注册频率限制: 同一 IP 1 小时内最多注册 5 个账号 */
 function checkRegRate(ip) {
   const a = registrations.get(ip);
   if (!a) return true;
-  if (a.until && Date.now() > a.until) { registrations.delete(ip); return true; }
+  if (!a.startedAt || Date.now() - a.startedAt >= REGISTER_WINDOW_MS) {
+    registrations.delete(ip);
+    return true;
+  }
   return a.count < 5;
 }
 
 function noteRegistration(ip) {
-  const a = registrations.get(ip) || { count: 0, until: 0 };
+  let a = registrations.get(ip);
+  if (!a || !a.startedAt || Date.now() - a.startedAt >= REGISTER_WINDOW_MS) {
+    a = { count: 0, startedAt: Date.now(), until: 0 };
+  }
   a.count++;
-  if (a.count >= 5) a.until = Date.now() + 60 * 60 * 1000;
+  a.until = a.count >= 5 ? a.startedAt + REGISTER_WINDOW_MS : 0;
   registrations.set(ip, a);
+  trimRateMap(registrations);
 }
 
 function checkRate(ip) {
@@ -259,14 +280,20 @@ function checkRate(ip) {
   // 注意: until 为 0 表示「还没锁」, 不能用 Date.now() > until 判断 ——
   // 那样每��次检查都会把计数器清掉, 限流等于没有。
   if (a.until && Date.now() > a.until) { attempts.delete(ip); return true; }
+  if (!a.until && a.seenAt && Date.now() - a.seenAt > 10 * 60 * 1000) {
+    attempts.delete(ip);
+    return true;
+  }
   return a.count < 8;
 }
 
 function noteFail(ip) {
   const a = attempts.get(ip) || { count: 0, until: 0 };
   a.count++;
+  a.seenAt = Date.now();
   if (a.count >= 8) a.until = Date.now() + 5 * 60 * 1000;    // 锁 5 分钟
   attempts.set(ip, a);
+  trimRateMap(attempts);
 }
 
 function clearFail(ip) { attempts.delete(ip); }

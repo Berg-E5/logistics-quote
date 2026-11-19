@@ -183,12 +183,12 @@ done
 
 # 数据: 首次安装时带一份初始数据 (没有就建空壳)
 if [ ! -f "$DIR/data/users.json" ]; then
-  if [ -f "$SRC/data/users.json" ]; then
-    cp -a "$SRC/data/users."* "$DIR/data/" 2>/dev/null || true
-    mkdir -p "$DIR/data/users"
-    [ -d "$SRC/data/users" ] && cp -a "$SRC/data/users/." "$DIR/data/users/" 2>/dev/null || true
-    echo "    初始数据已带上"
+  if [ -d "$SRC/data/users/admin" ]; then
+    mkdir -p "$DIR/data/users/admin"
+    cp -a "$SRC/data/users/admin/." "$DIR/data/users/admin/"
+    echo "    站主初始价格数据已带上"
   fi
+  [ -f "$SRC/data/fx.json" ] && cp -a "$SRC/data/fx.json" "$DIR/data/fx.json"
 fi
 chmod 700 "$DIR/data" 2>/dev/null || true
 

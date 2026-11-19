@@ -23,10 +23,178 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const USERS_DIR = path.join(DATA_DIR, 'users');
 const TOKEN_FILE = path.join(DATA_DIR, 'admin.token');
 const DEFAULT_SCOPE = 'admin';
+const CHANGELOG_MAX_BYTES = Math.max(
+  1024 * 1024,
+  Number.parseInt(process.env.QUOTE_CHANGELOG_MAX_BYTES || String(8 * 1024 * 1024), 10)
+    || 8 * 1024 * 1024
+);
 const COUNTRY_CURRENCY = {
   '美国': 'USD', '加拿大': 'CAD', '墨西哥': 'MXN', '澳大利亚': 'AUD',
   '英国': 'GBP', '沙特阿拉伯': 'SAR', '阿联酋': 'AED',
 };
+const TIER_MODES = new Set(['band', 'firstnext', 'divider']);
+const NUM_EPS = 1e-9;
+
+function normalizeData(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    const e = new Error('数据必须是对象'); e.status = 400; throw e;
+  }
+
+  const data = Object.assign({}, input);
+  if (!Array.isArray(data.tiers)) {
+    const e = new Error('缺少 tiers 数组'); e.status = 400; throw e;
+  }
+  if (data.groups != null && !Array.isArray(data.groups)) {
+    const e = new Error('groups 必须是数组'); e.status = 400; throw e;
+  }
+  if (data.rules != null && !Array.isArray(data.rules)) {
+    const e = new Error('rules 必须是数组'); e.status = 400; throw e;
+  }
+  if (data.divRules != null && (typeof data.divRules !== 'object' || Array.isArray(data.divRules))) {
+    const e = new Error('divRules 必须是对象'); e.status = 400; throw e;
+  }
+
+  data.groups = Array.isArray(data.groups) ? data.groups : [];
+  data.rules = Array.isArray(data.rules) ? data.rules : [];
+  data.divRules = data.divRules || {};
+
+  data.tiers = data.tiers.map((raw, i) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      const e = new Error(`第 ${i + 1} 条费率不是对象`); e.status = 400; throw e;
+    }
+    const sheet = String(raw.sheet || '').trim();
+    const country = String(raw.country || '').trim();
+    const mode = String(raw.mode || 'band');
+    const lo = Number(raw.lo);
+    const hi = Number(raw.hi);
+    const price = Number(raw.price);
+    const fee = raw.fee == null || raw.fee === '' ? 0 : Number(raw.fee);
+    if (!sheet || !country) {
+      const e = new Error(`第 ${i + 1} 条费率缺少渠道或国家`); e.status = 400; throw e;
+    }
+    if (!TIER_MODES.has(mode)) {
+      const e = new Error(`第 ${i + 1} 条费率方式不支持: ${mode}`); e.status = 400; throw e;
+    }
+    if (!isFinite(lo) || !isFinite(hi) || lo < 0 || hi < lo) {
+      const e = new Error(`第 ${i + 1} 条费率重量段无效`); e.status = 400; throw e;
+    }
+    if (!isFinite(price) || price < 0 || !isFinite(fee) || fee < 0) {
+      const e = new Error(`第 ${i + 1} 条费率价格或挂号费无效`); e.status = 400; throw e;
+    }
+    const tier = Object.assign({}, raw, {
+      sheet, country, mode,
+      zone: String(raw.zone || '-'),
+      line: String(raw.line || '-'),
+      attr: String(raw.attr || ''),
+      lo, hi, price, fee,
+      nextkg: raw.nextkg == null || raw.nextkg === '' ? 0 : Number(raw.nextkg),
+      first_kg: raw.first_kg == null || raw.first_kg === '' ? 0 : Number(raw.first_kg),
+      next_kg: raw.next_kg == null || raw.next_kg === '' ? 0 : Number(raw.next_kg),
+    });
+    if (mode === 'firstnext') {
+      if (!isFinite(tier.first_kg) || tier.first_kg < 0
+          || !isFinite(tier.next_kg) || tier.next_kg < 0
+          || !isFinite(tier.nextkg) || tier.nextkg < 0) {
+        const e = new Error(`第 ${i + 1} 条首重续重参数无效`); e.status = 400; throw e;
+      }
+    }
+    return tier;
+  });
+
+  const groups = [];
+  const groupKeys = new Set();
+  for (const raw of data.groups) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      const e = new Error('渠道组不是对象'); e.status = 400; throw e;
+    }
+    const mode = String(raw.mode || 'band');
+    if (!TIER_MODES.has(mode)) {
+      const e = new Error('渠道组计费方式不支持: ' + mode); e.status = 400; throw e;
+    }
+    const country = String(raw.country || '').trim();
+    const sheet = String(raw.sheet || '').trim();
+    if (!sheet || !country) {
+      const e = new Error('渠道组缺少渠道或国家'); e.status = 400; throw e;
+    }
+    const currency = String(raw.currency || raw.cur || COUNTRY_CURRENCY[country] || 'EUR');
+    const group = Object.assign({}, raw, {
+      sheet, country, mode,
+      zone: String(raw.zone || '-'),
+      line: String(raw.line || '-'),
+      attr: String(raw.attr || ''),
+      div: isFinite(Number(raw.div)) && Number(raw.div) > 0 ? Number(raw.div) : 6000,
+      cur: currency,
+      currency,
+    });
+    const key = divKey(group);
+    if (!groupKeys.has(key)) {
+      groupKeys.add(key);
+      groups.push(group);
+    }
+  }
+
+  for (const t of data.tiers) {
+    const key = divKeyOfTier(t);
+    if (groupKeys.has(key)) continue;
+    const currency = COUNTRY_CURRENCY[t.country] || 'EUR';
+    groups.push({
+      sheet: t.sheet, country: t.country, zone: t.zone, line: t.line,
+      attr: t.attr, mode: t.mode, div: 6000, cur: currency, currency,
+      lead: '', limits: '',
+    });
+    groupKeys.add(key);
+  }
+
+  const byMode = new Map();
+  for (const t of data.tiers) {
+    const key = divKeyOfTier(t);
+    if (!byMode.has(key)) byMode.set(key, []);
+    byMode.get(key).push(t);
+  }
+  for (const [key, tiers] of byMode) {
+    const sorted = tiers.slice().sort((a, b) => a.lo - b.lo || a.hi - b.hi);
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].lo <= sorted[i - 1].hi + NUM_EPS) {
+        const e = new Error(`重量段重叠: ${tierLabel(sorted[i])}`);
+        e.status = 400;
+        throw e;
+      }
+    }
+  }
+
+  const existingCountries = new Map();
+  for (const c of (Array.isArray(data.countries) ? data.countries : [])) {
+    const name = String((c && c.name) || '').trim();
+    if (!name) continue;
+    existingCountries.set(name, String((c && c.label) || name));
+  }
+  const coveredCountries = [...new Set(groups.map(g => g.country))];
+  data.countries = coveredCountries.map(name => ({
+    name,
+    label: existingCountries.get(name) || name,
+  }));
+
+  const channels = new Map();
+  for (const g of groups) {
+    if (!channels.has(g.sheet)) channels.set(g.sheet, []);
+    channels.get(g.sheet).push(g);
+  }
+  const oldMeta = (data.meta && typeof data.meta === 'object') ? data.meta : {};
+  data.meta = Object.assign({}, oldMeta, {
+    channels: channels.size,
+    groups: groups.length,
+    tiers: data.tiers.length,
+    countries: data.countries.length,
+    countriesAll: coveredCountries.length,
+    channelList: [...channels.entries()].map(([sheet, list]) => ({
+      sheet,
+      groups: list.length,
+      attr: [...new Set(list.map(g => g.attr || '通用'))].sort(),
+    })),
+  });
+  data.groups = groups;
+  return data;
+}
 
 function ensureDir(dir) {
   const d = dir || DATA_DIR;
@@ -231,11 +399,16 @@ function applyLocks(scope, data) {
   for (const t of data.tiers || []) {
     if (!locks[t.id]) delete t.locked;
   }
+  if (missing.length) {
+    for (const id of missing) delete locks[id];
+    saveLocks(scope, locks);
+  }
   return { preserved, missing };
 }
 
 /** 保存整份数据集 (导入用) */
 function saveAll(scope, data, note, by) {
+  data = normalizeData(data);
   const cur = load(scope);
   // 导入来的数据没有 id, 这里统一补上 (后台改价靠 id 定位)
   ensureIds(data);
@@ -708,18 +881,36 @@ function setDiv(scope, key, div, by) {
 function appendChange(scope, entry) {
   const CHANGELOG = changelogPath(scope);
   ensureDir(path.dirname(CHANGELOG));
+  try {
+    if (fs.existsSync(CHANGELOG) && fs.statSync(CHANGELOG).size >= CHANGELOG_MAX_BYTES) {
+      const previous = CHANGELOG + '.1';
+      fs.rmSync(previous, { force: true });
+      fs.renameSync(CHANGELOG, previous);
+    }
+  } catch (e) {
+    console.error('[db] 改动日志轮转失败:', e.message);
+  }
   fs.appendFileSync(CHANGELOG, JSON.stringify(entry) + '\n', 'utf8');
 }
 
-function readChanges(scope, limit, offset, filter) {
-  const CHANGELOG = changelogPath(scope);
-  ensureDir(path.dirname(CHANGELOG));
-  if (!fs.existsSync(CHANGELOG)) return [];
-  const lines = fs.readFileSync(CHANGELOG, 'utf8').trim().split('\n').filter(Boolean);
+function loadChangeEntries(scope) {
+  const current = changelogPath(scope);
+  ensureDir(path.dirname(current));
+  const lines = [];
+  for (const file of [current + '.1', current]) {
+    if (!fs.existsSync(file)) continue;
+    const part = fs.readFileSync(file, 'utf8').trim();
+    if (part) lines.push(...part.split('\n').filter(Boolean));
+  }
   const all = [];
   for (let i = lines.length - 1; i >= 0; i--) {
     try { all.push(JSON.parse(lines[i])); } catch (e) { /* 跳过坏行 */ }
   }
+  return all;
+}
+
+function readChanges(scope, limit, offset, filter) {
+  const all = loadChangeEntries(scope);
   let list = all;
   if (filter && filter.kind) list = list.filter(c => c.kind === filter.kind);
   if (filter && filter.q) {
@@ -736,13 +927,9 @@ function readChanges(scope, limit, offset, filter) {
 }
 
 function countChanges(scope, filter) {
-  const CHANGELOG = changelogPath(scope);
-  ensureDir(path.dirname(CHANGELOG));
-  if (!fs.existsSync(CHANGELOG)) return 0;
-  const lines = fs.readFileSync(CHANGELOG, 'utf8').trim().split('\n').filter(Boolean);
+  const all = loadChangeEntries(scope);
   let n = 0;
-  for (const l of lines) {
-    let c; try { c = JSON.parse(l); } catch (e) { continue; }
+  for (const c of all) {
     if (filter && filter.kind && c.kind !== filter.kind) continue;
     if (filter && filter.q && JSON.stringify(c).toLowerCase().indexOf(String(filter.q).toLowerCase()) < 0) continue;
     if (filter && filter.since) {
@@ -787,7 +974,7 @@ function checkToken(token) {
 }
 
 module.exports = {
-  diffTiers, changeSummary, tierLabel,
+  normalizeData, diffTiers, changeSummary, tierLabel,
   divKey, divKeyOfTier, divInfo, buildRuleMap, listDivs, setDiv,
   divsPath, loadDivs, saveDivs, applyDivOverrides, divLabel, divSrcName, loadView,
   load, saveAll, updateRate, addRate, ensureIds, appendChange, readChanges, countChanges,

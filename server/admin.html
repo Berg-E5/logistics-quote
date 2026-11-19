@@ -650,7 +650,8 @@ createApp({
         if (!rows.length) { toast('当前筛选下没有渠道组', 'err'); return; }
         const esc = v => {
           const s = (v === null || v === undefined) ? '' : String(v);
-          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+          const safe = /^[=+\-@]/.test(s) ? "'" + s : s;
+          return /[",\n]/.test(safe) ? '"' + safe.replace(/"/g, '""') + '"' : safe;
         };
         const head = ['渠道', '国家', '分区', '产品线', '属性', '方式',
                       '体积数', '来源', '不确定', '可报价档位数', '时效', '币种'];

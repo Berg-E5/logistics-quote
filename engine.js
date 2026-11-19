@@ -17,6 +17,11 @@
  */
 
 const EPS = 1e-6;
+const SURCHARGE_CONDITION_KEYS = new Set([
+  'weight_gt', 'side_gt', 'side_ge', 'other_side_gt', 'side2_ge',
+  'girth2_gt', 'girth1_gt', 'sum3_gt', 'sum3_lte', 'vol_ratio_gt',
+  'vol_m3_gt', 'dim_gt', 'dim_ge',
+]);
 
 /** 档位边界去重: 报价表写 "0-2KG"/"2-10KG" 时 2kg 会命中两档。 */
 function dedupeBands(tiers) {
@@ -176,6 +181,8 @@ function checkRateLimit(lim, kg, L, W, H, div, volKg) {
 
 /** 单条附加费条件判定 */
 function condHit(c, kg, L, W, H, div) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
+  if (Object.keys(c).some(k => !SURCHARGE_CONDITION_KEYS.has(k))) return false;
   const d = [L, W, H].slice().sort((a, b) => b - a);
   const [d1, d2, d3] = d;
   const girth = d1 + (d2 + d3) * 2;

@@ -301,6 +301,36 @@ with open(trace, "a", encoding="utf-8") as f:
   });
   assert.equal(overlapRes.status, 400);
 
+  // 删除已锁定档位时，应同时清理孤儿锁。
+  const rateRows = await getJson(base, '/api/rates?limit=5', cookieA);
+  const lockedId = rateRows.rows.find(r => r.sheet === '测试渠道').id;
+  await responseJson(await fetch(base + '/api/rates/' + lockedId + '/lock', {
+    method: 'PUT',
+    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locked: true }),
+  }));
+  const locksBefore = await getJson(base, '/api/locks', cookieA);
+  assert.equal(locksBefore.count, 1);
+
+  const emptyData = fakeDataset(0);
+  emptyData.tiers = [];
+  emptyData.groups = [];
+  emptyData.countries = [];
+  await responseJson(await fetch(base + '/api/import', {
+    method: 'POST',
+    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note: 'remove locked tier', data: emptyData }),
+  }));
+  const locksAfter = await getJson(base, '/api/locks', cookieA);
+  assert.equal(locksAfter.count, 0);
+
+  const badJson = await fetch(base + '/api/rates/' + lockedId, {
+    method: 'PUT',
+    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    body: '{bad json',
+  });
+  assert.equal(badJson.status, 400);
+
   // 改密码后旧会话立即失效，当前设备拿到新会话。
   const passwordRes = await fetch(base + '/api/password', {
     method: 'POST',
