@@ -116,7 +116,7 @@ cat > /tmp/quote-release-README.txt <<EOF
     SHA256SUMS                           校验和
     fetch-release.sh                     一条命令拉取并安装
 
-依赖: node 18+ / nginx / python3 + openpyxl (只有整表导入需要 openpyxl)
+依赖: install.sh 会自动安装 Node 18+ / nginx / python3 / openpyxl / certbot
 
 这个包是「线上正在跑的版本」打出来的, 装了就能直接用。
 镜像里不含任何数据 (报价表/账号/价格), 数据靠 volume 挂进来或后台导入。

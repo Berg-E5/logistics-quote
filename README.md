@@ -11,14 +11,15 @@
 
 ## 一条命令装起来
 
-在一台新服务器上（需要 node 18+ / nginx / python3）：
+在一台新服务器上运行。脚本会自动安装 Node 18+、nginx、Python 3、openpyxl 和 certbot：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/deploy/bootstrap.sh \
   | sudo bash -s -- <你的域名>
 ```
 
-脚本会下载程序包，然后装 systemd 单元、nginx 反代、申请证书、建 admin 账号、自检。
+脚本会下载程序包、安装系统依赖、配置 systemd 和 nginx、申请 HTTPS 证书、
+启用自动续签，并创建全新的 admin 账号。没有域名的测试环境可在末尾加 `skip-ssl`。
 
 起好之后：
 
@@ -115,7 +116,7 @@ cd logistics-quote && docker compose up -d
 
 | 脚本 | 作用 |
 |---|---|
-| `deploy/install.sh` | 在一台新服务器上装（依赖检查 → systemd → nginx → 证书 → admin） |
+| `deploy/install.sh` | 自动装依赖 → systemd → nginx → 证书续签 → admin |
 | `deploy/install-remote.sh` | 在本地跑一条命令，远程装到别的服务器 |
 | `deploy/release.sh` | 打包 + 更新发布目录 |
 | `deploy/bootstrap.sh` | 一条命令安装 (curl \| bash) |
