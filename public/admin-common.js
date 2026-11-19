@@ -256,6 +256,7 @@
               <div class="dd-user">{{ user }}</div>
               <div class="dd-role">{{ roleCn }}</div>
             </div>
+            <a class="dd-item" href="/"><span>前台报价</span></a>
             <a class="dd-item" href="/admin"><span>后台改价</span></a>
             <a class="dd-item" href="/admin/changes"><span>改动记录</span></a>
             <a class="dd-item" href="/admin/users" v-if="role === 'admin'"><span>用户管理</span></a>
