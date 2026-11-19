@@ -53,6 +53,11 @@ const MAX_IMPORT_TIERS = Math.max(
   1000,
   Number.parseInt(process.env.QUOTE_IMPORT_MAX_TIERS || '200000', 10) || 200000
 );
+const IMPORT_STALE_MS = Math.max(
+  60 * 60 * 1000,
+  Number.parseInt(process.env.QUOTE_IMPORT_STALE_HOURS || '24', 10) * 60 * 60 * 1000
+    || 24 * 60 * 60 * 1000
+);
 let activeImportCount = 0;
 // 每个用户一个导入任务, 互不干扰
 const importJobs = new Map();
@@ -142,6 +147,24 @@ function cleanupImportWorkspace(workDir) {
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return;
   try { fs.rmSync(workDir, { recursive: true, force: true }); }
   catch (e) { console.error('[import] 清理临时目录失败:', e.message); }
+}
+
+function cleanupStaleImportWorkspaces() {
+  if (!fs.existsSync(UPLOAD_DIR)) return 0;
+  let removed = 0;
+  const now = Date.now();
+  for (const entry of fs.readdirSync(UPLOAD_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('job-')) continue;
+    const dir = path.join(UPLOAD_DIR, entry.name);
+    try {
+      if (now - fs.statSync(dir).mtimeMs < IMPORT_STALE_MS) continue;
+      cleanupImportWorkspace(dir);
+      removed++;
+    } catch (e) {
+      console.error('[import] 清理旧临时目录失败:', e.message);
+    }
+  }
+  return removed;
 }
 
 function syncOfflineSnapshot(scriptsDir) {
@@ -333,7 +356,7 @@ function startImport(scope, filename, fileBuffer) {
     }
     try {
       const raw = fs.readFileSync(outJson, 'utf8');
-      const data = JSON.parse(raw);
+      const data = db.normalizeData(JSON.parse(raw));
       const report = diffData(db.load(scope).data, data);
       const r = db.saveAll(scope, data, '网页整表导入', scope);
       importJob.state = 'done';
@@ -450,19 +473,35 @@ function sendErr(res, code, msg) {
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     let size = 0;
+    let rejected = false;
     const chunks = [];
     req.on('data', c => {
+      if (rejected) return;
       size += c.length;
       if (size > (limit || 20 * 1024 * 1024)) {
-        reject(new Error('请求体太大'));
-        req.destroy();
+        rejected = true;
+        req.pause();
+        const e = new Error('请求体太大');
+        e.status = 413;
+        reject(e);
         return;
       }
       chunks.push(c);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => { if (!rejected) resolve(Buffer.concat(chunks).toString('utf8')); });
     req.on('error', reject);
   });
+}
+
+async function readJsonBody(req, limit) {
+  const raw = await readBody(req, limit);
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    const err = new Error('请求格式不对');
+    err.status = 400;
+    throw err;
+  }
 }
 
 function tokenFrom(req) {
@@ -840,7 +879,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/rates/') && req.method === 'PUT'
         && !pathname.endsWith('/lock')) {
       const id = pathname.slice('/api/rates/'.length);
-      const body = JSON.parse((await readBody(req)) || '{}');
+      const body = await readJsonBody(req);
       try {
         const r = db.updateRate(scope, id, body, actor);
         return sendJson(res, 200, { ok: true, ...r });
@@ -868,7 +907,7 @@ const server = http.createServer(async (req, res) => {
 
     // ---- 整表导入: 上传报价表 ----
     if (pathname === '/api/import-file' && req.method === 'POST') {
-      const body = JSON.parse((await readBody(req, 60 * 1024 * 1024)) || '{}');
+      const body = await readJsonBody(req, 60 * 1024 * 1024);
       if (!body.data) return sendErr(res, 400, '没收到文件内容');
       const name = String(body.filename || 'quote.xlsx').replace(/[^\w.\-一-龥]/g, '_');
       if (!/\.xlsx$/i.test(name)) return sendErr(res, 400, '只支持 .xlsx 文件');
@@ -911,7 +950,7 @@ const server = http.createServer(async (req, res) => {
     // 锁定 / 解锁某个费率档 (整表推送时不覆盖)
     if (pathname.startsWith('/api/rates/') && pathname.endsWith('/lock') && req.method === 'PUT') {
       const id = pathname.slice('/api/rates/'.length, -'/lock'.length);
-      const body = JSON.parse((await readBody(req)) || '{}');
+      const body = await readJsonBody(req);
       try {
         const r = db.setLock(scope, id, body.locked !== false, actor);
         return sendJson(res, 200, { ok: true, ...r });
@@ -927,7 +966,7 @@ const server = http.createServer(async (req, res) => {
 
     // 新增一条费率档 (手工加渠道 / 补漏的档位)
     if (pathname === '/api/rates' && req.method === 'POST') {
-      const body = JSON.parse((await readBody(req)) || '{}');
+      const body = await readJsonBody(req);
       try {
         const r = db.addRate(scope, body, actor);
         return sendJson(res, 200, { ok: true, ...r });
@@ -1077,12 +1116,20 @@ const server = http.createServer(async (req, res) => {
     }
     return serveStatic(res, filePath);
   } catch (e) {
-    console.error('[error]', req.method, pathname, e);
-    sendErr(res, 500, e.message);
+    const status = Number(e.status) || 500;
+    if (status >= 500) console.error('[error]', req.method, pathname, e);
+    if (status === 413 && !res.headersSent) res.setHeader('Connection', 'close');
+    sendErr(res, status, status >= 500 && !e.status ? '服务器内部错误' : e.message);
   }
 });
 
 server.listen(PORT, HOST, () => {
+  try {
+    const removed = cleanupStaleImportWorkspaces();
+    if (removed) console.log(`[import] 已清理 ${removed} 个过期临时导入目录`);
+  } catch (e) {
+    console.error('[startup] 清理临时导入目录失败:', e.message);
+  }
   // 管理令牌必须在启动时可用, 否则新装站点的 CLI / 自动化第一次调用会找不到文件。
   try {
     db.getToken();

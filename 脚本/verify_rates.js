@@ -206,7 +206,8 @@ if (csvArg > 0 && process.argv[csvArg + 1]) {
   const out = process.argv[csvArg + 1];
   const esc = v => {
     const s = (v === null || v === undefined) ? '' : String(v);
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    const safe = /^[=+\-@]/.test(s) ? "'" + s : s;
+    return /[",\n]/.test(safe) ? '"' + safe.replace(/"/g, '""') + '"' : safe;
   };
   fs.writeFileSync(out, '\uFEFF' + csvRows.map(r => r.map(esc).join(',')).join('\r\n'), 'utf8');
   console.log(`\n核对用 CSV 已导出: ${out}  (${csvRows.length - 1} 行)`);

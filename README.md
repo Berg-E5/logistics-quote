@@ -144,9 +144,12 @@ node --test
 | `QUOTE_IMPORT_MAX_UNCOMPRESSED_MB` | `500` | XLSX 解压后总大小上限 |
 | `QUOTE_IMPORT_TIMEOUT_MS` | `600000` | 单次导入超时时间 |
 | `QUOTE_IMPORT_MAX_TIERS` | `200000` | JSON 导入的最大费率档数量 |
+| `QUOTE_IMPORT_STALE_HOURS` | `24` | 启动时清理多久以前的临时导入目录 |
+| `QUOTE_CHANGELOG_MAX_BYTES` | `8388608` | 单个改动日志文件轮转大小 |
 
 公开部署前必须确认 `admin` 密码没有出现在源码、脚本或 Git 历史中。密码一旦泄露，
 除了改密码，还应轮换生产环境的 `data/secret.key`，否则已经签发的会话仍可继续使用。
+发布包不包含账号库、`secret.key` 或管理令牌，每个新站会生成自己的管理员账号和签名密钥。
 
 ## 关于这个仓库
 

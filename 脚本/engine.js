@@ -17,6 +17,11 @@
  */
 
 const EPS = 1e-6;
+const SURCHARGE_CONDITION_KEYS = new Set([
+  'weight_gt', 'side_gt', 'side_ge', 'other_side_gt', 'side2_ge',
+  'girth2_gt', 'girth1_gt', 'sum3_gt', 'sum3_lte', 'vol_ratio_gt',
+  'vol_m3_gt', 'dim_gt', 'dim_ge',
+]);
 
 /** 档位边界去重: 报价表写 "0-2KG"/"2-10KG" 时 2kg 会命中两档。 */
 function dedupeBands(tiers) {
@@ -176,6 +181,8 @@ function checkRateLimit(lim, kg, L, W, H, div, volKg) {
 
 /** 单条附加费条件判定 */
 function condHit(c, kg, L, W, H, div) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
+  if (Object.keys(c).some(k => !SURCHARGE_CONDITION_KEYS.has(k))) return false;
   const d = [L, W, H].slice().sort((a, b) => b - a);
   const [d1, d2, d3] = d;
   const girth = d1 + (d2 + d3) * 2;
@@ -315,8 +322,17 @@ function quote(q, lib, inp, rule, preferRates) {
     const customSell = o.total / (1 - margin) / extra;
     o.sells.custom = round2(customSell);
     o.locals.custom = fxRate ? round2(customSell / fxRate) : 0;
-    o.profit = round2(recv - o.total);
-    o.profitRatio = recv ? round2(o.profit / recv) : 0;
+    // 不可发时「利润」没有意义。
+    // 原表 U 列是 =L3-M8, 而 M8 在超尺寸时被置 0, 于是 U8 会算出「毛利 = 到账全额」
+    // (例如到账 1500 时显示毛利 1500) —— 那是原表的缺陷, 照搬会误导。
+    // 这里置 null, 前台/后台显示「不可发」而不是白赚一笔。
+    if (o.blocked) {
+      o.profit = null;
+      o.profitRatio = null;
+    } else {
+      o.profit = round2(recv - o.total);
+      o.profitRatio = recv ? round2(o.profit / recv) : 0;
+    }
     return o;
   }
 
@@ -407,6 +423,8 @@ function quote(q, lib, inp, rule, preferRates) {
   const volKg = volumetricWeight(L, W, H, div);
   out.volKg = round2(volKg);
   out.divUsed = div;
+  // 报价表没给这个国家的体积重除数 -> divUsed 只是估算值, 前台要显示「不确定」
+  out.divUncertain = !!(preferRates && q.countryDivUncertain && !q.countryDiv);
   // 实重不在允许范围时, 原表 F 列返回 "超尺寸" 文本, Excel 的 MAX 会忽略文本,
   // 计费重只剩体积重。
   let effKg = kg;
@@ -421,7 +439,12 @@ function quote(q, lib, inp, rule, preferRates) {
   // ---- 运费 ----
   let freight = 0, fee = 0;
 
-  if (rule && rule.type === 'triple' && rule.lines) {
+  // 原计算器口径: 专线三条线各算一遍取 MIN (原表 D8 公式)。
+  // 注意 preferRates: 报价表口径下**必须**走下面的通用费率库分支 ——
+  // 报价表把专线拆成三条独立产品线(÷18000 / ÷10000 / ÷6000), 各自有自己的
+  // 单价和挂号费档位; 如果这里还用 rule.lines, 就会拿原计算器的旧单价
+  // (如美国Ⅱ号线 106/89/71) 覆盖掉报价表的当前价 (119/98/81)。
+  if (rule && rule.type === 'triple' && rule.lines && !preferRates) {
     // 专线: 三条产品线各算各的 (泡货走泡货线, 重货走重货线)。
     // 组本身已经按产品线拆开 (q.line 指定), 所以按 q.line 选对应那条;
     // 若组没有指定线, 则三条取最便宜 (对齐原表 D 列的 MIN(...))。
@@ -499,6 +522,10 @@ function quote(q, lib, inp, rule, preferRates) {
 
   out.freight = out.blocked ? 0 : freight;
   out.fee = out.blocked ? 0 : fee;
+  // 产品线名: 原表口径的三线分支会自己设 out.line; 报价表口径走通用费率库分支,
+  // 不会设 —— 这里回填渠道组自己的 line (专线三线是 ÷18000 / ÷10000 / ÷6000 三条
+  // 独立产品线, 前台要显示出来)。普通渠道 line 为 '-', 前台本来就不显示。
+  if (!out.line) out.line = q.line || '';
   return finalize(out);
 }
 
