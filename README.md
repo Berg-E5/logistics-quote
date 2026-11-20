@@ -22,7 +22,8 @@ curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/deploy
 ```
 
 脚本会下载程序包、安装系统依赖、配置 systemd 和 nginx、申请 HTTPS 证书、
-启用自动续签、配置每日加密备份，并创建全新的 admin 账号。没有域名的测试环境可在末尾加 `skip-ssl`。
+启用自动续签、配置每日加密备份，并创建全新的 admin 账号。小内存新机还会自动补
+2 GB Swap，并启用 fail2ban 的 SSH 防护。没有域名的测试环境可在末尾加 `skip-ssl`。
 
 起好之后：
 

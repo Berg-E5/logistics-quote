@@ -18,6 +18,8 @@ test('一键安装会自动处理系统依赖', () => {
   assert.match(install, /--require-hashes/);
   assert.match(install, /openpyxl 3\.1\.5/);
   assert.doesNotMatch(install, /pip install[^\n]*openpyxl(?! --)/);
+  assert.match(install, /fail2ban/);
+  assert.match(install, /fallocate -l 2G \/swapfile/);
   assert.match(install, /certbot/);
 });
 

@@ -84,7 +84,7 @@ if command -v apt-get >/dev/null 2>&1; then
   echo "    包管理器: apt"
   apt-get update
   apt-get install -y --no-install-recommends \
-    ca-certificates curl gnupg tar openssl nginx python3 python3-pip python3-venv
+    ca-certificates curl gnupg tar openssl nginx python3 python3-pip python3-venv fail2ban
   apt-get install -y --no-install-recommends certbot python3-certbot-nginx
   if ! node_ok; then
     echo "    安装 Node.js 22 LTS (NodeSource)"
@@ -94,7 +94,7 @@ if command -v apt-get >/dev/null 2>&1; then
 elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
   if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
   echo "    包管理器: $PKG"
-  $PKG install -y ca-certificates curl tar openssl nginx python3 python3-pip
+  $PKG install -y ca-certificates curl tar openssl nginx python3 python3-pip fail2ban || true
   if ! $PKG install -y certbot python3-certbot-nginx; then
     echo "    补充 EPEL 源后重试 certbot"
     $PKG install -y epel-release || true
@@ -126,6 +126,46 @@ echo "    python3 $(python3 -V 2>&1 | awk '{print $2}')"
 echo "    nginx   $(nginx -v 2>&1 | sed 's#nginx version: ##')"
 [ "$SKIP_SSL" = "skip-ssl" ] || echo "    certbot $(certbot --version 2>&1 | awk '{print $2}')"
 HAVE_NGINX=1
+
+# 小内存机器自动补 2GB Swap，避免 Node + Python 同时导入时被 OOM 杀掉。
+MEM_MB=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
+SWAP_MB=$(awk '/SwapTotal/{print int($2/1024)}' /proc/meminfo)
+if [ "${MEM_MB:-0}" -lt 3072 ] && [ "${SWAP_MB:-0}" -lt 512 ] \
+    && [ ! -e /swapfile ]; then
+  AVAIL_KB=$(df --output=avail -k / | tail -1 | tr -d ' ')
+  if [ "${AVAIL_KB:-0}" -gt 5242880 ]; then
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -qE '^/swapfile[[:space:]]' /etc/fstab \
+      || printf '/swapfile none swap sw 0 0\n' >> /etc/fstab
+    printf 'vm.swappiness=10\nvm.vfs_cache_pressure=50\n' > /etc/sysctl.d/99-quote-memory.conf
+    sysctl --system >/dev/null
+    echo "    已启用 2GB Swap"
+  else
+    echo "    磁盘空间不足，跳过 Swap"
+  fi
+fi
+
+if command -v fail2ban-client >/dev/null 2>&1; then
+  mkdir -p /etc/fail2ban/jail.d
+  cat > /etc/fail2ban/jail.d/quote-sshd.local <<'EOF'
+[sshd]
+enabled = true
+backend = systemd
+mode = aggressive
+maxretry = 4
+findtime = 10m
+bantime = 1h
+EOF
+  chmod 600 /etc/fail2ban/jail.d/quote-sshd.local
+  if fail2ban-client -t >/dev/null 2>&1; then
+    systemctl enable fail2ban >/dev/null 2>&1 || true
+    systemctl restart fail2ban
+    echo "    fail2ban 已启用 (SSH 10 分钟失败 4 次封禁 1 小时)"
+  fi
+fi
 
 # 证书申请需要 80/443 可达；只放行 Web 端口，不碰 SSH。
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
