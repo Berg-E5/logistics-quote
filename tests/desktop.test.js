@@ -47,6 +47,7 @@ test('首次启动支持本机管理员和中央服务器两种模式', () => {
   assert.match(main, /connectionMode = 'remote'/);
   assert.match(main, /body\.apiVersion/);
   assert.match(main, /function isAppUrl/);
+  assert.match(main, /await waitForServer\(\);\s+if \(!connection\.existing\)/);
   assert.match(main, /设置登录方式/);
   assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
   const setupHtml = fs.readFileSync(path.join(desktop, 'setup.html'), 'utf8');

@@ -626,6 +626,8 @@ async function bootstrap() {
   try { await session.defaultSession.cookies.remove(baseUrl, 'quote_session'); }
   catch (e) { /* cookie did not exist */ }
   sessionCookieHeader = '';
+  // 已有本机账号不会走 ensureDesktopLogin，但仍必须等服务真正监听后再加载页面。
+  await waitForServer();
   if (!connection.existing) await ensureDesktopLogin(connection);
   const win = createWindow();
   let initialPath = '/';
