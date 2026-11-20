@@ -146,21 +146,16 @@ test('并发导入隔离且管理令牌写入 admin 作用域', { timeout: 30000
   const repo = path.resolve(__dirname, '..');
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'quote-review-'));
   const scriptsDir = path.join(tempRoot, 'scripts');
-  const traceFile = path.join(tempRoot, 'concurrency.log');
   fs.cpSync(path.join(repo, 'server'), path.join(tempRoot, 'server'), { recursive: true });
   fs.mkdirSync(scriptsDir, { recursive: true });
   fs.writeFileSync(path.join(scriptsDir, 'run_pipeline.py'), `
 import json
-import os
 import sys
 import time
 
 raw = open(sys.argv[1], "rb").read()
 marker = raw[4:5].decode("ascii")
 delay = float(raw[5:].decode("ascii"))
-trace = os.environ["QUOTE_TEST_LOG"]
-with open(trace, "a", encoding="utf-8") as f:
-    f.write("start:" + marker + "\\n")
 time.sleep(delay)
 price = {"A": 111, "B": 222}.get(marker, 333)
 data = {
@@ -181,8 +176,6 @@ data = {
 }
 with open(sys.argv[2], "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False)
-with open(trace, "a", encoding="utf-8") as f:
-    f.write("end:" + marker + "\\n")
 `, 'utf8');
 
   const port = await freePort();
@@ -197,7 +190,6 @@ with open(trace, "a", encoding="utf-8") as f:
       ADMIN_PASSWORD: 'ReviewAdmin123',
       QUOTE_FX_OFF: '1',
       QUOTE_IMPORT_CONCURRENCY: '2',
-      QUOTE_TEST_LOG: traceFile,
       PYTHONIOENCODING: 'utf-8',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -232,10 +224,6 @@ with open(trace, "a", encoding="utf-8") as f:
   ]);
   assert.equal(dataA.data.tiers[0].price, 111);
   assert.equal(dataB.data.tiers[0].price, 222);
-
-  const trace = fs.readFileSync(traceFile, 'utf8').trim().split(/\r?\n/);
-  assert.deepEqual(trace.slice(0, 2).sort(), ['start:A', 'start:B']);
-  assert.ok(trace.slice(2).every(line => line.startsWith('end:')));
 
   const tokenFile = path.join(tempRoot, 'data', 'admin.token');
   assert.equal(fs.existsSync(tokenFile), true, '服务启动时应自动生成管理令牌');

@@ -11,7 +11,7 @@ const form = document.getElementById('form');
 if (reset) {
   document.title = '重置管理员密码';
   title.textContent = '重置管理员密码';
-  lead.textContent = '本机已有管理员账户，但当前登录凭据不可用。请设置新的本地管理员密码。';
+  lead.textContent = '本机已有管理员账户，但尚未完成明确的密码设置。请重新设置本地管理员密码。';
   submit.textContent = '保存新密码并进入系统';
 }
 

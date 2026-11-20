@@ -28,13 +28,13 @@ test('桌面窗口只使用本地服务并保持渲染进程隔离', () => {
   assert.match(main, /nodeIntegration: false/);
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /sandbox: true/);
-  assert.match(main, /QUOTE_REGISTRATION_OPEN: '0'/);
+  assert.match(main, /QUOTE_REGISTRATION_OPEN: '1'/);
 });
 
-test('桌面管理员凭据使用 safeStorage 加密', () => {
-  assert.match(main, /safeStorage\.encryptString/);
-  assert.match(main, /safeStorage\.decryptString/);
-  assert.match(main, /env\.ADMIN_PASSWORD = settings\.password/);
+test('桌面端不在本地保存管理员明文密码', () => {
+  assert.doesNotMatch(main, /safeStorage/);
+  assert.doesNotMatch(main, /settings\.password/);
+  assert.doesNotMatch(main, /encryptedPassword = safeStorage/);
   assert.match(main, /adminSetupVersion = 1/);
 });
 

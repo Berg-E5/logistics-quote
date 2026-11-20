@@ -55,6 +55,7 @@ cd logistics-quote && docker compose up -d
 
 `desktop/` 下是 Electron + Node + Python 的桌面版。窗口启动本地随机端口服务，
 不会打开浏览器；首次运行要求用户为 `admin` 设置密码，然后进入价格表导入页。
+后续启动显示登录页，普通用户可自行注册，管理员登录后可进入用户管理。
 
 ```powershell
 cd desktop
