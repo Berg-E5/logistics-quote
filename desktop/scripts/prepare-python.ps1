@@ -42,7 +42,6 @@ $ZipPath = Join-Path $TempDir "python-embed.zip"
 $ExtractDir = Join-Path $TempDir "python"
 
 New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
-New-Item -ItemType Directory -Force -Path $ExtractDir | Out-Null
 try {
   $Url = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
   Write-Host "Downloading $Url"
@@ -51,7 +50,8 @@ try {
   if ($ActualZipHash -ne $PythonZipSha256.ToLowerInvariant()) {
     throw "Python ZIP SHA256 mismatch: expected $PythonZipSha256, got $ActualZipHash"
   }
-  Expand-Archive -LiteralPath $ZipPath -DestinationPath $ExtractDir -Force
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $ExtractDir)
 
   $Pth = Get-ChildItem -LiteralPath $ExtractDir -Filter "python*._pth" | Select-Object -First 1
   if (-not $Pth) { throw "Python embeddable ._pth file not found" }

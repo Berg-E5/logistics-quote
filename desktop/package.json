@@ -2,6 +2,9 @@
   "name": "logistics-quote-desktop",
   "version": "1.4.0",
   "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "description": "物流报价 Windows 桌面客户端",
   "main": "main.js",
   "author": "Berg-E5",

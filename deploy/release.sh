@@ -66,6 +66,7 @@ echo "[2/4] 在服务器上打包"
 #   deploy/quote-install-*.tar.gz 发布包本身 (别把旧包打进新包)
 ssh $SSH_OPTS "$HOST" "
 set -e
+mkdir -p '$RELEASE_DIR'
 cd '$SITE'
 FILES='server public scripts deploy index.html LICENSE data/fx.json'
 [ -d data/users/admin ] && FILES=\"\$FILES data/users/admin\"
