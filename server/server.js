@@ -64,7 +64,10 @@ let activeImportCount = 0;
 const importJobs = new Map();
 function getJob(scope) {
   if (!importJobs.has(scope)) {
-    importJobs.set(scope, { state: 'idle', log: [], startedAt: null, result: null, error: null });
+    importJobs.set(scope, {
+      state: 'idle', log: [], startedAt: null, result: null, error: null,
+      preview: false, pendingData: null, pendingSnapshot: null,
+    });
   }
   return importJobs.get(scope);
 }
@@ -168,15 +171,18 @@ function cleanupStaleImportWorkspaces() {
   return removed;
 }
 
-function syncOfflineSnapshot(scriptsDir) {
-  if (process.env.QUOTE_DESKTOP === '1') return false;
-  const snap = path.join(scriptsDir, 'data_v2.js');
-  if (!fs.existsSync(snap)) return false;
-  const buf = fs.readFileSync(snap);
+function writeOfflineSnapshot(buf) {
+  if (process.env.QUOTE_DESKTOP === '1' || !buf) return false;
   for (const dst of [path.join(ROOT, 'data_v2.js'), path.join(PUBLIC, 'data_v2.js')]) {
     try { fs.writeFileSync(dst, buf); } catch (e) { /* ignore */ }
   }
   return true;
+}
+
+function syncOfflineSnapshot(scriptsDir) {
+  const snap = path.join(scriptsDir, 'data_v2.js');
+  if (!fs.existsSync(snap)) return false;
+  return writeOfflineSnapshot(fs.readFileSync(snap));
 }
 
 function killImportTree(child) {
@@ -189,7 +195,7 @@ function killImportTree(child) {
   catch (e) { try { child.kill('SIGKILL'); } catch (e2) { /* already exited */ } }
 }
 
-function startImport(scope, filename, fileBuffer) {
+function startImport(scope, filename, fileBuffer, options) {
   const importJob = getJob(scope);
   if (importJob.state === 'running') {
     const e = new Error('已经有一个导入任务在跑了, 等它结束');
@@ -240,6 +246,9 @@ function startImport(scope, filename, fileBuffer) {
   importJob.log = [];
   importJob.result = null;
   importJob.error = null;
+  importJob.preview = !!(options && options.previewOnly);
+  importJob.pendingData = null;
+  importJob.pendingSnapshot = null;
   importJob.startedAt = new Date().toISOString();
   importJob.file = filename;
   // ---- 进度条 ----
@@ -361,6 +370,23 @@ function startImport(scope, filename, fileBuffer) {
       const raw = fs.readFileSync(outJson, 'utf8');
       const data = db.normalizeData(JSON.parse(raw));
       const report = diffData(db.load(scope).data, data);
+      if (importJob.preview) {
+        const snap = path.join(jobScripts, 'data_v2.js');
+        importJob.pendingData = data;
+        importJob.pendingSnapshot = fs.existsSync(snap) ? fs.readFileSync(snap) : null;
+        importJob.state = 'preview';
+        importJob.progress = 100;
+        importJob.stepDone = importJob.stepTotal || importJob.stepDone;
+        importJob.result = {
+          preview: true,
+          report,
+          tiers: data.tiers.length,
+          groups: data.groups.length,
+          countries: data.countries.length,
+        };
+        importJob.log.push(`预览完成 · ${data.tiers.length} 条费率，确认后才会发布`);
+        return;
+      }
       const r = db.saveAll(scope, data, '网页整表导入', scope);
       importJob.state = 'done';
       importJob.progress = 100;
@@ -976,8 +1002,8 @@ const server = http.createServer(async (req, res) => {
         if (fileBuffer.length > MAX_IMPORT_BYTES) {
           return sendErr(res, 413, `文件太大，最大 ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)} MB`);
         }
-        startImport(scope, name, fileBuffer);
-        return sendJson(res, 200, { ok: true, started: true });
+        startImport(scope, name, fileBuffer, { previewOnly: body.preview === true });
+        return sendJson(res, 200, { ok: true, started: true, preview: body.preview === true });
       } catch (e) {
         return sendErr(res, e.status || 500, e.message);
       }
@@ -1000,7 +1026,50 @@ const server = http.createServer(async (req, res) => {
         stepDone: job.stepDone || 0,
         elapsed: job.elapsed || 0,
         stepMs: job.stepMs || 0,
+        preview: !!job.preview,
       });
+    }
+
+    if (pathname === '/api/import-commit' && req.method === 'POST') {
+      const job = getJob(scope);
+      if (job.state !== 'preview' || !job.pendingData) {
+        return sendErr(res, 409, '没有等待确认的导入预览');
+      }
+      try {
+        const data = job.pendingData;
+        const r = db.saveAll(scope, data, '导入预览确认', actor);
+        job.state = 'done';
+        job.result = {
+          rev: r.rev,
+          updatedAt: r.updatedAt,
+          lockedPreserved: r.lockedPreserved || 0,
+          locksMissing: r.locksMissing || 0,
+          report: job.result && job.result.report ? job.result.report : {},
+          confirmed: true,
+        };
+        const systemAdmin = users.findSystemAdmin();
+        const globalScope = systemAdmin ? systemAdmin.username : db.DEFAULT_SCOPE;
+        if (scope === globalScope) writeOfflineSnapshot(job.pendingSnapshot);
+        job.pendingData = null;
+        job.pendingSnapshot = null;
+        job.log.push(`已发布 · 数据版本 v${r.rev}`);
+        return sendJson(res, 200, { ok: true, ...job.result });
+      } catch (e) {
+        return sendErr(res, 400, e.message);
+      }
+    }
+
+    if (pathname === '/api/import-cancel' && req.method === 'POST') {
+      const job = getJob(scope);
+      if (job.state === 'running') return sendErr(res, 409, '导入仍在处理中');
+      job.state = 'idle';
+      job.preview = false;
+      job.pendingData = null;
+      job.pendingSnapshot = null;
+      job.result = null;
+      job.error = null;
+      job.log = [];
+      return sendJson(res, 200, { ok: true });
     }
 
     // 锁定 / 解锁某个费率档 (整表推送时不覆盖)
@@ -1207,6 +1276,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---------- 静态 ----------
+    if (pathname === '/admin/overview' || pathname === '/admin/overview/') {
+      return serveStatic(res, path.join(__dirname, 'overview.html'));
+    }
+    if (pathname === '/admin/workspaces' || pathname === '/admin/workspaces/') {
+      return serveStatic(res, path.join(__dirname, 'workspaces.html'));
+    }
+    if (pathname === '/admin/import' || pathname === '/admin/import/') {
+      return serveStatic(res, path.join(__dirname, 'imports.html'));
+    }
+    if (pathname === '/admin/security' || pathname === '/admin/security/') {
+      return serveStatic(res, path.join(__dirname, 'security.html'));
+    }
     if (pathname === '/admin' || pathname === '/admin/') {
       return serveStatic(res, path.join(__dirname, 'admin.html'));
     }

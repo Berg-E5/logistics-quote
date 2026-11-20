@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理员与工作区 · 物流报价</title>
+<link rel="stylesheet" href="/ui-common.css">
+<link rel="stylesheet" href="/admin-common.css">
+<style>
+  .ws-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; }
+  .ws-head h2 { margin: 0; font-size: 20px; letter-spacing: -.3px; }
+  .ws-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .ws-head .grow { flex: 1; }
+  .ws-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .ws-tools input { min-width: 240px; }
+  .ws-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin-bottom: 14px; }
+  .ws-stat { padding: 13px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .ws-stat span { color: var(--muted); font-size: 11px; }
+  .ws-stat b { display: block; margin-top: 3px; font: 620 21px var(--mono); }
+  .ws-table td:first-child { min-width: 180px; }
+  .ws-name { display: flex; align-items: center; gap: 9px; }
+  .ws-name .avatar { width: 28px; height: 28px; border-radius: 8px; background: var(--warn); color: var(--on-warn); display: grid; place-items: center; font-weight: 700; }
+  .ws-name b { display:block; font-family: var(--mono); font-size: 12.5px; }
+  .ws-name small { color: var(--muted); font-size: 10.5px; }
+  .ws-status { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; }
+  .ws-status i { width:7px; height:7px; border-radius:50%; background:var(--good); }
+  .ws-status.bad i { background:var(--bad); }
+  .ws-status.warn i { background:var(--warn); }
+  .ws-empty { padding: 44px; text-align:center; color:var(--muted); border:1px dashed var(--line2); border-radius:10px; }
+  @media(max-width:1100px){.ws-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<script>
+(function(){try{var v=localStorage.getItem('quote.theme');if(v!=='light'&&v!=='dark')v='auto';document.documentElement.setAttribute('data-theme',v);var dark=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme-effective',v==='auto'?(dark?'dark':'light'):v);}catch(e){}})();
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script src="/vue.global.prod.js"></script>
+<script src="/admin-common.js"></script>
+<script>
+const A = window.QuoteAdmin;
+const { createApp, ref, computed, onMounted } = Vue;
+createApp({
+  components: { AppSidebar: A.AppSidebar, AppHeader: A.AppHeader, LoginGate: A.LoginGate, PasswordModal: A.PasswordModal },
+  setup() {
+    const { logged, checking, me, mustChange, afterLogin, reset: resetAuth } = A.useAuth(async()=>load());
+    const version = ref('');
+    const users = ref([]);
+    const query = ref('');
+    const filter = ref('all');
+    const showPwd = ref(false);
+    const loadErr = ref('');
+    const admins = computed(() => users.value.filter(u => u.role === 'admin'));
+    const visible = computed(() => admins.value.filter(a => {
+      if (filter.value === 'disabled' && !a.disabled) return false;
+      if (filter.value === 'nodata' && a.hasData) return false;
+      if (filter.value === 'ready' && (!a.hasData || a.disabled)) return false;
+      const q = query.value.trim().toLowerCase();
+      return !q || a.username.toLowerCase().includes(q);
+    }));
+    const membersOf = name => users.value.filter(u => u.role === 'user' && u.ownerAdmin === name).length;
+    const totalMembers = computed(() => users.value.filter(u => u.role === 'user').length);
+    const disabledAdmins = computed(() => admins.value.filter(u => u.disabled).length);
+    const noData = computed(() => admins.value.filter(u => !u.hasData).length);
+    const ready = computed(() => admins.value.filter(u => u.hasData && !u.disabled).length);
+    function status(a) {
+      if (a.disabled) return { cls:'bad', text:'已停用' };
+      if (!a.hasData) return { cls:'warn', text:'未导入价格表' };
+      return { cls:'', text:'运行正常' };
+    }
+    function time(iso) { return iso ? new Date(iso).toLocaleString('zh-CN') : '从未登录'; }
+    async function load() {
+      loadErr.value = '';
+      try {
+        const [v, u] = await Promise.all([A.api('/api/version'), A.api('/api/users')]);
+        version.value = `价格表 v${v.rev}`;
+        users.value = u.users || [];
+      } catch(e) { loadErr.value = e.message; }
+    }
+    async function logout() { try { await A.api('/api/logout',{method:'POST'}); } catch(e){} resetAuth(); location.href='/'; }
+    onMounted(async()=>{ try { await afterLogin(); } catch(e){ logged.value=false; } });
+    return { logged,checking,me,mustChange,version,users,query,filter,showPwd,loadErr,admins,visible,membersOf,totalMembers,disabledAdmins,noData,ready,status,time,load,afterLogin,logout };
+  },
+  template: `
+  <div>
+    <AppSidebar :user="logged ? me.user : ''" :system="me.system" :workspace="me.dataScope" />
+    <AppHeader title="管理员与工作区" :version="version" :user="me.user" :role="me.role" :system="me.system" :workspace="me.dataScope" :workspace-meta="version" refresh :links="[]" @refresh="load" @logout="logout" @password="showPwd=true" />
+    <main>
+      <template v-if="checking"><div class="gate"><p class="muted">正在读取工作区…</p></div></template>
+      <template v-else-if="!logged"><LoginGate msg="只有总管理员可以管理管理员与工作区。" @login="afterLogin" /></template>
+      <template v-else-if="!me.system"><div class="gate"><h2>没有访问权限</h2><p>该页面只对总管理员开放。</p><a href="/admin/overview">返回工作区总览</a></div></template>
+      <template v-else>
+        <div class="ws-head"><div><h2>管理员与工作区</h2><p>从元数据层面查看各管理员的价格表、成员和账号状态，不显示其他工作区价格内容。</p></div><span class="grow"></span><a class="tb" href="/admin/users?tab=admins">新增或管理管理员</a></div>
+        <div class="ws-summary">
+          <div class="ws-stat"><span>管理员工作区</span><b>{{ admins.length }}</b></div>
+          <div class="ws-stat"><span>运行正常</span><b>{{ ready }}</b></div>
+          <div class="ws-stat"><span>普通用户</span><b>{{ totalMembers }}</b></div>
+          <div class="ws-stat"><span>停用 / 未导入</span><b>{{ disabledAdmins }} / {{ noData }}</b></div>
+        </div>
+        <div class="ws-tools">
+          <input v-model="query" type="search" placeholder="搜索管理员或工作区…">
+          <select v-model="filter"><option value="all">全部状态</option><option value="ready">运行正常</option><option value="nodata">未导入价格表</option><option value="disabled">已停用</option></select>
+          <span class="muted">显示 {{ visible.length }} / {{ admins.length }}</span><span class="err" v-if="loadErr">{{ loadErr }}</span>
+        </div>
+        <div class="tablewrap" v-if="visible.length">
+          <table class="ws-table"><thead><tr><th>管理员 / 工作区</th><th>状态</th><th>价格表</th><th class="num">成员</th><th>最后登录</th><th>账号管理</th></tr></thead>
+          <tbody><tr v-for="a in visible" :key="a.username">
+            <td><div class="ws-name"><span class="avatar">{{ a.username.charAt(0).toUpperCase() }}</span><span><b>{{ a.username }}</b><small>{{ a.system ? '总管理员工作区' : '独立工作区' }}</small></span></div></td>
+            <td><span class="ws-status" :class="status(a).cls"><i></i>{{ status(a).text }}</span></td>
+            <td><b>{{ a.hasData ? 'v'+a.rev : '—' }}</b><br><small class="muted">{{ a.tiers || 0 }} 条费率</small></td>
+            <td class="num">{{ membersOf(a.username) }}</td>
+            <td>{{ time(a.lastLoginAt) }}</td>
+            <td><a class="tb" :href="'/admin/users?tab=admins&q='+encodeURIComponent(a.username)">管理账号</a></td>
+          </tr></tbody></table>
+        </div>
+        <div class="ws-empty" v-else>没有符合条件的管理员工作区</div>
+      </template>
+    </main>
+    <PasswordModal :show="showPwd || mustChange" :required="mustChange" @close="showPwd=false" />
+  </div>`,
+}).mount('#root');
+</script>
+</body>
+</html>

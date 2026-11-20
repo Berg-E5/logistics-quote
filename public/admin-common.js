@@ -12,7 +12,9 @@
 (function (global) {
   'use strict';
 
-  const { createApp, ref, reactive, computed, watch, onMounted, nextTick } = global.Vue;
+  const {
+    createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick,
+  } = global.Vue;
 
   /* ---------------------------------------------------------------- API */
   async function api(path, opts) {
@@ -183,7 +185,127 @@
     return { logged, checking, me, mustChange, afterLogin, reset };
   }
 
+  /* ----------------------------------------------------- 全局提示 / 确认 */
+  const toastItems = ref([]);
+  const confirmState = ref(null);
+  let toastSeq = 0;
+  function notify(message, type) {
+    const id = ++toastSeq;
+    toastItems.value.push({ id, message: String(message), type: type || 'info' });
+    setTimeout(() => {
+      toastItems.value = toastItems.value.filter(t => t.id !== id);
+    }, 3200);
+  }
+  function confirmAction(options) {
+    const opts = typeof options === 'string' ? { message: options } : (options || {});
+    return new Promise(resolve => {
+      confirmState.value = {
+        title: opts.title || '请确认',
+        message: opts.message || '',
+        confirmText: opts.confirmText || '确认',
+        cancelText: opts.cancelText || '取消',
+        danger: opts.danger === true,
+        resolve,
+      };
+    });
+  }
+  function settleConfirm(value) {
+    const current = confirmState.value;
+    confirmState.value = null;
+    if (current) current.resolve(value);
+  }
+  const DialogHost = {
+    setup() {
+      return { toastItems, confirmState, settleConfirm };
+    },
+    template: `
+      <div>
+        <div class="toaststack" aria-live="polite">
+          <div v-for="t in toastItems" :key="t.id" class="toastitem" :class="t.type">
+            <span class="toastdot"></span><span>{{ t.message }}</span>
+          </div>
+        </div>
+        <div class="modal" v-if="confirmState" @click.self="settleConfirm(false)">
+          <div class="mbox askbox" role="dialog" aria-modal="true">
+            <h3>{{ confirmState.title }}</h3>
+            <p class="muted">{{ confirmState.message }}</p>
+            <div class="row">
+              <button @click="settleConfirm(false)">{{ confirmState.cancelText }}</button>
+              <button class="primary" :class="{danger: confirmState.danger}"
+                      @click="settleConfirm(true)">{{ confirmState.confirmText }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+  };
+
   /* ------------------------------------------------------------ 组件们 */
+
+  /** 服务端工作台左侧导航。只在登录后渲染，登录页保持简洁。 */
+  const AppSidebar = {
+    props: {
+      user: { type: String, default: '' },
+      system: { type: Boolean, default: false },
+      workspace: { type: String, default: '' },
+    },
+    setup(props) {
+      const links = computed(() => {
+        const list = [
+          { href: '/admin/overview', text: '工作区总览', sym: '◇' },
+          { href: '/admin', text: '价格表管理', sym: '▤' },
+          { href: '/admin/import', text: '导入中心', sym: '⇧' },
+          { href: '/admin/users', text: '成员管理', sym: '◎' },
+          { href: '/admin/changes', text: '改动记录', sym: '≋' },
+        ];
+        if (props.system) {
+          list.splice(1, 0, { href: '/admin/workspaces', text: '管理员与工作区', sym: '▦' });
+          list.push({ href: '/admin/security', text: '登录与安全', sym: '⊘' });
+        }
+        return list;
+      });
+      const here = ref('');
+      function syncShell() {
+        document.body.classList.toggle('admin-shell', !!props.user);
+      }
+      watch(() => props.user, syncShell);
+      onMounted(() => {
+        syncShell();
+        here.value = location.pathname.replace(/\/$/, '');
+      });
+      onUnmounted(() => {
+        document.body.classList.remove('admin-shell');
+      });
+      return { links, here };
+    },
+    template: `
+      <aside class="appsidebar" v-if="user">
+        <a class="sb-brand" href="/admin/overview" aria-label="物流报价工作台">
+          <span class="sb-logo"><i></i><i></i><i></i><i></i></span>
+          <span><b>物流报价</b><small>MANAGEMENT CONSOLE</small></span>
+        </a>
+        <div class="sb-workspace">
+          <span>当前工作区</span>
+          <b>{{ workspace || user }}</b>
+          <small>{{ system ? '总管理员' : '管理员' }}</small>
+        </div>
+        <nav class="sb-nav" aria-label="后台管理">
+          <a v-for="l in links" :key="l.href" :href="l.href"
+             :class="{on: here === l.href.replace(/\\/$/, '')}">
+            <span class="sb-sym" aria-hidden="true">{{ l.sym }}</span>
+            <span>{{ l.text }}</span>
+          </a>
+        </nav>
+        <div class="sb-bottom">
+          <a href="/"><span class="sb-sym">↗</span><span>打开前台报价</span></a>
+          <div class="sb-user">
+            <span class="avatar">{{ user.charAt(0) }}</span>
+            <span><b>{{ user }}</b><small>{{ system ? '总管理员' : '管理员' }}</small></span>
+          </div>
+        </div>
+      </aside>
+    `,
+  };
 
   /** 页头: 标题 + 版本 + 右侧操作 + 用户菜单 */
   const AppHeader = {
@@ -428,8 +550,9 @@
 
   /* --------------------------------------------------------------- 导出 */
   global.QuoteAdmin = {
-    api, esc, fmtTime, fmtMoney, fmtTimeAgo, usePaging, useAuth,
-    AppHeader, LoginGate, Pager, PasswordModal,
+    api, esc, fmtTime, fmtMoney, fmtTimeAgo, usePaging, useAuth, notify, confirmAction,
+    DialogHost,
+    AppSidebar, AppHeader, LoginGate, Pager, PasswordModal,
     createApp,
   };
 })(window);

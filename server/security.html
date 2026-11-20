@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录与安全 · 物流报价</title>
+<link rel="stylesheet" href="/ui-common.css"><link rel="stylesheet" href="/admin-common.css">
+<style>
+  .sec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-bottom:14px}
+  .sec-card{padding:15px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  .sec-card span{color:var(--muted);font-size:11px}.sec-card b{display:block;margin-top:3px;font:620 23px var(--mono)}
+  .sec-grid .warn b{color:var(--warn)}.sec-grid .bad b{color:var(--bad)}
+  .sec-split{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}
+  .sec-panel{border:1px solid var(--line);border-radius:11px;background:var(--panel);overflow:hidden}
+  .sec-ph{display:flex;align-items:center;padding:13px 15px;border-bottom:1px solid var(--line)}.sec-ph h3{margin:0;font-size:13.5px}.sec-ph span{margin-left:auto;color:var(--muted);font-size:11.5px}
+  .sec-panel .tablewrap{border:0;border-radius:0;max-height:410px}
+  @media(max-width:1100px){.sec-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sec-split{grid-template-columns:1fr}}
+</style>
+<script>(function(){try{var v=localStorage.getItem('quote.theme');if(v!=='light'&&v!=='dark')v='auto';document.documentElement.setAttribute('data-theme',v);var d=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme-effective',v==='auto'?(d?'dark':'light'):v)}catch(e){}})();</script>
+</head>
+<body><div id="root"></div><script src="/vue.global.prod.js"></script><script src="/admin-common.js"></script><script>
+const A=window.QuoteAdmin;const{createApp,ref,computed,onMounted}=Vue;
+createApp({components:{AppSidebar:A.AppSidebar,AppHeader:A.AppHeader,LoginGate:A.LoginGate,PasswordModal:A.PasswordModal,DialogHost:A.DialogHost},setup(){
+  const{logged,checking,me,mustChange,afterLogin,reset:resetAuth}=A.useAuth(async()=>load());
+  const version=ref(''),users=ref([]),locks=ref([]),showPwd=ref(false),err=ref('');
+  const disabled=computed(()=>users.value.filter(u=>u.disabled).length);
+  const temp=computed(()=>users.value.filter(u=>u.mustChangePassword).length);
+  const systemCount=computed(()=>users.value.filter(u=>u.system).length);
+  async function load(){err.value='';try{const[v,u,l]=await Promise.all([A.api('/api/version'),A.api('/api/users'),A.api('/api/rate-locks')]);version.value='价格表 v'+v.rev;users.value=u.users||[];locks.value=l.locks||[]}catch(e){err.value=e.message}}
+  async function unlock(ip){if(!await A.confirmAction({title:'解封 IP',message:'确定解封 '+ip+' 吗？',confirmText:'解封'}))return;try{await A.api('/api/rate-locks/'+encodeURIComponent(ip),{method:'DELETE'});await load();A.notify('已解封 '+ip,'ok')}catch(e){err.value=e.message}}
+  async function unlockAll(){if(!await A.confirmAction({title:'全部解封',message:'确定解封全部 IP 吗？',confirmText:'全部解封'}))return;try{await A.api('/api/rate-locks',{method:'DELETE'});await load();A.notify('已解封全部 IP','ok')}catch(e){err.value=e.message}}
+  async function logout(){try{await A.api('/api/logout',{method:'POST'})}catch(e){}resetAuth();location.href='/'}
+  function remain(s){const m=Math.floor(s/60);return m?m+' 分 '+(s%60)+' 秒':s+' 秒'}
+  onMounted(async()=>{try{await afterLogin()}catch(e){logged.value=false}});
+  return{logged,checking,me,mustChange,version,users,locks,showPwd,err,disabled,temp,systemCount,load,unlock,unlockAll,remain,afterLogin,logout};
+},template:`
+<div><AppSidebar :user="logged?me.user:''" :system="me.system" :workspace="me.dataScope"/>
+<AppHeader title="登录与安全" :version="version" :user="me.user" :role="me.role" :system="me.system" :workspace="me.dataScope" :workspace-meta="version" refresh :links="[]" @refresh="load" @logout="logout" @password="showPwd=true"/>
+<main>
+<template v-if="checking"><div class="gate"><p class="muted">正在检查安全状态…</p></div></template>
+<template v-else-if="!logged"><LoginGate msg="只有总管理员可以查看登录与安全。" @login="afterLogin"/></template>
+<template v-else-if="!me.system"><div class="gate"><h2>没有访问权限</h2><p>该页面只对总管理员开放。</p><a href="/admin/overview">返回工作区总览</a></div></template>
+<template v-else>
+  <div class="sec-grid">
+    <div class="sec-card"><span>账号总数</span><b>{{ users.length }}</b></div>
+    <div class="sec-card warn"><span>待首次改密</span><b>{{ temp }}</b></div>
+    <div class="sec-card bad"><span>停用 / IP 锁定</span><b>{{ disabled }} / {{ locks.length }}</b></div>
+  </div>
+  <div class="sec-split">
+    <section class="sec-panel"><div class="sec-ph"><h3>账号安全状态</h3><span>全站账号</span></div>
+      <div class="tablewrap"><table><thead><tr><th>账号</th><th>角色</th><th>状态</th><th>最后登录</th></tr></thead><tbody>
+      <tr v-for="u in users" :key="u.username"><td><b>{{ u.username }}</b></td><td>{{ u.system?'总管理员':(u.role==='admin'?'管理员':'普通用户') }}</td><td><span class="err" v-if="u.disabled">已停用</span><span style="color:var(--warn)" v-else-if="u.mustChangePassword">待改密</span><span class="ok" v-else>正常</span></td><td>{{ u.lastLoginAt?new Date(u.lastLoginAt).toLocaleString('zh-CN'):'从未登录' }}</td></tr>
+      </tbody></table></div>
+    </section>
+    <section class="sec-panel"><div class="sec-ph"><h3>登录失败锁定</h3><button @click="unlockAll">全部解封</button></div>
+      <div class="tablewrap" v-if="locks.length"><table><thead><tr><th>IP</th><th>原因</th><th>剩余</th><th>操作</th></tr></thead><tbody>
+      <tr v-for="l in locks" :key="l.ip"><td><code>{{ l.ip }}</code></td><td>{{ l.kind==='login'?'登录失败':'注册频繁' }}</td><td>{{ remain(l.remainSec) }}</td><td><button @click="unlock(l.ip)">解封</button></td></tr>
+      </tbody></table></div><div class="empty" v-else>当前没有被锁定的 IP</div>
+    </section>
+  </div>
+  <div class="err">{{ err }}</div>
+</template></main><PasswordModal :show="showPwd||mustChange" :required="mustChange" @close="showPwd=false"/><DialogHost/></div>`
+}).mount('#root');
+</script></body></html>

@@ -67,9 +67,9 @@ test('首次启动支持本机管理员和中央服务器两种模式', () => {
 test('后台和桌面菜单都提供前台报价入口', () => {
   assert.match(main, /label: '前台报价'/);
   const adminCommon = fs.readFileSync(path.join(root, 'public', 'admin-common.js'), 'utf8');
-  assert.match(adminCommon, /href="\/"><span>前台报价/);
+  assert.match(adminCommon, /href="\/"><span class="sb-sym">↗<\/span><span>打开前台报价/);
   for (const file of ['admin.html', 'changes.html', 'users.html']) {
     const html = fs.readFileSync(path.join(root, 'server', file), 'utf8');
-    assert.match(html, /href:'\/', text:'前台报价'/);
+    assert.match(html, /<AppSidebar/);
   }
 });

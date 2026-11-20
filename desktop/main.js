@@ -622,9 +622,9 @@ function installMenu() {
           click: () => { if (mainWindow) mainWindow.loadURL(baseUrl + '/'); },
         },
         {
-          label: '后台管理',
+          label: '管理工作台',
           accelerator: 'CmdOrCtrl+2',
-          click: () => { if (mainWindow) mainWindow.loadURL(baseUrl + '/admin'); },
+          click: () => { if (mainWindow) mainWindow.loadURL(baseUrl + '/admin/overview'); },
         },
         { type: 'separator' },
         { label: '打开数据目录', click: () => shell.openPath(dataDir()) },

@@ -114,7 +114,7 @@ async function getJson(base, pathname, cookie) {
   return responseJson(res);
 }
 
-async function submitImport(base, cookie, marker, delay) {
+async function submitImport(base, cookie, marker, delay, preview = false) {
   // 前四个字节是 zip 魔数；假管道从第 5 个字节开始读取标记和延时。
   const file = Buffer.concat([
     Buffer.from([0x50, 0x4b, 0x03, 0x04]),
@@ -123,7 +123,11 @@ async function submitImport(base, cookie, marker, delay) {
   const res = await fetch(base + '/api/import-file', {
     method: 'POST',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: marker + '.xlsx', data: file.toString('base64') }),
+    body: JSON.stringify({
+      filename: marker + '.xlsx',
+      data: file.toString('base64'),
+      preview,
+    }),
   });
   return responseJson(res);
 }
@@ -137,6 +141,17 @@ async function waitImport(base, cookie) {
     await sleep(50);
   }
   throw new Error('导入没有在 10 秒内完成');
+}
+
+async function waitPreview(base, cookie) {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    const job = await getJson(base, '/api/import-status', cookie);
+    if (job.state === 'preview') return job;
+    if (job.state === 'failed') throw new Error(job.error || '预览失败');
+    await sleep(50);
+  }
+  throw new Error('导入预览没有在 10 秒内完成');
 }
 
 test('总管理员、租户管理员和普通用户严格隔离', { timeout: 30000 }, async t => {
@@ -239,6 +254,21 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   assert.equal(dataA.mine, false);
   assert.equal(dataB.mine, false);
 
+  // 导入预览阶段不能改现有价格，确认发布后才生效。
+  await submitImport(base, cookieAdminA, 'C', '0.1', true);
+  const preview = await waitPreview(base, cookieAdminA);
+  assert.equal(preview.result.preview, true);
+  assert.equal(preview.result.report.counts.changed, 1);
+  const beforeCommit = await getJson(base, '/api/data', cookieA);
+  assert.equal(beforeCommit.data.tiers[0].price, 111);
+  const committed = await responseJson(await fetch(base + '/api/import-commit', {
+    method: 'POST',
+    headers: { Cookie: cookieAdminA },
+  }));
+  assert.equal(committed.confirmed, true);
+  const afterCommit = await getJson(base, '/api/data', cookieA);
+  assert.equal(afterCommit.data.tiers[0].price, 333);
+
   const allUsers = await getJson(base, '/api/users', adminCookie);
   assert.equal(allUsers.system, true);
   assert.deepEqual(
@@ -254,6 +284,17 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   assert.equal(userARecord.shared, true);
   assert.equal(userARecord.tiers, 1);
   assert.equal(userARecord.ownerAdmin, 'adminA');
+
+  for (const page of ['/admin/overview', '/admin/import', '/admin/users', '/admin/changes']) {
+    const res = await fetch(base + page, { headers: { Cookie: cookieAdminA } });
+    assert.equal(res.status, 200, page);
+    assert.match(await res.text(), /AppSidebar/, page);
+  }
+  for (const page of ['/admin/workspaces', '/admin/security']) {
+    const res = await fetch(base + page, { headers: { Cookie: adminCookie } });
+    assert.equal(res.status, 200, page);
+    assert.match(await res.text(), /AppSidebar/, page);
+  }
 
   const deniedCreateAdmin = await fetch(base + '/api/users', {
     method: 'POST',

@@ -98,7 +98,7 @@ const money = v => (v === null || v === undefined || v === '') ? '–' : Number(
 
 createApp({
   components: {
-    AppHeader: A.AppHeader, LoginGate: A.LoginGate,
+    AppSidebar: A.AppSidebar, AppHeader: A.AppHeader, LoginGate: A.LoginGate,
     Pager: A.Pager, PasswordModal: A.PasswordModal,
   },
   setup() {
@@ -326,6 +326,11 @@ createApp({
   },
   template: `
     <div>
+      <AppSidebar
+        :user="logged ? me.user : ''"
+        :system="me.system"
+        :workspace="me.dataScope"
+      />
       <AppHeader
         title="改动记录"
         :version="version"
@@ -335,7 +340,7 @@ createApp({
         :workspace="me.dataScope"
         :workspace-meta="version"
         refresh
-        :links="[{href:'/', text:'前台报价'}, {href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
+        :links="[]"
         @logout="logout"
         @password="showPwd = true"
         @refresh="onRefresh"

@@ -19,6 +19,90 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body.admin-shell { padding-left: 216px; }
+body.admin-shell header { z-index: 30; }
+
+/* ---------------- 工作台侧栏 ---------------- */
+.appsidebar {
+  position: fixed; inset: 0 auto 0 0; width: 216px; z-index: 40;
+  display: flex; flex-direction: column; padding: 16px 13px;
+  background:
+    radial-gradient(circle at 15% 0, var(--accentdim), transparent 210px),
+    linear-gradient(180deg, var(--panel), var(--bg));
+  border-right: 1px solid var(--line-2);
+  box-shadow: 12px 0 34px -30px var(--shadow-deep);
+}
+.sb-brand {
+  display: flex; align-items: center; gap: 10px; color: var(--fg);
+  text-decoration: none; padding: 4px 7px 16px;
+}
+.sb-brand b { display: block; font-size: 14px; letter-spacing: -.2px; }
+.sb-brand small {
+  display: block; color: var(--dim); font-size: 8px; letter-spacing: .13em;
+  white-space: nowrap; margin-top: 1px;
+}
+.sb-logo {
+  width: 30px; height: 30px; display: grid; grid-template: 1fr 1fr / 1fr 1fr;
+  gap: 3px; padding: 5px; border-radius: 9px; background: var(--panel-3);
+  border: 1px solid var(--line2);
+}
+.sb-logo i { background: var(--line-3); border-radius: 1px; }
+.sb-logo i:nth-child(2) { background: var(--accent); }
+.sb-logo i:nth-child(3) { background: var(--accenthi); opacity: .55; }
+.sb-workspace {
+  padding: 11px 12px; margin: 0 3px 15px; border-radius: 10px;
+  border: 1px solid var(--line2); background: var(--ov-2);
+}
+.sb-workspace span { display: block; color: var(--dim); font-size: 9.5px; }
+.sb-workspace b {
+  display: block; margin-top: 3px; color: var(--fg); font: 590 13px/1.35 var(--mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sb-workspace small { color: var(--accenthi); font-size: 10.5px; }
+.sb-nav { display: flex; flex-direction: column; gap: 3px; }
+.sb-nav a, .sb-bottom a {
+  display: flex; align-items: center; gap: 10px; min-height: 38px;
+  padding: 8px 10px; border-radius: 8px; color: var(--muted);
+  text-decoration: none; font-size: 12.5px; font-weight: 510;
+  border: 1px solid transparent;
+}
+.sb-nav a:hover, .sb-bottom a:hover { color: var(--fg); background: var(--ov-3); }
+.sb-nav a.on {
+  color: var(--fg); background: var(--accentdim); border-color: var(--line2);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.sb-sym {
+  width: 22px; height: 22px; display: inline-grid; place-items: center;
+  border-radius: 6px; background: var(--ov-3); color: var(--fg2); font-size: 12px;
+}
+.sb-nav a.on .sb-sym { color: var(--accenthi); background: var(--accentdim); }
+.sb-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 9px; }
+.sb-user {
+  display: flex; align-items: center; gap: 9px; padding: 10px;
+  border-top: 1px solid var(--line); margin-top: 3px;
+}
+.sb-user .avatar {
+  width: 28px; height: 28px; display: grid; place-items: center; flex: none;
+  border-radius: 8px; background: var(--accent); color: var(--on-accent);
+  font-weight: 700; font-size: 12px;
+}
+.sb-user b { display: block; color: var(--fg); font-size: 12px; }
+.sb-user small { display: block; color: var(--muted); font-size: 10px; }
+
+@media (max-width: 1280px) {
+  body.admin-shell { padding-left: 188px; }
+  .appsidebar { width: 188px; padding-left: 10px; padding-right: 10px; }
+  .sb-brand small { display: none; }
+}
+@media (max-width: 980px) {
+  body.admin-shell { padding-left: 0; }
+  .appsidebar { position: static; width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .sb-workspace { margin-bottom: 8px; }
+  .sb-nav { flex-direction: row; flex-wrap: wrap; }
+  .sb-bottom { flex-direction: row; margin-top: 0; margin-left: auto; }
+  .sb-user { border-top: 0; }
+}
+
 /* ---------------- 页头 ---------------- */
 header {
   position: sticky; top: 0; z-index: 10;
@@ -192,6 +276,22 @@ td.num { font-variant-numeric: tabular-nums; }
 }
 
 /* ---------------- 弹窗 ---------------- */
+.toaststack {
+  position: fixed; right: 18px; bottom: 18px; z-index: 180;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.toastitem {
+  min-width: 250px; max-width: 420px; display: flex; align-items: center; gap: 9px;
+  padding: 11px 14px; border-radius: 9px; border: 1px solid var(--line2);
+  background: var(--panel); color: var(--fg2); font-size: 12.5px;
+  box-shadow: 0 18px 45px -25px var(--shadow-deep);
+}
+.toastdot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.toastitem.error .toastdot { background: var(--bad); }
+.toastitem.ok .toastdot { background: var(--good); }
+.askbox { max-width: 440px; }
+.askbox p { margin: 0 0 16px; font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; }
+.askbox button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
 .modal {
   position: fixed; inset: 0; background: var(--scrim); z-index: 100;
   display: flex; align-items: center; justify-content: center; padding: 20px;

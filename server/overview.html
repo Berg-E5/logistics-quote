@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作区总览 · 物流报价</title>
+<link rel="stylesheet" href="/ui-common.css">
+<link rel="stylesheet" href="/admin-common.css">
+<style>
+  .ov-page { display: flex; flex-direction: column; gap: 14px; }
+  .ov-hero {
+    position: relative; overflow: hidden; padding: 22px 24px;
+    border: 1px solid var(--line-2); border-radius: 12px;
+    background:
+      radial-gradient(circle at 92% 10%, var(--accentdim), transparent 260px),
+      linear-gradient(135deg, var(--panel), var(--panel-2));
+    box-shadow: 0 20px 45px -38px var(--shadow-deep);
+  }
+  .ov-hero h2 { margin: 0 0 5px; font-size: 22px; letter-spacing: -.4px; }
+  .ov-hero p { margin: 0; color: var(--muted); font-size: 13px; max-width: 720px; }
+  .ov-hero-row { display: flex; align-items: flex-end; gap: 18px; }
+  .ov-hero-main { flex: 1; min-width: 0; }
+  .ov-quick { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ov-quick a {
+    text-decoration: none; color: var(--fg2); border: 1px solid var(--line2);
+    background: var(--panel-3); border-radius: 8px; padding: 8px 11px;
+    font-size: 12px; font-weight: 510;
+  }
+  .ov-quick a:hover { color: var(--fg); border-color: var(--accent); background: var(--accentdim); }
+  .ov-quick a.primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+  .ov-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
+  .ov-card {
+    padding: 15px 16px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); box-shadow: inset 0 1px 0 var(--ov-4);
+  }
+  .ov-card .k { color: var(--muted); font-size: 11px; }
+  .ov-card .v {
+    display: block; margin-top: 5px; color: var(--fg);
+    font: 620 23px/1.15 var(--mono); font-variant-numeric: tabular-nums;
+  }
+  .ov-card .s { display: block; color: var(--dim); font-size: 11px; margin-top: 5px; }
+  .ov-card.good .v { color: var(--good); }
+  .ov-card.warn .v { color: var(--warn); }
+  .ov-split { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; }
+  .ov-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+  .ov-ph { display: flex; align-items: center; gap: 10px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+  .ov-ph h3 { margin: 0; font-size: 13.5px; }
+  .ov-ph span { color: var(--muted); font-size: 11.5px; }
+  .ov-ph a { margin-left: auto; font-size: 12px; color: var(--accenthi); text-decoration: none; }
+  .ov-body { padding: 13px 15px; }
+  .health-list { display: flex; flex-direction: column; gap: 9px; }
+  .health-item { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
+  .health-dot.bad { background: var(--bad); }
+  .health-item b { margin-left: auto; color: var(--fg2); font-weight: 590; }
+  .activity { display: flex; flex-direction: column; }
+  .activity-row { display: grid; grid-template-columns: 76px 1fr auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .activity-row:last-child { border-bottom: 0; }
+  .activity-row time { color: var(--dim); font: 10.5px var(--mono); }
+  .activity-row .who { color: var(--muted); font-size: 11px; }
+  .activity-row .kind { color: var(--accenthi); }
+  .tenant-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+  .tenant-mini { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+  .tenant-mini b { display: block; font-family: var(--mono); font-size: 12.5px; }
+  .tenant-mini span { color: var(--muted); font-size: 11px; }
+  @media (max-width: 1180px) {
+    .ov-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .ov-split { grid-template-columns: 1fr; }
+    .tenant-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  }
+</style>
+<script>
+(function () {
+  try {
+    var v = localStorage.getItem('quote.theme');
+    if (v !== 'light' && v !== 'dark') v = 'auto';
+    document.documentElement.setAttribute('data-theme', v);
+    var dark = !matchMedia('(prefers-color-scheme: dark)').matches ? false : true;
+    document.documentElement.setAttribute('data-theme-effective', v === 'auto' ? (dark ? 'dark' : 'light') : v);
+  } catch (e) {}
+})();
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script src="/vue.global.prod.js"></script>
+<script src="/admin-common.js"></script>
+<script>
+const A = window.QuoteAdmin;
+const { createApp, ref, computed, onMounted } = Vue;
+
+createApp({
+  components: {
+    AppSidebar: A.AppSidebar,
+    AppHeader: A.AppHeader,
+    LoginGate: A.LoginGate,
+    PasswordModal: A.PasswordModal,
+  },
+  setup() {
+    const { logged, checking, me, mustChange, afterLogin, reset: resetAuth } =
+      A.useAuth(async () => { await loadAll(); });
+    const version = ref('读取中…');
+    const data = ref(null);
+    const users = ref([]);
+    const changes = ref([]);
+    const showPwd = ref(false);
+    const loadErr = ref('');
+
+    const isSystem = computed(() => !!me.value.system);
+    const channels = computed(() => new Set((data.value?.tiers || []).map(t => t.sheet)).size);
+    const countries = computed(() => new Set((data.value?.tiers || []).map(t => t.country)).size);
+    const tiers = computed(() => (data.value?.tiers || []).length);
+    const members = computed(() => users.value.filter(u => u.role === 'user').length);
+    const admins = computed(() => users.value.filter(u => u.role === 'admin').length);
+    const disabled = computed(() => users.value.filter(u => u.disabled).length);
+    const waitingPassword = computed(() => users.value.filter(u => u.mustChangePassword).length);
+    const noDataAdmins = computed(() => users.value.filter(u => u.role === 'admin' && !u.hasData));
+    const recentAdmins = computed(() => users.value.filter(u => u.role === 'admin').slice(0, 6));
+    const greeting = computed(() => {
+      const h = new Date().getHours();
+      return h < 12 ? '上午好' : h < 18 ? '下午好' : '晚上好';
+    });
+    const updatedAt = computed(() => data.value?.updatedAt
+      ? new Date(data.value.updatedAt).toLocaleString('zh-CN') : '尚未导入');
+    const dataHealth = computed(() => [
+      { label: '价格表已导入', ok: tiers.value > 0, value: tiers.value > 0 ? `${tiers.value} 条` : '未导入' },
+      { label: '渠道数据可用', ok: channels.value > 0, value: `${channels.value} 个渠道` },
+      { label: '国家覆盖', ok: countries.value > 0, value: `${countries.value} 个国家和地区` },
+      { label: '成员账号', ok: members.value > 0, value: `${members.value} 个普通用户` },
+    ]);
+
+    function kindCn(kind) {
+      return ({ update: '改价', add: '新增', import: '整表导入', lock: '锁定', unlock: '解锁', del: '删除' })[kind] || kind || '变更';
+    }
+    function timeShort(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function loadAll() {
+      loadErr.value = '';
+      const results = await Promise.allSettled([
+        A.api('/api/version'),
+        A.api('/api/data'),
+        A.api('/api/users'),
+        A.api('/api/changes?limit=8&offset=0'),
+      ]);
+      if (results[0].status === 'fulfilled') {
+        const v = results[0].value;
+        version.value = `价格表 v${v.rev}${v.updatedAt ? ' · ' + new Date(v.updatedAt).toLocaleString('zh-CN') : ''}`;
+      }
+      if (results[1].status === 'fulfilled') data.value = results[1].value.data;
+      else data.value = null;
+      if (results[2].status === 'fulfilled') users.value = results[2].value.users || [];
+      else loadErr.value = results[2].reason?.message || '账号状态读取失败';
+      if (results[3].status === 'fulfilled') changes.value = results[3].value.changes || [];
+    }
+
+    async function logout() {
+      try { await A.api('/api/logout', { method: 'POST' }); } catch (e) {}
+      resetAuth();
+      location.href = '/';
+    }
+
+    onMounted(async () => {
+      try { await afterLogin(); }
+      catch (e) { logged.value = false; }
+    });
+
+    return {
+      logged, checking, me, mustChange, version, data, users, changes, showPwd, loadErr,
+      isSystem, channels, countries, tiers, members, admins, disabled, waitingPassword,
+      noDataAdmins, recentAdmins, greeting, updatedAt, dataHealth,
+      kindCn, timeShort, loadAll, afterLogin, logout,
+    };
+  },
+  template: `
+    <div>
+      <AppSidebar :user="logged ? me.user : ''" :system="me.system" :workspace="me.dataScope" />
+      <AppHeader
+        title="工作区总览"
+        :version="version"
+        :user="me.user"
+        :role="me.role"
+        :system="me.system"
+        :workspace="me.dataScope"
+        :workspace-meta="version"
+        refresh
+        :links="[]"
+        @refresh="loadAll"
+        @logout="logout"
+        @password="showPwd = true"
+      />
+      <main>
+        <template v-if="checking"><div class="gate"><p class="muted">正在读取工作台…</p></div></template>
+        <template v-else-if="!logged"><LoginGate msg="登录后进入报价管理工作台。" @login="afterLogin" /></template>
+        <template v-else>
+          <div class="ov-page">
+            <section class="ov-hero">
+              <div class="ov-hero-row">
+                <div class="ov-hero-main">
+                  <h2>{{ greeting }}，{{ me.user }}</h2>
+                  <p v-if="isSystem">这里是总管理员工作台，可以从元数据层面查看所有管理员工作区，并管理账号与登录安全。</p>
+                  <p v-else>这是「{{ me.dataScope }}」的独立工作区。价格表、成员和改动记录只在本工作区可见。</p>
+                </div>
+                <div class="ov-quick">
+                  <a class="primary" href="/admin/import">导入价格表</a>
+                  <a href="/admin">管理价格表</a>
+                  <a href="/admin/users">成员管理</a>
+                  <a href="/admin/changes">查看改动</a>
+                  <a href="/">前台报价 ↗</a>
+                </div>
+              </div>
+            </section>
+
+            <div class="ov-grid">
+              <div class="ov-card" :class="{good: tiers > 0, warn: tiers === 0}">
+                <span class="k">费率档</span><b class="v">{{ tiers }}</b>
+                <span class="s">{{ data ? '价格表已发布' : '当前工作区还没有价格表' }}</span>
+              </div>
+              <div class="ov-card"><span class="k">渠道 / 国家</span><b class="v">{{ channels }} / {{ countries }}</b><span class="s">当前报价覆盖范围</span></div>
+              <div class="ov-card"><span class="k">普通用户</span><b class="v">{{ members }}</b><span class="s">{{ waitingPassword }} 个待首次改密</span></div>
+              <div class="ov-card" :class="{warn: disabled > 0}">
+                <span class="k">{{ isSystem ? '工作区管理员' : '安全状态' }}</span>
+                <b class="v">{{ isSystem ? admins : (disabled ? disabled : '正常') }}</b>
+                <span class="s">{{ isSystem ? (disabled + ' 个账号停用') : '当前账号与成员状态' }}</span>
+              </div>
+            </div>
+
+            <div class="ov-split">
+              <section class="ov-panel">
+                <div class="ov-ph"><h3>数据健康</h3><span>最近更新 {{ updatedAt }}</span><a href="/admin">进入价格表 →</a></div>
+                <div class="ov-body health-list">
+                  <div class="health-item" v-for="h in dataHealth" :key="h.label">
+                    <i class="health-dot" :class="{bad: !h.ok}"></i><span>{{ h.label }}</span><b>{{ h.value }}</b>
+                  </div>
+                  <div class="err" v-if="loadErr">{{ loadErr }}</div>
+                </div>
+              </section>
+              <section class="ov-panel">
+                <div class="ov-ph"><h3>最近改动</h3><span>当前工作区</span><a href="/admin/changes">全部记录 →</a></div>
+                <div class="ov-body activity" v-if="changes.length">
+                  <div class="activity-row" v-for="c in changes.slice(0,5)" :key="c.id || (c.at + c.label)">
+                    <time>{{ timeShort(c.at) }}</time>
+                    <span><b class="kind">{{ kindCn(c.kind) }}</b> · {{ c.label || c.note || '价格数据' }}</span>
+                    <span class="who">{{ c.by || 'system' }}</span>
+                  </div>
+                </div>
+                <div class="ov-body muted" v-else>还没有改动记录</div>
+              </section>
+            </div>
+
+            <section class="ov-panel" v-if="isSystem">
+              <div class="ov-ph">
+                <h3>管理员工作区</h3><span>仅展示账号和价格表元数据</span>
+                <a href="/admin/workspaces">管理工作区 →</a>
+              </div>
+              <div class="ov-body">
+                <div class="tenant-grid">
+                  <div class="tenant-mini" v-for="a in recentAdmins" :key="a.username">
+                    <b>{{ a.system ? '总管理员' : a.username }}</b>
+                    <span>v{{ a.rev || '—' }} · {{ a.tiers || 0 }} 条 · {{ a.disabled ? '已停用' : '正常' }}</span>
+                  </div>
+                </div>
+                <div class="err" v-if="noDataAdmins.length">{{ noDataAdmins.length }} 个管理员工作区尚未导入价格表</div>
+              </div>
+            </section>
+          </div>
+        </template>
+      </main>
+      <PasswordModal :show="showPwd || mustChange" :required="mustChange" @close="showPwd = false" />
+    </div>
+  `,
+}).mount('#root');
+</script>
+</body>
+</html>

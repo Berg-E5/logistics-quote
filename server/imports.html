@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>导入中心 · 物流报价</title>
+<link rel="stylesheet" href="/ui-common.css"><link rel="stylesheet" href="/admin-common.css">
+<style>
+  .imp-page{display:flex;flex-direction:column;gap:14px}
+  .imp-hero{padding:20px 22px;border:1px solid var(--line-2);border-radius:12px;background:radial-gradient(circle at 90% 0,var(--accentdim),transparent 260px),var(--panel)}
+  .imp-hero h2{margin:0 0 5px;font-size:20px}.imp-hero p{margin:0;color:var(--muted);font-size:12.5px}
+  .drop{margin-top:18px;border:1px dashed var(--line2);border-radius:11px;background:var(--panel2);padding:24px;text-align:center;transition:.15s}
+  .drop.over{border-color:var(--accent);background:var(--accentdim)}
+  .drop b{display:block;font-size:14px;margin-bottom:5px}.drop span{display:block;color:var(--muted);font-size:12px}
+  .drop input{display:none}.dropbtns{display:flex;gap:8px;justify-content:center;margin-top:14px}
+  .imp-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .imp-stat{padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .imp-stat span{color:var(--muted);font-size:11px}.imp-stat b{display:block;margin-top:4px;font:620 24px var(--mono)}
+  .imp-stat.add b{color:var(--good)}.imp-stat.del b{color:var(--bad)}.imp-stat.chg b{color:var(--warn)}
+  .imp-panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .imp-ph{padding:13px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}.imp-ph h3{margin:0;font-size:13.5px}.imp-ph span{color:var(--muted);font-size:11.5px}
+  .imp-actions{margin-left:auto;display:flex;gap:8px}
+  .sheet-row{display:grid;grid-template-columns:1fr repeat(3,72px);gap:10px;padding:8px 15px;border-bottom:1px solid var(--line);font-size:12px}
+  .sheet-row.head{color:var(--muted);font-size:10.5px;background:var(--panel2)}.sheet-row b{text-align:right;font-variant-numeric:tabular-nums}
+  .change-list{max-height:330px;overflow:auto}.change-row{display:grid;grid-template-columns:1fr 110px 110px;gap:10px;padding:8px 15px;border-bottom:1px solid var(--line);font-size:11.5px}
+  .change-row .old{color:var(--muted);text-decoration:line-through}.change-row .new{color:var(--good);font-weight:590}
+  .progress{height:7px;background:var(--panel3);border-radius:4px;overflow:hidden;margin:16px 0 8px}.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accenthi))}
+  .log{font:11px/1.6 var(--mono);color:var(--muted);white-space:pre-wrap;max-height:130px;overflow:auto;background:var(--panel2);padding:10px;border-radius:7px}
+  @media(max-width:1100px){.imp-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<script>(function(){try{var v=localStorage.getItem('quote.theme');if(v!=='light'&&v!=='dark')v='auto';document.documentElement.setAttribute('data-theme',v);var d=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme-effective',v==='auto'?(d?'dark':'light'):v)}catch(e){}})();</script>
+</head>
+<body><div id="root"></div><script src="/vue.global.prod.js"></script><script src="/admin-common.js"></script><script>
+const A=window.QuoteAdmin;const{createApp,ref,computed,onMounted,onUnmounted}=Vue;
+createApp({components:{AppSidebar:A.AppSidebar,AppHeader:A.AppHeader,LoginGate:A.LoginGate,PasswordModal:A.PasswordModal},setup(){
+  const{logged,checking,me,mustChange,afterLogin,reset:resetAuth}=A.useAuth(async()=>loadVersion());
+  const version=ref(''),file=ref(null),drag=ref(false),busy=ref(false),state=ref('idle'),progress=ref(0),step=ref(0),stepTotal=ref(0),result=ref(null),job=ref(null),err=ref(''),showPwd=ref(false);
+  let timer=null;
+  const report=computed(()=>result.value?.report||null);
+  const sheets=computed(()=>Object.entries(report.value?.bySheet||{}).sort((a,b)=>(b[1].changed+b[1].added+b[1].removed)-(a[1].changed+a[1].added+a[1].removed)));
+  const jobLog=computed(()=>((job.value&&job.value.log)||[]).join('\n'));
+  async function loadVersion(){try{const v=await A.api('/api/version');version.value='价格表 v'+v.rev}catch(e){}}
+  function pick(e){const f=e.target.files&&e.target.files[0];if(f){file.value=f;err.value='';state.value='ready'}}
+  function drop(e){drag.value=false;const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f){file.value=f;err.value='';state.value='ready'}}
+  function readBase64(f){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(f)})}
+  async function start(){if(!file.value)return;err.value='';busy.value=true;state.value='uploading';result.value=null;try{const b64=await readBase64(file.value);await A.api('/api/import-file',{method:'POST',body:{filename:file.value.name,data:b64,preview:true}});state.value='running';poll()}catch(e){err.value=e.message;state.value='failed';busy.value=false}}
+  async function poll(){clearTimeout(timer);try{const j=await A.api('/api/import-status');job.value=j;progress.value=j.progress||0;step.value=j.step||0;stepTotal.value=j.stepTotal||0;if(j.state==='preview'){state.value='preview';result.value=j.result;busy.value=false;await loadVersion();return}if(j.state==='failed'){err.value=j.error||'导入失败';state.value='failed';busy.value=false;return}if(j.state==='done'){state.value='done';result.value=j.result;busy.value=false;await loadVersion();return}timer=setTimeout(poll,700)}catch(e){err.value=e.message;state.value='failed';busy.value=false}}
+  async function commit(){busy.value=true;err.value='';try{result.value=await A.api('/api/import-commit',{method:'POST'});state.value='done';version.value='价格表 v'+result.value.rev;file.value=null}catch(e){err.value=e.message}finally{busy.value=false}}
+  async function cancel(){try{await A.api('/api/import-cancel',{method:'POST'})}catch(e){}result.value=null;job.value=null;file.value=null;state.value='idle';progress.value=0}
+  async function logout(){try{await A.api('/api/logout',{method:'POST'})}catch(e){}resetAuth();location.href='/'}
+  onMounted(async()=>{try{await afterLogin()}catch(e){logged.value=false}});onUnmounted(()=>clearTimeout(timer));
+  return{logged,checking,me,mustChange,version,file,drag,busy,state,progress,step,stepTotal,result,job,jobLog,err,showPwd,report,sheets,pick,drop,start,commit,cancel,afterLogin,logout};
+},template:`
+<div><AppSidebar :user="logged?me.user:''" :system="me.system" :workspace="me.dataScope"/>
+<AppHeader title="导入中心" :version="version" :user="me.user" :role="me.role" :system="me.system" :workspace="me.dataScope" :workspace-meta="version" :links="[]" @logout="logout" @password="showPwd=true"/>
+<main>
+<template v-if="checking"><div class="gate"><p class="muted">正在打开导入中心…</p></div></template>
+<template v-else-if="!logged"><LoginGate msg="登录后可以导入当前工作区的价格表。" @login="afterLogin"/></template>
+<template v-else><div class="imp-page">
+  <section class="imp-hero"><h2>先预览，再发布</h2><p>上传 XLSX 后先抽取并展示新增、删除和价格变化；确认无误才写入当前工作区。</p>
+    <div class="drop" :class="{over:drag}" @dragover.prevent="drag=true" @dragleave.prevent="drag=false" @drop.prevent="drop">
+      <b>{{ file ? file.name : '拖入渠道报价 XLSX' }}</b><span>或选择本地文件，最大 40 MB</span>
+      <input id="impFile" ref="fileInput" type="file" accept=".xlsx" @change="pick">
+      <div class="dropbtns"><button @click="$refs.fileInput.click()">选择文件</button><button class="primary" :disabled="busy||!file" @click="start">生成导入预览</button></div>
+    </div>
+    <div v-if="state==='uploading'||state==='running'"><div class="progress"><i :style="{width:Math.max(3,progress)+'%'}"></i></div><p>正在抽取数据 · {{ progress }}% <span v-if="stepTotal">· 步骤 {{ step }}/{{ stepTotal }}</span></p></div>
+    <div class="err">{{ err }}</div>
+  </section>
+  <div class="imp-summary" v-if="report&&state==='preview'">
+    <div class="imp-stat"><span>导入后费率档</span><b>{{ result.tiers }}</b></div>
+    <div class="imp-stat chg"><span>价格变化</span><b>{{ report.counts.changed }}</b></div>
+    <div class="imp-stat add"><span>新增档位</span><b>{{ report.counts.added }}</b></div>
+    <div class="imp-stat del"><span>删除档位</span><b>{{ report.counts.removed }}</b></div>
+  </div>
+  <section class="imp-panel" v-if="report&&state==='preview'">
+    <div class="imp-ph"><h3>发布确认</h3><span>发布前不会修改现有价格表</span><div class="imp-actions"><button @click="cancel">取消预览</button><button class="primary" :disabled="busy" @click="commit">确认发布</button></div></div>
+    <div class="sheet-row head"><span>渠道</span><b>改价</b><b>新增</b><b>删除</b></div>
+    <div class="sheet-row" v-for="[name,c] in sheets" :key="name"><span>{{ name }}</span><b>{{ c.changed }}</b><b>{{ c.added }}</b><b>{{ c.removed }}</b></div>
+  </section>
+  <section class="imp-panel" v-if="report&&report.changed&&report.changed.length">
+    <div class="imp-ph"><h3>价格变化明细</h3><span>显示前 {{ report.changed.length }} 条</span></div>
+    <div class="change-list"><div class="change-row" v-for="(c,i) in report.changed" :key="i"><span>{{ c.label }}</span><span class="old">¥{{ c.oldPrice }}</span><span class="new">¥{{ c.newPrice }}</span></div></div>
+  </section>
+  <section class="imp-panel" v-if="state==='done'"><div class="imp-ph"><h3>导入已发布</h3><span>价格表 v{{ result.rev }}</span><div class="imp-actions"><a class="tb" href="/admin">查看价格表 →</a></div></div><div class="ov-body" style="padding:16px">修改已生效，前台刷新后可看到新报价。</div></section>
+  <section class="imp-panel" v-if="job&&job.log&&job.log.length&&state==='running'"><div class="imp-ph"><h3>处理日志</h3></div><div class="log">{{ jobLog }}</div></section>
+</div></template></main><PasswordModal :show="showPwd||mustChange" :required="mustChange" @close="showPwd=false"/></div>`
+}).mount('#root');
+</script></body></html>

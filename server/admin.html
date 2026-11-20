@@ -346,7 +346,8 @@ const AuthGate = {
 
 createApp({
   components: {
-    AppHeader: A.AppHeader, AuthGate, Pager: A.Pager, PasswordModal: A.PasswordModal,
+    AppSidebar: A.AppSidebar, AppHeader: A.AppHeader, AuthGate,
+    Pager: A.Pager, PasswordModal: A.PasswordModal,
   },
   setup() {
     const { logged, checking, me, mustChange, afterLogin, reset: resetAuth } = A.useAuth(async () => {
@@ -986,8 +987,13 @@ createApp({
   },
   template: `
     <div>
+      <AppSidebar
+        :user="logged ? me.user : ''"
+        :system="me.system"
+        :workspace="me.dataScope"
+      />
       <AppHeader
-        title="报价后台"
+        title="价格表管理"
         :version="version"
         :user="me.user"
         :role="me.role"
@@ -996,7 +1002,7 @@ createApp({
         :workspace-meta="version"
         :badge="chgBadge"
         refresh
-        :links="[{href:'/', text:'前台报价'}, {href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
+        :links="[]"
         @logout="logout"
         @password="showPwd = true"
         @refresh="loadAll"
