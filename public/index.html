@@ -259,6 +259,18 @@
   }
   .gform button.primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
   .gform button.primary:disabled { opacity: .55; cursor: default; }
+  .gnodata {
+    padding: 16px; border-radius: 10px; border: 1px solid var(--line-2);
+    background: var(--panel-2); margin-bottom: 14px;
+  }
+  .gnodata b { display: block; font-size: 14px; color: var(--fg); margin-bottom: 4px; }
+  .gnodata p { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+  .gnodata a {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 34px;
+    padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line2);
+    color: var(--fg2); text-decoration: none; margin: 0 6px 6px 0; font-size: 12px;
+  }
+  .gnodata a.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 590; }
   .gfoot {
     margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
     font-size: 12px; color: var(--muted); line-height: 1.85;
@@ -1189,7 +1201,7 @@
         <div class="dd-user" id="ddUser">—</div>
         <div class="dd-role" id="ddRole">—</div>
       </div>
-      <a class="dd-item" id="adminLink" href="/admin"><span>后台改价</span></a>
+      <a class="dd-item" id="adminLink" href="/admin/overview"><span>管理工作台</span></a>
       <a class="dd-item" id="changesLink" href="/admin/changes"><span>改动记录</span></a>
       <a class="dd-item" id="usersLink" href="/admin/users" style="display:none"><span>用户管理</span></a>
       <div class="dd-sep"></div>
@@ -1224,16 +1236,29 @@
       </ul>
     </div>
     <div class="gform">
-      <div class="gfield">
-        <label for="gUser">用户名</label>
-        <input id="gUser" type="text" autocomplete="username" placeholder="你的账号">
+      <div id="gLoginFields">
+        <div class="gfield">
+          <label for="gUser">用户名</label>
+          <input id="gUser" type="text" autocomplete="username" placeholder="你的账号">
+        </div>
+        <div class="gfield">
+          <label for="gPass">密码</label>
+          <input id="gPass" type="password" autocomplete="current-password" placeholder="密码">
+        </div>
+        <div class="err" id="gErr"></div>
+        <button class="primary" id="gGo">登录</button>
       </div>
-      <div class="gfield">
-        <label for="gPass">密码</label>
-        <input id="gPass" type="password" autocomplete="current-password" placeholder="密码">
+      <div class="gnodata" id="gAdminNoData" hidden>
+        <b>当前工作区尚未导入价格表</b>
+        <p>账号已经登录，但前台没有可计算的渠道数据。</p>
+        <a class="primary" href="/admin/import">去导入价格表</a>
+        <a href="/admin/overview">进入管理工作台</a>
       </div>
-      <div class="err" id="gErr"></div>
-      <button class="primary" id="gGo">登录</button>
+      <div class="gnodata" id="gUserNoData" hidden>
+        <b>所属管理员尚未导入价格表</b>
+        <p>账号登录成功，但当前工作区还没有可用于报价的渠道。</p>
+        <a href="/">刷新页面</a>
+      </div>
       <div class="gfoot">
         账号由管理员创建<br>
         <span class="ghint">请联系所属管理员添加账号。普通用户只能查看所属管理员的价格表。</span>
@@ -1680,9 +1705,16 @@ async function refreshLoginState() {
         const el = $(id);
         if (el) el.style.display = (j.role === 'admin') ? '' : 'none';
       }
+      const noData = !DATA;
+      if ($('gLoginFields')) $('gLoginFields').hidden = noData;
+      if ($('gAdminNoData')) $('gAdminNoData').hidden = !(noData && j.role === 'admin');
+      if ($('gUserNoData')) $('gUserNoData').hidden = !(noData && j.role === 'user');
       if (j.mustChangePassword) openForcePassword(j.user);
       else $('forcepwdmodal').style.display = 'none';
     } else {
+      if ($('gLoginFields')) $('gLoginFields').hidden = false;
+      if ($('gAdminNoData')) $('gAdminNoData').hidden = true;
+      if ($('gUserNoData')) $('gUserNoData').hidden = true;
       menu.style.display = 'none';
       btn.style.display = 'inline-block';
     }

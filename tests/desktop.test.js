@@ -29,6 +29,8 @@ test('桌面端保持渲染进程隔离并保护本机服务', () => {
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /sandbox: true/);
   assert.match(main, /QUOTE_REGISTRATION_OPEN: '0'/);
+  assert.match(main, /autoHideMenuBar: false/);
+  assert.match(main, /setMenuBarVisibility\(true\)/);
 });
 
 test('桌面端不在本地保存管理员明文密码', () => {

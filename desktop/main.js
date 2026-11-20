@@ -562,7 +562,7 @@ function createWindow() {
     title: APP_NAME,
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     backgroundColor: '#0b1220',
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -571,7 +571,7 @@ function createWindow() {
     },
   });
   mainWindow = win;
-  win.setMenuBarVisibility(false);
+  win.setMenuBarVisibility(true);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isAppUrl(url)) win.loadURL(url);
