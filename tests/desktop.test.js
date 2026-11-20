@@ -95,6 +95,8 @@ test('桌面 Python 运行时和依赖都做完整性校验', () => {
   assert.match(prepare, /PythonZipSha256/);
   assert.match(prepare, /--require-hashes/);
   assert.match(prepare, /--only-binary=:all:/);
+  assert.match(prepare, /ZipFile\]::ExtractToDirectory/);
+  assert.doesNotMatch(prepare, /Expand-Archive/);
   assert.match(requirements, /openpyxl==3\.1\.5/);
   assert.match(requirements, /et_xmlfile==2\.0\.0/);
   assert.match(requirements, /defusedxml==0\.7\.1/);
