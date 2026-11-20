@@ -86,13 +86,13 @@ async function responseJson(res) {
   return body;
 }
 
-async function createUser(base, adminCookie, username, password) {
+async function createUser(base, adminCookie, username, password, role = 'user') {
   const res = await fetch(base + '/api/users', {
     method: 'POST',
     headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, role }),
   });
-  await responseJson(res);
+  return responseJson(res);
 }
 
 async function login(base, username, password) {
@@ -139,7 +139,7 @@ async function waitImport(base, cookie) {
   throw new Error('导入没有在 10 秒内完成');
 }
 
-test('管理员维护共享价格表且普通用户只读访问', { timeout: 30000 }, async t => {
+test('总管理员、租户管理员和普通用户严格隔离', { timeout: 30000 }, async t => {
   const repo = path.resolve(__dirname, '..');
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'quote-review-'));
   const scriptsDir = path.join(tempRoot, 'scripts');
@@ -206,26 +206,66 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   await waitForServer(base, () => output);
 
   const adminCookie = await login(base, 'owner', 'ReviewAdmin123');
-  await createUser(base, adminCookie, 'userA', 'ReviewUser123');
-  await createUser(base, adminCookie, 'userB', 'ReviewUser123');
+  const adminA = await createUser(base, adminCookie, 'adminA', 'ReviewAdmin123', 'admin');
+  const adminB = await createUser(base, adminCookie, 'adminB', 'ReviewAdmin123', 'admin');
+  assert.equal(adminA.system, false);
+  assert.equal(adminB.system, false);
+  const cookieAdminA = await login(base, 'adminA', 'ReviewAdmin123');
+  const cookieAdminB = await login(base, 'adminB', 'ReviewAdmin123');
+  await createUser(base, cookieAdminA, 'userA', 'ReviewUser123');
+  await createUser(base, cookieAdminB, 'userB', 'ReviewUser123');
   const cookieA = await login(base, 'userA', 'ReviewUser123');
   const cookieB = await login(base, 'userB', 'ReviewUser123');
 
-  await submitImport(base, adminCookie, 'A', '0.1');
-  await waitImport(base, adminCookie);
+  await Promise.all([
+    submitImport(base, cookieAdminA, 'A', '0.1'),
+    submitImport(base, cookieAdminB, 'B', '0.1'),
+  ]);
+  await Promise.all([
+    waitImport(base, cookieAdminA),
+    waitImport(base, cookieAdminB),
+  ]);
 
   const [dataA, dataB] = await Promise.all([
     getJson(base, '/api/data', cookieA),
     getJson(base, '/api/data', cookieB),
   ]);
   assert.equal(dataA.data.tiers[0].price, 111);
-  assert.equal(dataB.data.tiers[0].price, 111);
-  assert.equal(dataA.scope, 'owner');
-  assert.equal(dataB.scope, 'owner');
-  const sharedUsers = await getJson(base, '/api/users', adminCookie);
-  const userARecord = sharedUsers.users.find(u => u.username === 'userA');
+  assert.equal(dataB.data.tiers[0].price, 222);
+  assert.equal(dataA.scope, 'adminA');
+  assert.equal(dataB.scope, 'adminB');
+  assert.equal(dataA.mine, false);
+  assert.equal(dataB.mine, false);
+
+  const allUsers = await getJson(base, '/api/users', adminCookie);
+  assert.equal(allUsers.system, true);
+  assert.deepEqual(
+    allUsers.users.map(u => u.username).sort(),
+    ['adminA', 'adminB', 'owner', 'userA', 'userB'],
+  );
+  const tenantUsersA = await getJson(base, '/api/users', cookieAdminA);
+  assert.deepEqual(
+    tenantUsersA.users.map(u => u.username).sort(),
+    ['adminA', 'userA'],
+  );
+  const userARecord = tenantUsersA.users.find(u => u.username === 'userA');
   assert.equal(userARecord.shared, true);
   assert.equal(userARecord.tiers, 1);
+  assert.equal(userARecord.ownerAdmin, 'adminA');
+
+  const deniedCreateAdmin = await fetch(base + '/api/users', {
+    method: 'POST',
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'adminC', password: 'ReviewUser123', role: 'admin',
+    }),
+  });
+  assert.equal(deniedCreateAdmin.status, 403);
+  const deniedDeleteB = await fetch(base + '/api/users/userB', {
+    method: 'DELETE',
+    headers: { Cookie: cookieAdminA },
+  });
+  assert.equal(deniedDeleteB.status, 403);
 
   const deniedImport = await fetch(base + '/api/import', {
     method: 'POST',
@@ -262,6 +302,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   }));
   assert.equal(tokenMe.user, 'owner');
   assert.equal(tokenMe.role, 'admin');
+  assert.equal(tokenMe.system, true);
 
   await responseJson(await fetch(base + '/api/import', {
     method: 'POST',
@@ -278,7 +319,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   // 手工新增“首重续重”必须保留首重/续重参数，并且新渠道币种要与国家一致。
   await responseJson(await fetch(base + '/api/rates', {
     method: 'POST',
-    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sheet: '首重测试', country: '美国', zone: '-', line: '-', attr: '',
       mode: 'firstnext', lo: 0, hi: 10, price: 20, fee: 3,
@@ -297,19 +338,19 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   // 客户端不能伪造改动记录里的操作者。
   await responseJson(await fetch(base + '/api/rates?by=userA', {
     method: 'POST',
-    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sheet: '分段测试', country: '美国', zone: '-', line: '-', attr: '',
       mode: 'band', lo: 0, hi: 10, price: 10, fee: 0,
     }),
   }));
-  const changes = await getJson(base, '/api/changes?kind=add&limit=5', adminCookie);
-  assert.equal(changes.changes[0].by, 'owner');
+  const changes = await getJson(base, '/api/changes?kind=add&limit=5', cookieAdminA);
+  assert.equal(changes.changes[0].by, 'adminA');
 
   // 同方式重量段重叠必须拒绝，否则一个计费重会命中多条并重复收费。
   const overlapRes = await fetch(base + '/api/rates', {
     method: 'POST',
-    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sheet: '分段测试', country: '美国', zone: '-', line: '-', attr: '',
       mode: 'band', lo: 5, hi: 20, price: 12, fee: 0,
@@ -318,14 +359,14 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   assert.equal(overlapRes.status, 400);
 
   // 删除已锁定档位时，应同时清理孤儿锁。
-  const rateRows = await getJson(base, '/api/rates?limit=5', adminCookie);
+  const rateRows = await getJson(base, '/api/rates?limit=5', cookieAdminA);
   const lockedId = rateRows.rows.find(r => r.sheet === '测试渠道').id;
   await responseJson(await fetch(base + '/api/rates/' + lockedId + '/lock', {
     method: 'PUT',
-    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
     body: JSON.stringify({ locked: true }),
   }));
-  const locksBefore = await getJson(base, '/api/locks', adminCookie);
+  const locksBefore = await getJson(base, '/api/locks', cookieAdminA);
   assert.equal(locksBefore.count, 1);
 
   const emptyData = fakeDataset(0);
@@ -334,15 +375,15 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   emptyData.countries = [];
   await responseJson(await fetch(base + '/api/import', {
     method: 'POST',
-    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
     body: JSON.stringify({ note: 'remove locked tier', data: emptyData }),
   }));
-  const locksAfter = await getJson(base, '/api/locks', adminCookie);
+  const locksAfter = await getJson(base, '/api/locks', cookieAdminA);
   assert.equal(locksAfter.count, 0);
 
   const badJson = await fetch(base + '/api/rates/' + lockedId, {
     method: 'PUT',
-    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
     body: '{bad json',
   });
   assert.equal(badJson.status, 400);

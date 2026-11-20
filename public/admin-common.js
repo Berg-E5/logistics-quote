@@ -154,7 +154,12 @@
         // 提前置 false 会让登录框在 /api/me 还没回来时就渲染出来 —— 闪一下。
         checking.value = false;
         if (!j || !j.user) { logged.value = false; return; }   // 匿名: user 是 null
-        me.value = { user: j.user || j.username || '', role: j.role || '' };
+        me.value = {
+          user: j.user || j.username || '',
+          role: j.role || '',
+          system: !!j.system,
+          ownerAdmin: j.ownerAdmin || null,
+        };
         logged.value = true;
         if (onLoggedIn) await onLoggedIn();
       } catch (e) {
@@ -181,6 +186,7 @@
       version: { type: String, default: '' },
       user: { type: String, default: '' },
       role: { type: String, default: '' },
+      system: { type: Boolean, default: false },
       badge: { type: Number, default: 0 },
       links: { type: Array, default: () => [] },   // [{href, text}]
       refresh: { type: Boolean, default: false },
@@ -195,7 +201,8 @@
       onMounted(() => {
         document.addEventListener('keydown', e => { if (e.key === 'Escape') { open.value = false; themeOpen.value = false; } });
       });
-      const roleCn = computed(() => props.role === 'admin' ? '管理员' : '普通用户');
+      const roleCn = computed(() =>
+        props.role === 'admin' ? (props.system ? '总管理员' : '管理员') : '普通用户');
       /* 主题: 用模块级的工具函数 (那里有系统监听) */
       const themeMode = ref(themeRead());
       function themeSetAndSync(m) {

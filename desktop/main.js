@@ -80,10 +80,63 @@ function persistSettings(saved) {
 
 function markAdminSetup(username) {
   settings.saved.adminUsername = username;
+  settings.saved.connectionMode = 'local';
+  delete settings.saved.serverUrl;
   settings.saved.adminSetupVersion = 1;
   settings.saved.adminSetupAt = new Date().toISOString();
   delete settings.saved.encryptedPassword;
   persistSettings(settings.saved);
+}
+
+function markRemoteConnection(serverUrl) {
+  settings.saved.connectionMode = 'remote';
+  settings.saved.serverUrl = serverUrl;
+  settings.saved.connectionConfiguredAt = new Date().toISOString();
+  delete settings.saved.encryptedPassword;
+  persistSettings(settings.saved);
+}
+
+function normalizeServerUrl(raw) {
+  let value = String(raw || '').trim();
+  if (!value) throw new Error('请填写中央服务器地址');
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) value = 'https://' + value;
+  let parsed;
+  try { parsed = new URL(value); }
+  catch (e) { throw new Error('服务器地址格式不正确'); }
+  const localHttp = parsed.protocol === 'http:'
+    && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(parsed.hostname);
+  if (parsed.protocol !== 'https:' && !localHttp) {
+    throw new Error('中央服务器必须使用 HTTPS 地址');
+  }
+  if (parsed.username || parsed.password) throw new Error('服务器地址不能包含账号密码');
+  if (parsed.search || parsed.hash) throw new Error('服务器地址不能包含查询参数或锚点');
+  if (parsed.pathname && parsed.pathname !== '/') {
+    throw new Error('客户端需要连接网站根地址，不要填写子目录');
+  }
+  return parsed.origin;
+}
+
+async function verifyRemoteServer(serverUrl) {
+  let res;
+  try {
+    res = await fetch(serverUrl + '/api/version', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000),
+    });
+  } catch (e) {
+    throw new Error(`无法连接中央服务器: ${e.message}`);
+  }
+  if (!res.ok) throw new Error(`中央服务器返回 HTTP ${res.status}`);
+  let body;
+  try { body = await res.json(); }
+  catch (e) { throw new Error('填写的地址不是物流报价服务器'); }
+  if (!body || !Number.isFinite(Number(body.rev))) {
+    throw new Error('中央服务器版本信息不正确');
+  }
+  if (Number(body.apiVersion) < 2) {
+    throw new Error('中央服务器版本过旧，请先升级服务器版');
+  }
+  return body;
 }
 
 function saveWindowBounds(bounds) {
@@ -243,16 +296,22 @@ function runAdminCli(args, serviceName) {
   });
 }
 
-function showAdminSetup(reset, username) {
+function showAdminSetup(options) {
   return new Promise((resolve, reject) => {
+    const opts = options || {};
+    if (setupWindow) {
+      setupWindow.focus();
+      resolve(null);
+      return;
+    }
     const win = new BrowserWindow({
       width: 560,
-      height: 640,
+      height: 720,
       resizable: false,
       maximizable: false,
       minimizable: true,
       show: false,
-      title: reset ? '重置管理员密码' : '创建管理员账户',
+      title: opts.reset ? '重置管理员密码' : (opts.purpose === 'switch' ? '连接设置' : '设置登录方式'),
       icon: path.join(__dirname, 'assets', 'icon.ico'),
       backgroundColor: '#0b1220',
       webPreferences: {
@@ -275,17 +334,42 @@ function showAdminSetup(reset, username) {
     });
     win.loadFile(path.join(__dirname, 'setup.html'), {
       query: {
-        mode: reset ? 'reset' : 'create',
-        username: username || '',
+        mode: opts.reset ? 'reset' : 'create',
+        purpose: opts.purpose || 'setup',
+        username: opts.username || '',
+        currentMode: opts.currentMode || '',
+        serverUrl: opts.serverUrl || '',
+        hasLocal: opts.hasLocal ? '1' : '0',
       },
     });
   });
 }
 
-ipcMain.handle('admin-setup:submit', (event, payload) => {
+ipcMain.handle('admin-setup:submit', async (event, payload) => {
   const senderUrl = event.senderFrame?.url || '';
   if (!senderUrl.startsWith('file://')) {
     return { ok: false, error: '非法请求来源' };
+  }
+  if (!setupResolver) return { ok: false, error: '设置窗口已经关闭' };
+  if (payload?.mode === 'remote') {
+    try {
+      const serverUrl = normalizeServerUrl(payload.serverUrl);
+      await verifyRemoteServer(serverUrl);
+      const pending = setupResolver;
+      setupResolver = null;
+      pending.resolve({ mode: 'remote', serverUrl });
+      if (setupWindow) setupWindow.close();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }
+  if (payload?.localReady === true) {
+    const pending = setupResolver;
+    setupResolver = null;
+    pending.resolve({ mode: 'local', localReady: true });
+    if (setupWindow) setupWindow.close();
+    return { ok: true };
   }
   const username = String(payload?.username || '').trim();
   const password = String(payload?.password || '');
@@ -296,10 +380,9 @@ ipcMain.handle('admin-setup:submit', (event, payload) => {
   if (password.length < 8) return { ok: false, error: '密码至少 8 位' };
   if (password.length > 128) return { ok: false, error: '密码不能超过 128 位' };
   if (password !== confirmPassword) return { ok: false, error: '两次输入的密码不一致' };
-  if (!setupResolver) return { ok: false, error: '设置窗口已经关闭' };
   const pending = setupResolver;
   setupResolver = null;
-  pending.resolve({ username, password });
+  pending.resolve({ mode: 'local', username, password });
   if (setupWindow) setupWindow.close();
   return { ok: true };
 });
@@ -311,22 +394,34 @@ ipcMain.on('admin-setup:cancel', event => {
 });
 
 async function ensureAdminAccount() {
+  if (settings.saved.connectionMode === 'remote' && settings.saved.serverUrl) {
+    return {
+      mode: 'remote',
+      serverUrl: normalizeServerUrl(settings.saved.serverUrl),
+      existing: true,
+    };
+  }
   const adminUser = findAdminUser();
   const hasAdmin = !!adminUser;
   const setupComplete = Number(settings.saved.adminSetupVersion || 0) >= 1;
   if (hasAdmin && setupComplete) {
+    if (settings.saved.connectionMode !== 'local') {
+      settings.saved.connectionMode = 'local';
+      delete settings.saved.serverUrl;
+      persistSettings(settings.saved);
+    }
     // 旧版可能保存过自动登录密码，统一清理；后续启动必须正常登录。
     if (settings.saved.encryptedPassword) {
       delete settings.saved.encryptedPassword;
       persistSettings(settings.saved);
     }
-    return null;
+    return { mode: 'local', username: adminUser.username, existing: true };
   }
 
   if (hasAdmin) {
     const username = adminUser.username;
     while (true) {
-      const value = await showAdminSetup(true, username);
+      const value = await showAdminSetup({ reset: true, username, hasLocal: true });
       if (!value) {
         app.quit();
         return null;
@@ -342,11 +437,21 @@ async function ensureAdminAccount() {
   }
 
   while (true) {
-    const value = await showAdminSetup(false, settings.saved.adminUsername || '');
+    const value = await showAdminSetup({
+      username: settings.saved.adminUsername || '',
+      hasLocal: hasAdmin,
+      currentMode: settings.saved.connectionMode || '',
+      serverUrl: settings.saved.serverUrl || '',
+    });
     if (!value) {
       app.quit();
       return null;
     }
+    if (value.mode === 'remote') {
+      markRemoteConnection(value.serverUrl);
+      return value;
+    }
+    if (value.localReady) return { mode: 'local', existing: true };
     try {
       await runAdminCli(['add', value.username, value.password], 'LogisticsQuote Admin Creation');
       markAdminSetup(value.username);
@@ -355,6 +460,37 @@ async function ensureAdminAccount() {
       dialog.showErrorBox(APP_NAME, e.message);
     }
   }
+}
+
+async function changeConnection() {
+  const adminUser = findAdminUser();
+  const setupComplete = Number(settings.saved.adminSetupVersion || 0) >= 1;
+  const value = await showAdminSetup({
+    purpose: 'switch',
+    username: adminUser ? adminUser.username : '',
+    currentMode: settings.saved.connectionMode || (adminUser ? 'local' : ''),
+    serverUrl: settings.saved.serverUrl || '',
+    hasLocal: !!adminUser && setupComplete,
+  });
+  if (!value) return;
+  if (value.mode === 'remote') {
+    markRemoteConnection(value.serverUrl);
+  } else if (!value.localReady) {
+    try {
+      await runAdminCli(['add', value.username, value.password], 'LogisticsQuote Admin Creation');
+      markAdminSetup(value.username);
+    } catch (e) {
+      dialog.showErrorBox(APP_NAME, e.message);
+      return;
+    }
+  } else {
+    settings.saved.connectionMode = 'local';
+    delete settings.saved.serverUrl;
+    persistSettings(settings.saved);
+  }
+  await stopServer();
+  app.relaunch();
+  app.exit(0);
 }
 
 async function ensureDesktopLogin(credentials) {
@@ -370,8 +506,13 @@ async function startServerWithPort() {
   startServer();
 }
 
+function isAppUrl(url) {
+  try { return new URL(url).origin === new URL(baseUrl).origin; }
+  catch (e) { return false; }
+}
+
 function externalUrl(url) {
-  return /^https?:\/\//i.test(url) && !url.startsWith(baseUrl);
+  return /^https?:\/\//i.test(url) && !isAppUrl(url);
 }
 
 function createWindow() {
@@ -399,12 +540,12 @@ function createWindow() {
   win.setMenuBarVisibility(false);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(baseUrl)) win.loadURL(url);
+    if (isAppUrl(url)) win.loadURL(url);
     else if (externalUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
-    if (url.startsWith(baseUrl)) return;
+    if (isAppUrl(url)) return;
     event.preventDefault();
     if (externalUrl(url)) shell.openExternal(url);
   });
@@ -435,6 +576,7 @@ function installMenu() {
         { type: 'separator' },
         { label: '打开数据目录', click: () => shell.openPath(dataDir()) },
         { label: '打开日志目录', click: () => shell.openPath(logDir()) },
+        { label: '连接设置…', click: () => { changeConnection(); } },
         { type: 'separator' },
         { label: '退出', role: 'quit' },
       ],
@@ -470,13 +612,21 @@ function installMenu() {
 async function bootstrap() {
   settings = loadSettings();
   installMenu();
-  const initialAdmin = await ensureAdminAccount();
-  if (!initialAdmin) return;
+  const connection = await ensureAdminAccount();
+  if (!connection) return;
+  if (connection.mode === 'remote') {
+    await verifyRemoteServer(connection.serverUrl);
+    baseUrl = connection.serverUrl;
+    const win = createWindow();
+    await win.loadURL(baseUrl + '/');
+    bootstrapping = false;
+    return;
+  }
   await startServerWithPort();
   try { await session.defaultSession.cookies.remove(baseUrl, 'quote_session'); }
   catch (e) { /* cookie did not exist */ }
   sessionCookieHeader = '';
-  await ensureDesktopLogin(initialAdmin);
+  if (!connection.existing) await ensureDesktopLogin(connection);
   const win = createWindow();
   let initialPath = '/';
   try {

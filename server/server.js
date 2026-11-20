@@ -53,6 +53,7 @@ const MAX_IMPORT_TIERS = Math.max(
   1000,
   Number.parseInt(process.env.QUOTE_IMPORT_MAX_TIERS || '200000', 10) || 200000
 );
+const API_VERSION = 2;
 const IMPORT_STALE_MS = Math.max(
   60 * 60 * 1000,
   Number.parseInt(process.env.QUOTE_IMPORT_STALE_HOURS || '24', 10) * 60 * 60 * 1000
@@ -376,7 +377,9 @@ function startImport(scope, filename, fileBuffer) {
       // 没同步的话离线打开是空壳 (线上没事, 线上走后端 /api/data)。
       // 离线快照是全站共享的, 只允许站主数据写入; 普通用户的数据不能落到公共文件。
       try {
-        if (syncOfflineSnapshot(jobScripts)) {
+        const systemAdmin = users.findSystemAdmin();
+        const globalScope = systemAdmin ? systemAdmin.username : db.DEFAULT_SCOPE;
+        if (scope === globalScope && syncOfflineSnapshot(jobScripts)) {
           importJob.log.push('离线快照已同步到站点根目录');
         }
       } catch (e) { /* ignore */ }
@@ -554,8 +557,8 @@ function currentIdentity(req) {
     return { user: byCookie, via: 'session' };
   }
   if (db.checkToken(tokenFrom(req))) {
-    // 管理令牌代表当前管理员账号，管理员用户名允许自定义。
-    const admin = users.findAdmin();
+    // 管理令牌始终代表总管理员，普通租户管理员不能使用站级令牌。
+    const admin = users.findSystemAdmin();
     return { user: admin ? admin.username : db.DEFAULT_SCOPE, via: 'token' };
   }
   return null;
@@ -573,6 +576,20 @@ function isAdmin(req) {
   if (!u) return false;
   const rec = users.findUser(u);
   return !!(rec && rec.role === 'admin');
+}
+
+function isSystemAdmin(req) {
+  const u = currentUser(req);
+  if (!u) return false;
+  const rec = users.findUser(u);
+  return !!(rec && rec.role === 'admin' && rec.system);
+}
+
+function dataScopeFor(record) {
+  if (!record) return null;
+  if (record.role === 'admin') return record.username;
+  if (record.role === 'user' && record.ownerAdmin) return record.ownerAdmin;
+  return null;
 }
 
 function serveStatic(res, filePath) {
@@ -608,15 +625,14 @@ const server = http.createServer(async (req, res) => {
 
   try {
     // ---------- 公开 ----------
-    // 已登录 -> 看自己的数据; 未登录 -> 看站主的 (公开页还能用)
+    // 管理员看自己的租户数据；普通用户看所属管理员的数据。
     const identity = currentIdentity(req);
     const viewer = identity ? identity.user : null;
     const viewerRecord = viewer ? users.findUser(viewer) : null;
     const viewerIsAdmin = !!(viewerRecord && viewerRecord.role === 'admin');
-    const adminRecord = users.findAdmin();
-    const adminScope = adminRecord ? adminRecord.username : db.DEFAULT_SCOPE;
-    // 管理员维护唯一共享价格表；普通用户只读访问管理员的同一份数据。
-    const scope = viewerIsAdmin ? viewer : adminScope;
+    const systemAdmin = users.findSystemAdmin();
+    const publicScope = systemAdmin ? systemAdmin.username : db.DEFAULT_SCOPE;
+    const scope = dataScopeFor(viewerRecord) || publicScope;
     const actor = viewer || scope;
 
     if (pathname === '/api/data' && req.method === 'GET') {
@@ -633,13 +649,15 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/version' && req.method === 'GET') {
       // 未登录只给版本号, 不暴露是谁的数据
       if (!viewer) {
-        const c0 = db.load(adminScope);
-        return sendJson(res, 200, { rev: c0.rev, updatedAt: c0.updatedAt });
+        const c0 = db.load(publicScope);
+        return sendJson(res, 200, {
+          rev: c0.rev, updatedAt: c0.updatedAt, apiVersion: API_VERSION,
+        });
       }
       const cur = db.load(scope);
       return sendJson(res, 200, {
         rev: cur.rev, updatedAt: cur.updatedAt, hasData: !!cur.data,
-        scope, mine: viewerIsAdmin,
+        scope, mine: viewerIsAdmin, apiVersion: API_VERSION,
       });
     }
 
@@ -669,7 +687,10 @@ const server = http.createServer(async (req, res) => {
       }
       users.clearFail(ip);
       setSessionCookie(req, res, u.username);
-      return sendJson(res, 200, { ok: true, user: u.username, role: u.role });
+      return sendJson(res, 200, {
+        ok: true, user: u.username, role: u.role, system: !!u.system,
+        ownerAdmin: u.role === 'user' ? u.ownerAdmin : null,
+      });
     }
 
     if (pathname === '/api/logout' && req.method === 'POST') {
@@ -685,6 +706,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         user: u || null,
         role: rec ? rec.role : null,
+        system: !!(rec && rec.system),
+        ownerAdmin: rec && rec.role === 'user' ? rec.ownerAdmin : null,
+        dataScope: dataScopeFor(rec),
         createdAt: rec ? rec.createdAt : null,
       });
     }
@@ -991,12 +1015,19 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // ---------- 用户管理 (仅管理员) ----------
+    // ---------- 用户管理 (租户隔离) ----------
     if (pathname === '/api/users' && req.method === 'GET') {
       if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能看用户列表');
-      const list = users.listUsers().map(u => {
-        // 普通用户读取管理员共享价格表，因此用户管理里也显示同一份数据规模。
-        const dataOwner = u.role === 'admin' ? u.username : adminScope;
+      const visible = users.listUsers().filter(u => {
+        if (viewerRecord.system) return true;
+        return u.username === viewerRecord.username ||
+          (u.role === 'user' && u.ownerAdmin === viewerRecord.username);
+      });
+      const list = visible.map(u => {
+        // 普通用户读取所属管理员的价格表；总管理员可以查看全部租户规模。
+        const dataOwner = u.role === 'admin'
+          ? u.username
+          : (u.ownerAdmin || publicScope);
         const p = db.ratesPath(dataOwner);
         let tiers = 0, rev = 0, hasData = false;
         try {
@@ -1007,9 +1038,18 @@ const server = http.createServer(async (req, res) => {
             hasData = true;
           }
         } catch (e) { /* ignore */ }
-        return { ...u, tiers, rev, hasData, shared: u.role !== 'admin' };
+        return {
+          ...u, tiers, rev, hasData,
+          shared: u.role !== 'admin',
+          dataOwner,
+          managedByMe: u.role === 'user' && u.ownerAdmin === viewerRecord.username,
+        };
       });
-      return sendJson(res, 200, { users: list });
+      return sendJson(res, 200, {
+        users: list,
+        system: !!viewerRecord.system,
+        scope: viewerRecord.username,
+      });
     }
 
     if (pathname === '/api/users' && req.method === 'POST') {
@@ -1017,12 +1057,22 @@ const server = http.createServer(async (req, res) => {
       let body;
       try { body = JSON.parse((await readBody(req, 8192)) || '{}'); }
       catch (e) { return sendErr(res, 400, '请求格式不对'); }
-      // 用户管理只创建普通用户；站点保持唯一管理员。
-      const role = 'user';
+      const role = body.role === 'admin' ? 'admin' : 'user';
+      if (role === 'admin' && !viewerRecord.system) {
+        return sendErr(res, 403, '只有总管理员能新增管理员');
+      }
       try {
-        const u = users.createUser(body.username, body.password, role);
-        console.log(`[users] 管理员新增用户 ${u.username} (${role})`);
-        return sendJson(res, 200, { ok: true, user: u.username, role: u.role });
+        const u = role === 'admin'
+          ? users.createUser(body.username, body.password, 'admin', { system: false })
+          : users.createUser(body.username, body.password, 'user', {
+              ownerAdmin: viewerRecord.username,
+            });
+        console.log(`[users] ${viewerRecord.username} 新增 ${role} ${u.username}` +
+          (u.ownerAdmin ? ` owner=${u.ownerAdmin}` : ''));
+        return sendJson(res, 200, {
+          ok: true, user: u.username, role: u.role,
+          system: !!u.system, ownerAdmin: u.ownerAdmin,
+        });
       } catch (e) {
         return sendErr(res, 400, e.message);
       }
@@ -1034,6 +1084,12 @@ const server = http.createServer(async (req, res) => {
       if (!name) return sendErr(res, 400, '缺少用户名');
       const me = currentUser(req, q);
       if (name === me) return sendErr(res, 400, '不能删除当前登录的账号');
+      const target = users.findUser(name);
+      if (!target) return sendErr(res, 400, '用户不存在: ' + name);
+      if (target.role === 'admin') return sendErr(res, 400, '管理员账号不能删除');
+      if (!viewerRecord.system && target.ownerAdmin !== viewerRecord.username) {
+        return sendErr(res, 403, '只能删除自己名下的普通用户');
+      }
       try {
         const u = users.deleteUser(name);
         // 连同这个人的数据一起清掉
@@ -1047,21 +1103,21 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // ---------- 登录/注册限流: 被锁的 IP (仅管理员) ----------
+    // ---------- 登录/注册限流: 被锁的 IP (仅总管理员) ----------
     if (pathname === '/api/rate-locks' && req.method === 'GET') {
-      if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能看锁定列表');
+      if (!isSystemAdmin(req)) return sendErr(res, 403, '只有总管理员能看锁定列表');
       return sendJson(res, 200, { locks: users.listRateLocks() });
     }
 
     if (pathname === '/api/rate-locks' && req.method === 'DELETE') {
-      if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能解封');
+      if (!isSystemAdmin(req)) return sendErr(res, 403, '只有总管理员能解封');
       const r = users.clearAllRates();
       console.log(`[rate] 管理员解封全部 IP (${r.cleared} 条)`);
       return sendJson(res, 200, { ok: true, ...r });
     }
 
     if (pathname.startsWith('/api/rate-locks/') && req.method === 'DELETE') {
-      if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能解封');
+      if (!isSystemAdmin(req)) return sendErr(res, 403, '只有总管理员能解封');
       const ip = decodeURIComponent(pathname.slice('/api/rate-locks/'.length));
       if (!ip) return sendErr(res, 400, '缺少 IP');
       const r = users.unlockRate(ip);
@@ -1148,28 +1204,29 @@ server.listen(PORT, HOST, () => {
   try { db.migrateLegacy(); }
   catch (e) { console.error('[startup] 迁移旧数据失败:', e.message); }
 
-  // 首次启动自动建一个 admin 用户
+  // 首次启动自动建总管理员；旧账号库在这里补上 system / ownerAdmin 字段。
   try {
+    users.migrateUsers();
     if (users.listUsers().length === 0) {
       const adminName = process.env.QUOTE_ADMIN_USERNAME || 'admin';
       const pw = process.env.ADMIN_PASSWORD || (require('crypto').randomBytes(9).toString('base64url'));
-      users.createUser(adminName, pw, 'admin');
+      users.createUser(adminName, pw, 'admin', { system: true });
       console.log('=============================================');
-      console.log(' 已创建管理员账号:');
+      console.log(' 已创建总管理员账号:');
       console.log('   用户名: ' + adminName);
       console.log('   密码  : ' + (process.env.QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG === '1'
         ? '(由桌面客户端安全保存)'
         : pw));
-      console.log('   (改密码: node server/user.js passwd admin)');
+      console.log(`   (改密码: node server/user.js passwd ${adminName})`);
       console.log('=============================================');
     }
   } catch (e) {
     console.error('[startup] 建管理员失败:', e.message);
   }
 
-  // 启动时补齐费率 id (保证后台能按 id 改价) —— 逐个用户扫一遍
+  // 启动时补齐费率 id (保证后台能按 id 改价) —— 逐个管理员扫一遍
   try {
-    for (const u of users.listUsers()) {
+    for (const u of users.findAdmins()) {
       const cur0 = db.load(u.username);
       if (cur0.data && (cur0.data.tiers || []).some(t => !t.id)) {
         db.ensureIds(cur0.data);
@@ -1184,11 +1241,11 @@ server.listen(PORT, HOST, () => {
   try { startFxWatcher(); }
   catch (e) { console.error('[fx] 启动汇率刷新失败:', e.message); }
 
-  const startupAdmin = users.findAdmin();
+  const startupAdmin = users.findSystemAdmin();
   const startupScope = startupAdmin ? startupAdmin.username : db.DEFAULT_SCOPE;
   const cur = db.load(startupScope);
   console.log(`物流报价服务 已启动  http://${HOST}:${PORT}`);
-  console.log(`  站主数据: ${cur.data ? (cur.data.tiers || []).length + ' 条费率' : '未导入'}` +
+  console.log(`  总管理员数据: ${cur.data ? (cur.data.tiers || []).length + ' 条费率' : '未导入'}` +
               `  rev=${cur.rev}`);
   const ul = users.listUsers();
   console.log(`  用户数: ${ul.length}  (管理: node server/user.js list)`);

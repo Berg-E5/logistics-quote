@@ -22,7 +22,7 @@ test('Electron 桌面配置会携带 Web、Node 和 Python 资源', () => {
   }
 });
 
-test('桌面窗口只使用本地服务并保持渲染进程隔离', () => {
+test('桌面端保持渲染进程隔离并保护本机服务', () => {
   assert.match(main, /HOST: '127\.0\.0\.1'/);
   assert.match(main, /QUOTE_DATA_DIR/);
   assert.match(main, /nodeIntegration: false/);
@@ -38,17 +38,25 @@ test('桌面端不在本地保存管理员明文密码', () => {
   assert.match(main, /adminSetupVersion = 1/);
 });
 
-test('首次启动要求用户创建管理员账户', () => {
+test('首次启动支持本机管理员和中央服务器两种模式', () => {
   assert.match(main, /showAdminSetup/);
   assert.match(main, /\['add', value\.username, value\.password\]/);
   assert.match(main, /pending\.resolve\(null\)/);
-  assert.match(main, /if \(!initialAdmin\) return/);
-  assert.match(main, /创建管理员账户/);
+  assert.match(main, /if \(!connection\) return/);
+  assert.match(main, /verifyRemoteServer/);
+  assert.match(main, /connectionMode = 'remote'/);
+  assert.match(main, /body\.apiVersion/);
+  assert.match(main, /function isAppUrl/);
+  assert.match(main, /设置登录方式/);
   assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
   const setupHtml = fs.readFileSync(path.join(desktop, 'setup.html'), 'utf8');
+  const setupJs = fs.readFileSync(path.join(desktop, 'setup.js'), 'utf8');
   const preload = fs.readFileSync(path.join(desktop, 'preload.js'), 'utf8');
   assert.match(setupHtml, /id="username"/);
-  assert.match(preload, /username/);
+  assert.match(setupHtml, /id="serverUrl"/);
+  assert.match(setupHtml, /data-mode="remote"/);
+  assert.match(setupJs, /mode: 'remote'/);
+  assert.match(preload, /submit\(payload\)/);
 });
 
 test('后台和桌面菜单都提供前台报价入口', () => {

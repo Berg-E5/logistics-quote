@@ -1,7 +1,9 @@
 /*
  * 用户与登录 —— 无第三方依赖, 用 Node 自带的 crypto。
  *
- * 用户库:  data/users.json   [{username, salt, hash, role, createdAt}]
+ * 用户库:  data/users.json
+ *   admin: {username, salt, hash, role:'admin', system, createdAt}
+ *   user : {username, salt, hash, role:'user', ownerAdmin, createdAt}
  * 密钥:    data/secret.key   用来签发会话 cookie
  *
  * 密码用 scrypt 加盐哈希, 不可逆。
@@ -70,15 +72,39 @@ function loadUsers() {
   if (!fs.existsSync(USERS)) return [];
   try {
     const u = JSON.parse(fs.readFileSync(USERS, 'utf8'));
-    return Array.isArray(u) ? u : [];
+    return Array.isArray(u) ? normalizeUsers(u) : [];
   } catch (e) {
     console.error('[users] users.json 解析失败:', e.message);
     return [];
   }
 }
 
+/**
+ * 兼容旧账号库:
+ * - 第一个管理员自动成为总管理员;
+ * - 旧普通用户自动挂到总管理员名下。
+ */
+function normalizeUsers(users) {
+  const admins = users.filter(u => u && u.role === 'admin');
+  const systemAdmin = admins.find(u => u.system === true) || admins[0] || null;
+  for (const u of users) {
+    if (!u || typeof u !== 'object') continue;
+    if (u.role === 'admin') {
+      u.system = !!systemAdmin && u.username === systemAdmin.username;
+      if (!Object.prototype.hasOwnProperty.call(u, 'ownerAdmin')) u.ownerAdmin = null;
+      continue;
+    }
+    if (u.role !== 'user') u.role = 'user';
+    const owner = admins.find(a =>
+      a.username.toLowerCase() === String(u.ownerAdmin || '').toLowerCase());
+    if (!owner && systemAdmin) u.ownerAdmin = systemAdmin.username;
+  }
+  return users;
+}
+
 function saveUsers(users) {
   ensureDir();
+  normalizeUsers(users);
   const tmp = USERS + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(users, null, 2), { encoding: 'utf8', mode: 0o600 });
   try { fs.chmodSync(tmp, 0o600); } catch (e) { /* Windows 忽略 */ }
@@ -91,12 +117,21 @@ function findUser(username) {
   return loadUsers().find(x => x.username.toLowerCase() === u) || null;
 }
 
-function findAdmin() {
-  return loadUsers().find(x => x.role === 'admin') || null;
+function findSystemAdmin() {
+  return loadUsers().find(x => x.role === 'admin' && x.system) || null;
 }
 
-/** 角色: admin = 站主 (能看所有用户), user = 普通用户 (只有自己的数据) */
-function createUser(username, password, role) {
+function findAdmins() {
+  return loadUsers().filter(x => x.role === 'admin');
+}
+
+/**
+ * 角色:
+ * - admin + system = 总管理员, 可创建管理员, 可查看全部账号;
+ * - admin          = 租户管理员, 只管理自己名下的普通用户和价格表;
+ * - user           = 普通用户, 只读所属管理员的价格表。
+ */
+function createUser(username, password, role, options) {
   const name = String(username || '').trim();
   if (!/^[A-Za-z0-9_.\-]{2,32}$/.test(name)) {
     throw new Error('用户名只能用字母数字下划线点横线, 2-32 位');
@@ -106,13 +141,29 @@ function createUser(username, password, role) {
   }
   const users = loadUsers();
   if (findUser(name)) throw new Error('用户已存在: ' + name);
-  if ((role || 'admin') === 'admin' && users.some(x => x.role === 'admin')) {
-    throw new Error('系统只能有一个管理员账号');
+  const opts = options || {};
+  const wantedRole = role === 'user' ? 'user' : 'admin';
+  const admins = users.filter(x => x.role === 'admin');
+  let system = false;
+  let ownerAdmin = null;
+  if (wantedRole === 'admin') {
+    const hasSystem = admins.some(x => x.system);
+    system = opts.system === true || !hasSystem;
+    if (system && hasSystem) throw new Error('系统只能有一个总管理员账号');
+  } else {
+    const wantedOwner = String(opts.ownerAdmin || '').trim();
+    const owner = wantedOwner
+      ? admins.find(x => x.username.toLowerCase() === wantedOwner.toLowerCase())
+      : admins.find(x => x.system) || admins[0];
+    if (!owner) throw new Error('还没有管理员，不能创建普通用户');
+    ownerAdmin = owner.username;
   }
   const { salt, hash } = hashPassword(password);
   const u = {
     username: name, salt, hash,
-    role: role || 'admin',
+    role: wantedRole,
+    system,
+    ownerAdmin,
     sessionVersion: 0,
     createdAt: new Date().toISOString(),
   };
@@ -123,7 +174,7 @@ function createUser(username, password, role) {
 
 /**
  * 公开注册 —— 新用户是普通角色, 数据为空, 需要自己上传价格表。
- * 不允许注册 admin 角色 (只有站主能指定)。
+ * 公开注册默认关闭, 且注册的普通用户归属总管理员。
  */
 function registerUser(username, password, confirm) {
   const name = String(username || '').trim();
@@ -177,8 +228,17 @@ function deleteUser(username) {
 
 function listUsers() {
   return loadUsers().map(u => ({
-    username: u.username, role: u.role, createdAt: u.createdAt, changedAt: u.changedAt,
+    username: u.username, role: u.role, system: !!u.system,
+    ownerAdmin: u.role === 'user' ? u.ownerAdmin : null,
+    createdAt: u.createdAt, changedAt: u.changedAt,
   }));
+}
+
+/** 把旧账号库的归属字段持久化到磁盘。 */
+function migrateUsers() {
+  const users = loadUsers();
+  saveUsers(users);
+  return users;
 }
 
 // ---------------- 会话 (无状态, HMAC 签名 cookie) ----------------
@@ -347,7 +407,7 @@ function clearAllRates() {
 
 module.exports = {
   createUser, registerUser, setPassword, revokeSessions, deleteUser, listUsers, findUser,
-  findAdmin,
+  findSystemAdmin, findAdmins, migrateUsers, normalizeUsers,
   verifyPassword, verifyPasswordAsync,
   hashPassword, loadUsers, saveUsers,
   makeSession, readSession, cookieHeader,

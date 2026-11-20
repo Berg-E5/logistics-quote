@@ -146,10 +146,13 @@ createApp({
     // 新增用户表单
     const nUser = ref('');
     const nPass = ref('');
+    const nRole = ref('user');
     const addErr = ref('');
     const addOk = ref('');
 
-    const countText = computed(() => `共 ${users.value.length} 个账号`);
+    const isSystem = computed(() => !!me.value.system);
+    const countText = computed(() =>
+      isSystem.value ? `全站共 ${users.value.length} 个账号` : `我的账号共 ${users.value.length} 个`);
     const lockCountText = computed(() => {
       if (lockErr.value) return '读取失败: ' + lockErr.value;
       return locks.value.length ? `有 ${locks.value.length} 个 IP 被锁` : '没有被锁的 IP';
@@ -163,7 +166,9 @@ createApp({
       } catch (e) { version.value = '数据版本读取失败'; }
     }
 
-    const usersWithData = computed(() => users.value.filter(u => u.hasData));
+    const dataOwnerCount = computed(() => new Set(
+      users.value.filter(u => u.hasData).map(u => u.dataOwner || u.username)
+    ).size);
     /** 每个账号一根迷你条: 长度按「数据规模」相对最大值缩放,
         一眼看出谁的数据多、谁基本没在用。 */
     const userSpark = computed(() => {
@@ -189,6 +194,10 @@ createApp({
 
     async function loadLocks() {
       lockErr.value = '';
+      if (!isSystem.value) {
+        locks.value = [];
+        return;
+      }
       try {
         const j = await A.api('/api/rate-locks');
         locks.value = j.locks || [];
@@ -248,8 +257,12 @@ createApp({
       if (nPass.value.length < 8) { addErr.value = '初始密码至少 8 位'; return; }
       busy.value = true;
       try {
-        await A.api('/api/users', { method: 'POST', body: { username, password: nPass.value } });
-        addOk.value = `已创建账号「${username}」`;
+        const role = isSystem.value ? nRole.value : 'user';
+        await A.api('/api/users', {
+          method: 'POST',
+          body: { username, password: nPass.value, role },
+        });
+        addOk.value = `已创建${role === 'admin' ? '管理员' : '普通用户'}「${username}」`;
         nUser.value = ''; nPass.value = '';
         await loadUsers();
       } catch (e) {
@@ -282,8 +295,8 @@ createApp({
 
     return {
       logged, checking, me, version, users, locks, lockErr, loadErr, showPwd, busy,
-      nUser, nPass, addErr, addOk, unlockMsg,
-      countText, usersWithData, adminCount, lockCountText, userSpark, loadUsers, loadLocks, lockRemain,
+      nUser, nPass, nRole, addErr, addOk, unlockMsg, isSystem,
+      countText, dataOwnerCount, adminCount, lockCountText, userSpark, loadUsers, loadLocks, lockRemain,
       delUser, unlockOne, unlockAll, addUser, afterLogin, logout,
     };
   },
@@ -294,6 +307,7 @@ createApp({
         :version="version"
         :user="me.user"
         :role="me.role"
+        :system="me.system"
         :links="[{href:'/', text:'前台报价'}, {href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
         @logout="logout"
         @password="showPwd = true"
@@ -318,16 +332,17 @@ createApp({
                   <span class="ms">{{ countText }}</span>
                 </div>
                 <div class="metric k-new">
-                  <span class="mk">已上传价格表</span><b class="mv">{{ usersWithData.length }}</b>
-                  <span class="ms">{{ users.length - usersWithData.length }} 个还没上传</span>
+                  <span class="mk">价格表</span><b class="mv">{{ dataOwnerCount }}</b>
+                  <span class="ms">已有报价数据的独立账户</span>
                 </div>
-                <div class="metric k-lock">
+                <div class="metric k-lock" v-if="isSystem">
                   <span class="mk">登录锁定</span><b class="mv">{{ locks.length }}</b>
-                  <span class="ms">待管理员解封</span>
+                  <span class="ms">待总管理员解封</span>
                 </div>
                 <div class="metric k-chg">
-                  <span class="mk">管理员</span><b class="mv">{{ adminCount }}</b>
-                  <span class="ms">可管理其它账号</span>
+                  <span class="mk">{{ isSystem ? '管理员' : '我的身份' }}</span>
+                  <b class="mv">{{ isSystem ? adminCount : '管理员' }}</b>
+                  <span class="ms">{{ isSystem ? '各自维护独立价格表' : '只管理自己名下用户' }}</span>
                 </div>
               </div>
               <div class="dash-spark" v-if="userSpark.length" title="每个账号的费率档数量 (相对最大值)">
@@ -353,9 +368,13 @@ createApp({
                 <span class="avatar" :class="{admin: u.role === 'admin'}">{{ u.username.charAt(0).toUpperCase() }}</span>
                 <div class="uc-id">
                   <b>{{ u.username }}</b>
-                  <span class="muted" v-if="u.role === 'admin'">站主</span>
+                  <span class="muted" v-if="u.system">总管理员</span>
+                  <span class="muted" v-else-if="u.role === 'admin'">独立租户</span>
+                  <span class="muted" v-else>归属 {{ u.ownerAdmin }}</span>
                 </div>
-                <span class="role" :class="u.role">{{ u.role === 'admin' ? '管理员' : '普通用户' }}</span>
+                <span class="role" :class="u.role">
+                  {{ u.system ? '总管理员' : (u.role === 'admin' ? '管理员' : '普通用户') }}
+                </span>
               </div>
               <div class="uc-meta">
                 <div class="uc-cell">
@@ -372,8 +391,8 @@ createApp({
                   <b>{{ u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '—' }}</b>
                 </div>
                 <div class="uc-cell">
-                  <span>改密码</span>
-                  <b>{{ u.changedAt ? new Date(u.changedAt).toLocaleDateString('zh-CN') : '未改过' }}</b>
+                  <span>数据归属</span>
+                  <b>{{ u.role === 'admin' ? u.username : u.ownerAdmin }}</b>
                 </div>
               </div>
               <div class="uc-acts">
@@ -390,7 +409,7 @@ createApp({
           </div>
 
           <!-- 登录锁定面板 -->
-          <div class="pane" id="lockpane" :class="{'has-locks': locks.length > 0}">
+          <div class="pane" id="lockpane" v-if="isSystem" :class="{'has-locks': locks.length > 0}">
             <h3>
               登录锁定（被锁定的 IP）
               <span class="lockbadge" v-if="locks.length">{{ locks.length }} 个待解封</span>
@@ -439,12 +458,23 @@ createApp({
             <div class="newgrid">
               <label>用户名<input v-model="nUser" placeholder="字母数字, 2-32 位"></label>
               <label>初始密码<input v-model="nPass" type="text" placeholder="至少 8 位"></label>
-              <label>账号类型<input value="普通用户" disabled></label>
+              <label v-if="isSystem">账号类型
+                <select v-model="nRole">
+                  <option value="user">普通用户（归属当前总管理员）</option>
+                  <option value="admin">管理员（创建独立价格表）</option>
+                </select>
+              </label>
+              <label v-else>账号类型<input value="普通用户（归属当前管理员）" disabled></label>
               <label style="justify-content:flex-end">
                 <button class="primary" :disabled="busy" @click="addUser">{{ busy ? '创建中…' : '新增' }}</button>
               </label>
             </div>
-            <div class="hint">新账号为普通用户，登录后只读查看管理员维护的共享价格表。</div>
+            <div class="hint" v-if="isSystem">
+              管理员拥有独立价格表和管理入口；普通用户归属当前总管理员，只读查看总管理员的价格表。
+            </div>
+            <div class="hint" v-else>
+              新账号只归属当前管理员，登录后只读查看当前管理员的价格表，不能看到其他管理员的数据。
+            </div>
             <div class="err" style="margin-top:6px" v-if="addErr">{{ addErr }}</div>
             <div class="ok" style="font-size:12.5px" v-if="addOk">{{ addOk }}</div>
           </div>

@@ -3,6 +3,7 @@
  *
  *   node server/user.js list
  *   node server/user.js add <用户名> [密码]
+ *   node server/user.js add-user <管理员> <用户名> [密码]
  *   node server/user.js passwd <用户名> [密码]
  *   node server/user.js del <用户名>
  *   node server/user.js locks      看被限流的 IP
@@ -24,9 +25,11 @@ function main() {
     case 'list': {
       const list = users.listUsers();
       if (!list.length) { console.log('还没有用户'); break; }
-      console.log('用户名'.padEnd(16) + '角色'.padEnd(10) + '创建时间');
+      console.log('用户名'.padEnd(20) + '角色'.padEnd(12) + '归属'.padEnd(20) + '创建时间');
       for (const u of list) {
-        console.log(u.username.padEnd(16) + (u.role || 'admin').padEnd(10) +
+        const role = u.role === 'admin' ? (u.system ? '总管理员' : '管理员') : '普通用户';
+        console.log(u.username.padEnd(20) + role.padEnd(12) +
+          String(u.ownerAdmin || '—').padEnd(20) +
           (u.createdAt || '').slice(0, 19).replace('T', ' '));
       }
       break;
@@ -36,6 +39,20 @@ function main() {
       const pw = arg2 || rand();
       const u = users.createUser(arg1, pw, 'admin');
       console.log('已创建用户:', u.username);
+      console.log('密码:', pw);
+      console.log('(密码只显示这一次, 请记好)');
+      break;
+    }
+    case 'add-user': {
+      const [owner, username, password] = process.argv.slice(3);
+      if (!owner || !username) {
+        console.log('用法: node server/user.js add-user <管理员> <用户名> [密码]');
+        process.exit(1);
+      }
+      const pw = password || rand();
+      const u = users.createUser(username, pw, 'user', { ownerAdmin: owner });
+      console.log('已创建普通用户:', u.username);
+      console.log('归属管理员:', u.ownerAdmin);
       console.log('密码:', pw);
       console.log('(密码只显示这一次, 请记好)');
       break;
@@ -106,6 +123,7 @@ function main() {
       console.log('用户管理');
       console.log('  node server/user.js list');
       console.log('  node server/user.js add <用户名> [密码]');
+      console.log('  node server/user.js add-user <管理员> <用户名> [密码]');
       console.log('  node server/user.js passwd <用户名> [密码]');
       console.log('  node server/user.js del <用户名>');
       console.log('  node server/user.js locks      看被限流的 IP');
