@@ -10,6 +10,9 @@ const { spawn, spawnSync } = require('node:child_process');
 
 const APP_NAME = '物流报价';
 const APP_ID = 'com.berg.logisticsquote';
+const RELEASES_API = 'https://api.github.com/repos/Berg-E5/logistics-quote/releases/latest';
+const RELEASES_PREFIX = 'https://github.com/Berg-E5/logistics-quote/releases/';
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 let mainWindow = null;
 let serverProcess = null;
@@ -21,6 +24,7 @@ let sessionCookieHeader = '';
 let setupWindow = null;
 let setupResolver = null;
 let bootstrapping = true;
+let updateCheckPromise = null;
 
 app.setName(process.env.QUOTE_DESKTOP_USER_DATA ? `${APP_NAME} Dev` : APP_NAME);
 if (process.platform === 'win32') {
@@ -137,6 +141,125 @@ async function verifyRemoteServer(serverUrl) {
     throw new Error('中央服务器版本过旧，请先升级服务器版');
   }
   return body;
+}
+
+function versionParts(value) {
+  const match = String(value || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/i);
+  return match ? match.slice(1, 4).map(Number) : null;
+}
+
+function compareVersions(a, b) {
+  const av = versionParts(a);
+  const bv = versionParts(b);
+  if (!av || !bv) return 0;
+  for (let i = 0; i < 3; i++) {
+    if (av[i] !== bv[i]) return av[i] > bv[i] ? 1 : -1;
+  }
+  return 0;
+}
+
+function safeReleaseUrl(value) {
+  const url = String(value || '');
+  return url.startsWith(RELEASES_PREFIX) ? url : RELEASES_PREFIX.slice(0, -1);
+}
+
+function showMessageBox(options) {
+  return mainWindow
+    ? dialog.showMessageBox(mainWindow, options)
+    : dialog.showMessageBox(options);
+}
+
+async function fetchLatestRelease() {
+  let res;
+  try {
+    res = await fetch(RELEASES_API, {
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'LogisticsQuote-Desktop/' + app.getVersion(),
+      },
+      signal: AbortSignal.timeout(12000),
+    });
+  } catch (e) {
+    throw new Error(`无法检查更新：${e.message}`);
+  }
+  if (!res.ok) throw new Error(`GitHub 更新服务返回 HTTP ${res.status}`);
+  const body = await res.json();
+  const version = String(body.tag_name || '').replace(/^v/i, '');
+  if (!versionParts(version)) throw new Error('GitHub 返回的版本号格式不正确');
+  const assets = Array.isArray(body.assets) ? body.assets : [];
+  const setup = assets.find(a => a && /^LogisticsQuote-Setup-.+-x64\.exe$/i.test(String(a.name || '')));
+  return {
+    version,
+    htmlUrl: safeReleaseUrl(body.html_url),
+    setupUrl: setup && String(setup.browser_download_url || '').startsWith(RELEASES_PREFIX)
+      ? String(setup.browser_download_url)
+      : null,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+async function checkForUpdates(options) {
+  const opts = options || {};
+  if (updateCheckPromise) return updateCheckPromise;
+  updateCheckPromise = (async () => {
+    const cached = settings?.saved?.lastUpdateRelease;
+    const cacheAge = Date.now() - Date.parse(settings?.saved?.lastUpdateCheckAt || 0);
+    let latest = cached;
+    if (opts.manual || !latest || !Number.isFinite(cacheAge) || cacheAge >= UPDATE_CHECK_MS) {
+      latest = await fetchLatestRelease();
+      settings.saved.lastUpdateCheckAt = latest.checkedAt;
+      settings.saved.lastUpdateRelease = latest;
+      persistSettings(settings.saved);
+    }
+    const current = app.getVersion();
+    if (compareVersions(latest.version, current) <= 0) {
+      if (opts.manual) {
+        await showMessageBox({
+          type: 'info', title: '检查更新',
+          message: '当前已经是最新版本',
+          detail: `当前版本：${current}\n最新版本：${latest.version}`,
+        });
+      }
+      return { available: false, current, latest: latest.version };
+    }
+    if (!opts.manual && settings.saved.lastUpdatePromptVersion === latest.version) {
+      return { available: true, suppressed: true, current, latest: latest.version };
+    }
+    const links = latest.setupUrl ? [latest.setupUrl, latest.htmlUrl] : [latest.htmlUrl];
+    const result = await showMessageBox({
+      type: 'info',
+      title: '发现新版本',
+      message: `${APP_NAME} ${latest.version} 已发布`,
+      detail: `当前版本：${current}\n最新版本：${latest.version}\n\n将打开 GitHub 下载页；安装前请核对文件来源。`,
+      buttons: ['打开下载页', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    settings.saved.lastUpdatePromptVersion = latest.version;
+    persistSettings(settings.saved);
+    if (result.response === 0) await shell.openExternal(links[0]);
+    return {
+      available: true, opened: result.response === 0,
+      current, latest: latest.version, url: links[0],
+    };
+  })().catch(async error => {
+    writeLog(`update check failed: ${error.stack || error.message}`);
+    if (opts.manual) {
+      await showMessageBox({
+        type: 'warning', title: '检查更新失败', message: error.message,
+      });
+    }
+    return { available: false, error: error.message };
+  }).finally(() => {
+    updateCheckPromise = null;
+  });
+  return updateCheckPromise;
+}
+
+function scheduleUpdateCheck() {
+  setTimeout(() => { checkForUpdates({ manual: false }); }, 5000).unref?.();
 }
 
 function saveWindowBounds(bounds) {
@@ -656,6 +779,10 @@ function installMenu() {
             detail: `版本 ${app.getVersion()}\n数据目录: ${dataDir()}`,
           }),
         },
+        {
+          label: '检查更新…',
+          click: () => checkForUpdates({ manual: true }),
+        },
       ],
     },
   ];
@@ -677,6 +804,7 @@ async function bootstrap() {
       await loadConnectionError(win, e.message);
     }
     bootstrapping = false;
+    scheduleUpdateCheck();
     return;
   }
   await startServerWithPort();
@@ -697,6 +825,7 @@ async function bootstrap() {
   } catch (e) { /* 默认打开首页 */ }
   await win.loadURL(baseUrl + initialPath);
   bootstrapping = false;
+  scheduleUpdateCheck();
 }
 
 app.whenReady().then(bootstrap).catch(async error => {

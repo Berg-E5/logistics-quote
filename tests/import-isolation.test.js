@@ -116,10 +116,24 @@ async function getJson(base, pathname, cookie) {
 
 async function submitImport(base, cookie, marker, delay, preview = false) {
   // 前四个字节是 zip 魔数；假管道从第 5 个字节开始读取标记和延时。
-  const file = Buffer.concat([
-    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
-    Buffer.from(marker + delay, 'ascii'),
-  ]);
+  // API 还会检查 ZIP 中央目录，所以补一个最小的单文件目录结构。
+  const payload = Buffer.from(marker + delay + '\0', 'ascii');
+  const prefix = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), payload]);
+  const name = Buffer.from('mock.xlsx', 'utf8');
+  const central = Buffer.alloc(46 + name.length);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(8, 10);
+  central.writeUInt32LE(payload.length, 20);
+  central.writeUInt32LE(payload.length, 24);
+  central.writeUInt16LE(name.length, 28);
+  name.copy(central, 46);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(1, 8);
+  eocd.writeUInt16LE(1, 10);
+  eocd.writeUInt32LE(central.length, 12);
+  eocd.writeUInt32LE(prefix.length, 16);
+  const file = Buffer.concat([prefix, central, eocd]);
   const res = await fetch(base + '/api/import-file', {
     method: 'POST',
     headers: { Cookie: cookie, 'Content-Type': 'application/json' },
@@ -167,7 +181,7 @@ import time
 
 raw = open(sys.argv[1], "rb").read()
 marker = raw[4:5].decode("ascii")
-delay = float(raw[5:].decode("ascii"))
+delay = float(raw[5:].split(b"\\0", 1)[0].decode("ascii"))
 time.sleep(delay)
 price = {"A": 111, "B": 222}.get(marker, 333)
 data = {

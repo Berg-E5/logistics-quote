@@ -16,7 +16,13 @@ const crypto = require('crypto');
 const DATA_DIR = path.resolve(process.env.QUOTE_DATA_DIR || path.join(__dirname, '..', 'data'));
 const USERS = path.join(DATA_DIR, 'users.json');
 const SECRET = path.join(DATA_DIR, 'secret.key');
+const AUDIT = path.join(DATA_DIR, 'security-audit.jsonl');
 const SESSION_HOURS = 12;
+const AUDIT_MAX_BYTES = Math.max(
+  256 * 1024,
+  Number.parseInt(process.env.QUOTE_AUDIT_MAX_BYTES || String(4 * 1024 * 1024), 10)
+    || 4 * 1024 * 1024
+);
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
@@ -27,7 +33,13 @@ function ensureDir() {
 function getSecret() {
   ensureDir();
   if (fs.existsSync(SECRET)) {
-    return fs.readFileSync(SECRET, 'utf8').trim();
+    const secret = fs.readFileSync(SECRET, 'utf8').trim();
+    if (!/^[a-f0-9]{64}$/i.test(secret)) {
+      const e = new Error('会话签名密钥损坏，请从备份恢复 secret.key');
+      e.code = 'SESSION_SECRET_CORRUPT';
+      throw e;
+    }
+    return secret;
   }
   const s = crypto.randomBytes(32).toString('hex');
   fs.writeFileSync(SECRET, s, { encoding: 'utf8', mode: 0o600 });
@@ -44,6 +56,7 @@ function hashPassword(password, salt) {
 
 function verifyPassword(password, user) {
   if (!user || !user.salt || !user.hash) return false;
+  if (typeof password !== 'string' || password.length > 256) return false;
   const { hash } = hashPassword(password, user.salt);
   return hashesEqual(hash, user.hash);
 }
@@ -51,6 +64,7 @@ function verifyPassword(password, user) {
 /** 异步校验，避免 scrypt 阻塞整个 Node 事件循环。 */
 function verifyPasswordAsync(password, user) {
   if (!user || !user.salt || !user.hash) return Promise.resolve(false);
+  if (typeof password !== 'string' || password.length > 256) return Promise.resolve(false);
   return new Promise((resolve, reject) => {
     crypto.scrypt(String(password), user.salt, 64,
       { N: 16384, r: 8, p: 1 }, (err, derived) => {
@@ -70,13 +84,41 @@ function hashesEqual(hash, expected) {
 function loadUsers() {
   ensureDir();
   if (!fs.existsSync(USERS)) return [];
+  let parsed;
   try {
-    const u = JSON.parse(fs.readFileSync(USERS, 'utf8'));
-    return Array.isArray(u) ? normalizeUsers(u) : [];
+    parsed = JSON.parse(fs.readFileSync(USERS, 'utf8'));
   } catch (e) {
     console.error('[users] users.json 解析失败:', e.message);
-    return [];
+    const err = new Error('账号库损坏，服务已停止写入。请从备份恢复 users.json');
+    err.code = 'USERS_STORE_CORRUPT';
+    err.cause = e;
+    throw err;
   }
+  if (!Array.isArray(parsed)) {
+    console.error('[users] users.json 结构错误: 顶层必须是数组');
+    const err = new Error('账号库结构错误，服务已停止写入。请从备份恢复 users.json');
+    err.code = 'USERS_STORE_CORRUPT';
+    throw err;
+  }
+  const seen = new Set();
+  for (const u of parsed) {
+    if (!u || typeof u !== 'object' || Array.isArray(u)
+        || typeof u.username !== 'string' || !u.username.trim()
+        || (u.role !== 'admin' && u.role !== 'user')
+        || typeof u.salt !== 'string' || typeof u.hash !== 'string') {
+      const err = new Error('账号库包含无效账号记录，服务已停止写入');
+      err.code = 'USERS_STORE_CORRUPT';
+      throw err;
+    }
+    const key = u.username.toLowerCase();
+    if (seen.has(key)) {
+      const err = new Error('账号库包含重复用户名，服务已停止写入');
+      err.code = 'USERS_STORE_CORRUPT';
+      throw err;
+    }
+    seen.add(key);
+  }
+  return normalizeUsers(parsed);
 }
 
 /**
@@ -143,6 +185,7 @@ function createUser(username, password, role, options) {
   if (!password || String(password).length < 8) {
     throw new Error('密码至少 8 位');
   }
+  if (String(password).length > 128) throw new Error('密码不能超过 128 位');
   const users = loadUsers();
   if (findUser(name)) throw new Error('用户已存在: ' + name);
   const opts = options || {};
@@ -199,6 +242,7 @@ function registerUser(username, password, confirm) {
 
 function setPassword(username, password) {
   if (!password || String(password).length < 8) throw new Error('密码至少 8 位');
+  if (String(password).length > 128) throw new Error('密码不能超过 128 位');
   const users = loadUsers();
   const u = users.find(x => x.username.toLowerCase() === String(username).toLowerCase());
   if (!u) throw new Error('用户不存在: ' + username);
@@ -250,12 +294,63 @@ function setDisabled(username, disabled) {
   return u;
 }
 
-function recordLogin(username) {
+function appendAudit(event) {
+  ensureDir();
+  const raw = event || {};
+  const entry = {
+    at: new Date().toISOString(),
+    actor: String(raw.actor || 'system').slice(0, 64),
+    action: String(raw.action || 'unknown').slice(0, 64),
+    target: raw.target == null ? null : String(raw.target).slice(0, 128),
+    ip: raw.ip == null ? null : String(raw.ip).slice(0, 64),
+    userAgent: raw.userAgent == null ? null : String(raw.userAgent).slice(0, 240),
+    details: raw.details && typeof raw.details === 'object' ? raw.details : null,
+  };
+  try {
+    if (fs.existsSync(AUDIT) && fs.statSync(AUDIT).size >= AUDIT_MAX_BYTES) {
+      const previous = AUDIT + '.1';
+      fs.rmSync(previous, { force: true });
+      fs.renameSync(AUDIT, previous);
+    }
+    fs.appendFileSync(AUDIT, JSON.stringify(entry) + '\n', { encoding: 'utf8', mode: 0o600 });
+    try { fs.chmodSync(AUDIT, 0o600); } catch (e) { /* Windows 忽略 */ }
+  } catch (e) {
+    console.error('[users] 写入安全审计日志失败:', e.message);
+  }
+  return entry;
+}
+
+function readAudit(limit) {
+  ensureDir();
+  const max = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  if (!fs.existsSync(AUDIT)) return [];
+  const lines = fs.readFileSync(AUDIT, 'utf8').trim().split('\n').filter(Boolean);
+  const out = [];
+  for (let i = lines.length - 1; i >= 0 && out.length < max; i--) {
+    try {
+      const item = JSON.parse(lines[i]);
+      if (item && typeof item === 'object') out.push(item);
+    } catch (e) { /* 单条坏记录不影响其它审计记录 */ }
+  }
+  return out;
+}
+
+function recordLogin(username, meta) {
   const users = loadUsers();
   const u = users.find(x => x.username.toLowerCase() === String(username).toLowerCase());
   if (!u) return false;
-  u.lastLoginAt = new Date().toISOString();
+  const info = meta || {};
+  const at = new Date().toISOString();
+  const ip = info.ip ? String(info.ip).slice(0, 64) : null;
+  const userAgent = info.userAgent ? String(info.userAgent).slice(0, 240) : null;
+  u.lastLoginAt = at;
+  u.lastLoginIp = ip;
+  u.lastLoginUserAgent = userAgent;
+  u.loginHistory = Array.isArray(u.loginHistory) ? u.loginHistory : [];
+  u.loginHistory.unshift({ at, ip, userAgent });
+  u.loginHistory = u.loginHistory.slice(0, 20);
   saveUsers(users);
+  appendAudit({ at, actor: u.username, action: 'login', target: u.username, ip, userAgent });
   return true;
 }
 
@@ -277,6 +372,8 @@ function listUsers() {
     disabled: u.disabled === true,
     mustChangePassword: u.mustChangePassword === true,
     lastLoginAt: u.lastLoginAt || null,
+    lastLoginIp: u.lastLoginIp || null,
+    lastLoginUserAgent: u.lastLoginUserAgent || null,
     createdAt: u.createdAt, changedAt: u.changedAt,
   }));
 }
@@ -404,11 +501,13 @@ function checkRate(ip) {
 
 function noteFail(ip) {
   const a = attempts.get(ip) || { count: 0, until: 0 };
+  const wasLocked = !!a.until;
   a.count++;
   a.seenAt = Date.now();
   if (a.count >= 8) a.until = Date.now() + 5 * 60 * 1000;    // 锁 5 分钟
   attempts.set(ip, a);
   trimRateMap(attempts);
+  return !wasLocked && !!a.until;
 }
 
 function clearFail(ip) { attempts.delete(ip); }
@@ -458,6 +557,7 @@ module.exports = {
   findSystemAdmin, findAdmins, migrateUsers, normalizeUsers,
   verifyPassword, verifyPasswordAsync,
   hashPassword, loadUsers, saveUsers,
+  appendAudit, readAudit,
   makeSession, readSession, cookieHeader,
   checkRate, noteFail, clearFail,
   checkRegRate, noteRegistration,

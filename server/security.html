@@ -13,6 +13,8 @@
   .sec-panel{border:1px solid var(--line);border-radius:11px;background:var(--panel);overflow:hidden}
   .sec-ph{display:flex;align-items:center;padding:13px 15px;border-bottom:1px solid var(--line)}.sec-ph h3{margin:0;font-size:13.5px}.sec-ph span{margin-left:auto;color:var(--muted);font-size:11.5px}
   .sec-panel .tablewrap{border:0;border-radius:0;max-height:410px}
+  .audit-panel{margin-top:12px}.audit-panel .tablewrap{max-height:360px}
+  .audit-action{font:600 12px var(--mono);color:var(--accent)}
   @media(max-width:1100px){.sec-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sec-split{grid-template-columns:1fr}}
 </style>
 <script>(function(){try{var v=localStorage.getItem('quote.theme');if(v!=='light'&&v!=='dark')v='auto';document.documentElement.setAttribute('data-theme',v);var d=matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.setAttribute('data-theme-effective',v==='auto'?(d?'dark':'light'):v)}catch(e){}})();</script>
@@ -21,17 +23,19 @@
 const A=window.QuoteAdmin;const{createApp,ref,computed,onMounted}=Vue;
 createApp({components:{AppSidebar:A.AppSidebar,AppHeader:A.AppHeader,LoginGate:A.LoginGate,PasswordModal:A.PasswordModal,DialogHost:A.DialogHost},setup(){
   const{logged,checking,me,mustChange,afterLogin,reset:resetAuth}=A.useAuth(async()=>load());
-  const version=ref(''),users=ref([]),locks=ref([]),showPwd=ref(false),err=ref('');
+  const version=ref(''),users=ref([]),locks=ref([]),audit=ref([]),showPwd=ref(false),err=ref('');
   const disabled=computed(()=>users.value.filter(u=>u.disabled).length);
   const temp=computed(()=>users.value.filter(u=>u.mustChangePassword).length);
   const systemCount=computed(()=>users.value.filter(u=>u.system).length);
-  async function load(){err.value='';try{const[v,u,l]=await Promise.all([A.api('/api/version'),A.api('/api/users'),A.api('/api/rate-locks')]);version.value='价格表 v'+v.rev;users.value=u.users||[];locks.value=l.locks||[]}catch(e){err.value=e.message}}
+  async function load(){err.value='';if(!me.value.system){users.value=[];locks.value=[];audit.value=[];return}try{const[v,u,l,a]=await Promise.all([A.api('/api/version'),A.api('/api/users'),A.api('/api/rate-locks'),A.api('/api/security-audit?limit=100')]);version.value='价格表 v'+v.rev;users.value=u.users||[];locks.value=l.locks||[];audit.value=a.events||[]}catch(e){err.value=e.message}}
   async function unlock(ip){if(!await A.confirmAction({title:'解封 IP',message:'确定解封 '+ip+' 吗？',confirmText:'解封'}))return;try{await A.api('/api/rate-locks/'+encodeURIComponent(ip),{method:'DELETE'});await load();A.notify('已解封 '+ip,'ok')}catch(e){err.value=e.message}}
   async function unlockAll(){if(!await A.confirmAction({title:'全部解封',message:'确定解封全部 IP 吗？',confirmText:'全部解封'}))return;try{await A.api('/api/rate-locks',{method:'DELETE'});await load();A.notify('已解封全部 IP','ok')}catch(e){err.value=e.message}}
   async function logout(){try{await A.api('/api/logout',{method:'POST'})}catch(e){}resetAuth();location.href='/'}
   function remain(s){const m=Math.floor(s/60);return m?m+' 分 '+(s%60)+' 秒':s+' 秒'}
+  const ACTION_CN={'login':'登录成功','login.locked':'登录失败锁定','login.denied':'停用账号登录被拒','account.admin.create':'新增管理员','account.user.create':'新增普通用户','account.delete':'删除普通用户','account.password.reset':'重置密码','account.password.change':'修改密码','account.disable':'停用账号','account.enable':'启用账号','account.sessions.revoke':'注销会话','account.register':'自助注册','rate-locks.clear':'解封 IP','rate-locks.clear-all':'全部解封'};
+  function actionCn(v){return ACTION_CN[v]||v}
   onMounted(async()=>{try{await afterLogin()}catch(e){logged.value=false}});
-  return{logged,checking,me,mustChange,version,users,locks,showPwd,err,disabled,temp,systemCount,load,unlock,unlockAll,remain,afterLogin,logout};
+  return{logged,checking,me,mustChange,version,users,locks,audit,showPwd,err,disabled,temp,systemCount,load,unlock,unlockAll,remain,actionCn,afterLogin,logout};
 },template:`
 <div><AppSidebar :user="logged?me.user:''" :system="me.system" :workspace="me.dataScope"/>
 <AppHeader title="登录与安全" :version="version" :user="me.user" :role="me.role" :system="me.system" :workspace="me.dataScope" :workspace-meta="version" refresh :links="[]" @refresh="load" @logout="logout" @password="showPwd=true"/>
@@ -48,7 +52,7 @@ createApp({components:{AppSidebar:A.AppSidebar,AppHeader:A.AppHeader,LoginGate:A
   <div class="sec-split">
     <section class="sec-panel"><div class="sec-ph"><h3>账号安全状态</h3><span>全站账号</span></div>
       <div class="tablewrap"><table><thead><tr><th>账号</th><th>角色</th><th>状态</th><th>最后登录</th></tr></thead><tbody>
-      <tr v-for="u in users" :key="u.username"><td><b>{{ u.username }}</b></td><td>{{ u.system?'总管理员':(u.role==='admin'?'管理员':'普通用户') }}</td><td><span class="err" v-if="u.disabled">已停用</span><span style="color:var(--warn)" v-else-if="u.mustChangePassword">待改密</span><span class="ok" v-else>正常</span></td><td>{{ u.lastLoginAt?new Date(u.lastLoginAt).toLocaleString('zh-CN'):'从未登录' }}</td></tr>
+      <tr v-for="u in users" :key="u.username"><td><b>{{ u.username }}</b></td><td>{{ u.system?'总管理员':(u.role==='admin'?'管理员':'普通用户') }}</td><td><span class="err" v-if="u.disabled">已停用</span><span style="color:var(--warn)" v-else-if="u.mustChangePassword">待改密</span><span class="ok" v-else>正常</span></td><td>{{ u.lastLoginAt?new Date(u.lastLoginAt).toLocaleString('zh-CN'):'从未登录' }}<div class="muted" v-if="u.lastLoginIp">{{ u.lastLoginIp }}</div></td></tr>
       </tbody></table></div>
     </section>
     <section class="sec-panel"><div class="sec-ph"><h3>登录失败锁定</h3><button @click="unlockAll">全部解封</button></div>
@@ -57,6 +61,11 @@ createApp({components:{AppSidebar:A.AppSidebar,AppHeader:A.AppHeader,LoginGate:A
       </tbody></table></div><div class="empty" v-else>当前没有被锁定的 IP</div>
     </section>
   </div>
+  <section class="sec-panel audit-panel"><div class="sec-ph"><h3>安全审计</h3><span>最近 100 条 · 包含登录与账号操作</span></div>
+    <div class="tablewrap" v-if="audit.length"><table><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>对象</th><th>来源 IP</th><th>客户端</th></tr></thead><tbody>
+    <tr v-for="(e,i) in audit" :key="i"><td>{{ new Date(e.at).toLocaleString('zh-CN') }}</td><td><b>{{ e.actor }}</b></td><td><span class="audit-action">{{ actionCn(e.action) }}</span></td><td>{{ e.target || '—' }}</td><td><code>{{ e.ip || '—' }}</code></td><td class="muted" :title="e.userAgent || ''">{{ e.userAgent || '—' }}</td></tr>
+    </tbody></table></div><div class="empty" v-else>还没有安全审计记录</div>
+  </section>
   <div class="err">{{ err }}</div>
 </template></main><PasswordModal :show="showPwd||mustChange" :required="mustChange" @close="showPwd=false"/><DialogHost/></div>`
 }).mount('#root');

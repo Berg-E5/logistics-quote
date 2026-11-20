@@ -84,13 +84,8 @@ if command -v apt-get >/dev/null 2>&1; then
   echo "    包管理器: apt"
   apt-get update
   apt-get install -y --no-install-recommends \
-    ca-certificates curl gnupg tar nginx python3 python3-pip
+    ca-certificates curl gnupg tar openssl nginx python3 python3-pip python3-venv
   apt-get install -y --no-install-recommends certbot python3-certbot-nginx
-  if ! python3 -c "import openpyxl" 2>/dev/null; then
-    apt-get install -y --no-install-recommends python3-openpyxl \
-      || python3 -m pip install --quiet --break-system-packages openpyxl \
-      || python3 -m pip install --quiet openpyxl
-  fi
   if ! node_ok; then
     echo "    安装 Node.js 22 LTS (NodeSource)"
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -99,16 +94,11 @@ if command -v apt-get >/dev/null 2>&1; then
 elif command -v dnf >/dev/null 2>&1 || command -v yum >/dev/null 2>&1; then
   if command -v dnf >/dev/null 2>&1; then PKG=dnf; else PKG=yum; fi
   echo "    包管理器: $PKG"
-  $PKG install -y ca-certificates curl tar nginx python3 python3-pip
+  $PKG install -y ca-certificates curl tar openssl nginx python3 python3-pip
   if ! $PKG install -y certbot python3-certbot-nginx; then
     echo "    补充 EPEL 源后重试 certbot"
     $PKG install -y epel-release || true
     $PKG install -y certbot python3-certbot-nginx
-  fi
-  if ! python3 -c "import openpyxl" 2>/dev/null; then
-    $PKG install -y python3-openpyxl \
-      || python3 -m pip install --quiet --break-system-packages openpyxl \
-      || python3 -m pip install --quiet openpyxl
   fi
   if ! node_ok; then
     echo "    安装 Node.js 22 LTS (NodeSource)"
@@ -128,10 +118,6 @@ hash -r
 node_ok || { echo "!! Node.js 安装后仍不是 18+" >&2; exit 1; }
 command -v nginx >/dev/null 2>&1 || { echo "!! nginx 安装失败" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "!! python3 安装失败" >&2; exit 1; }
-python3 -c "import openpyxl" 2>/dev/null || {
-  echo "!! openpyxl 安装失败，整表导入无法工作" >&2
-  exit 1
-}
 if [ "$SKIP_SSL" != "skip-ssl" ]; then
   command -v certbot >/dev/null 2>&1 || { echo "!! certbot 安装失败" >&2; exit 1; }
 fi
@@ -251,6 +237,25 @@ chown -R "$SVC_USER:$SVC_USER" "$DIR/data"
 touch "$DIR/data_v2.js" "$DIR/public/data_v2.js"
 chown "$SVC_USER:$SVC_USER" "$DIR/data_v2.js" "$DIR/public/data_v2.js"
 
+# Python 依赖放独立 venv 并锁定哈希，不复用系统里版本不确定的 openpyxl。
+PYTHON_BIN="$(command -v python3)"
+VENV="$DIR/.venv"
+REQUIREMENTS="$DIR/deploy/python-requirements.txt"
+if [ ! -f "$REQUIREMENTS" ]; then
+  echo "!! 缺少 Python 锁定依赖文件: $REQUIREMENTS" >&2
+  exit 1
+fi
+if ! "$PYTHON_BIN" -m venv "$VENV"; then
+  echo "!! 创建 Python venv 失败，请确认 python3-venv 已安装" >&2
+  exit 1
+fi
+"$VENV/bin/python" -m pip install --disable-pip-version-check --no-cache-dir \
+  --only-binary=:all: --no-deps --require-hashes -r "$REQUIREMENTS"
+chown -R "$SVC_USER:$SVC_USER" "$VENV"
+runuser -u "$SVC_USER" -- "$VENV/bin/python" -c \
+  "import openpyxl, defusedxml; assert openpyxl.__version__ == '3.1.5', openpyxl.__version__"
+echo "    Python venv + openpyxl 3.1.5 已就绪"
+
 # 先在服务启动前建账号，随机密码会直接打印在安装输出里，而不是只进 journal。
 cd "$DIR"
 if ! runuser -u "$SVC_USER" -- node server/user.js list 2>/dev/null | grep -q 'admin'; then
@@ -279,9 +284,23 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=$PORT
 Environment=HOST=127.0.0.1
+Environment=QUOTE_PYTHON=$VENV/bin/python
+Environment=QUOTE_IMPORT_CONCURRENCY=1
+Environment=QUOTE_IMPORT_PREVIEW_MINUTES=30
+UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
 ReadWritePaths=$DIR/data $DIR/data_v2.js $DIR/public/data_v2.js
 StandardOutput=journal
 StandardError=journal
@@ -324,6 +343,21 @@ server {
     listen 80;
     listen [::]:80;
     server_name $DOMAIN;
+    server_tokens off;
+    client_max_body_size 64m;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
+    proxy_hide_header Content-Security-Policy;
+    proxy_hide_header Strict-Transport-Security;
 
     # ACME http-01 challenge —— 证书续签要用, 永不要动
     location ^~ /.well-known/acme-challenge/ {
@@ -338,11 +372,6 @@ server {
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 120s;
-        client_max_body_size 64m;
-
-        add_header X-Content-Type-Options nosniff always;
-        add_header X-Frame-Options SAMEORIGIN always;
-        add_header Referrer-Policy strict-origin-when-cross-origin always;
     }
 }
 EOF
@@ -414,6 +443,31 @@ else
   echo
   echo "==> [6/7] 跳过 SSL"
 fi
+
+# ---------------------------------------------------------------- 6b. 备份
+echo
+echo "==> 配置每日加密备份"
+install -m 0700 "$DIR/deploy/backup.sh" /usr/local/sbin/quote-backup
+install -m 0644 "$DIR/deploy/quote-backup.service" /etc/systemd/system/quote-backup.service
+install -m 0644 "$DIR/deploy/quote-backup.timer" /etc/systemd/system/quote-backup.timer
+if [ ! -f /etc/quote-backup.env ]; then
+  cat > /etc/quote-backup.env <<EOF
+SITE=$DIR
+DEST=/root/backups
+KEEP=14
+KEY_FILE=/root/.quote-backup.key
+EOF
+  chmod 600 /etc/quote-backup.env
+fi
+systemctl daemon-reload
+systemctl enable --now quote-backup.timer >/dev/null
+systemctl start quote-backup.service
+systemctl is-active --quiet quote-backup.timer || {
+  echo "!! 每日备份定时器没有启用" >&2
+  exit 1
+}
+echo "    本地备份: /root/backups（AES-256 加密，保留 14 份）"
+echo "    备份密钥: 见 /etc/quote-backup.env 的 KEY_FILE；请另存到密码管理器"
 
 # ---------------------------------------------------------------- 7. 自检
 echo

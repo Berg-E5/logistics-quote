@@ -1,0 +1,13 @@
+[Unit]
+Description=Encrypted backup for logistics quote
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/quote-backup
+EnvironmentFile=-/etc/quote-backup.env
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

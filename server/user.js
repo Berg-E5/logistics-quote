@@ -77,7 +77,7 @@ function main() {
       // 锁定状态在【运行中的服务进程】内存里, 所以必须通过 HTTP 问它,
       // 不能直接改本地 Map (那是另一个进程的副本)。
       const url = process.env.QUOTE_URL || ('http://127.0.0.1:' + (process.env.PORT || 8792));
-      const tokenFile = path.join(__dirname, '..', 'data', 'admin.token');
+      const tokenFile = path.join(users.DATA_DIR, 'admin.token');
       if (!fs.existsSync(tokenFile)) {
         console.log('找不到管理令牌:', tokenFile);
         process.exit(1);

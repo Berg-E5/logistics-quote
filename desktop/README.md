@@ -17,8 +17,9 @@ npm install
 npm start
 ```
 
-`prepare:python` 会自动下载 Python embeddable 运行时，并把 openpyxl 安装到
-`desktop/resources/python/Lib/site-packages`。
+`prepare:python` 会下载 Python embeddable 运行时并校验固定 SHA-256，再用
+`deploy/python-requirements.txt` 的 wheel 哈希安装 `openpyxl 3.1.5`、
+`et_xmlfile` 和 `defusedxml`。下载或哈希不匹配时构建会失败。
 
 ## 构建
 
@@ -28,6 +29,9 @@ npm run dist
 ```
 
 安装程序输出到 `desktop/dist/LogisticsQuote-Setup-*.exe`。
+
+构建不强制代码签名；未配置证书时产物会标记为 NotSigned。打包固定使用
+`node_modules/electron/dist`，避免构建机器因重复下载 Electron 而卡住。
 
 ## 本地数据
 
@@ -43,3 +47,9 @@ npm run dist
 总管理员可以创建多个管理员。管理员 A/B 各自维护独立价格表，只能创建和管理自己名下的
 普通账号；A 的普通用户只能读取 A 的价格表，B 的普通用户只能读取 B 的价格表。
 首次创建本机管理员后自动登录一次，后续启动显示登录页。
+
+## 更新检查
+
+“帮助 → 检查更新”会读取 GitHub 最新 Release，并对下载地址做固定仓库前缀校验。
+发现新版本时只显示版本和下载按钮，不会静默下载或执行安装。安装前请核对 Release
+页面的 SHA-256；未签名安装包可能触发 Windows SmartScreen。

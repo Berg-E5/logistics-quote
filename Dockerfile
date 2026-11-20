@@ -16,13 +16,17 @@
 #  (不给就随机生成并打进日志)。
 # ============================================================
 
-FROM node:22-bookworm-slim
+FROM node:22.23.5-bookworm-slim
 
-# python3 + openpyxl 只有「整表导入」需要 (读报价表 xlsx),
-# 但一起装进镜像, 目标服务器就不用另外配环境了。
+COPY deploy/python-requirements.txt /tmp/python-requirements.txt
+
+# Python 依赖固定在独立 venv 中，并对 wheel 做哈希校验。
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-pip tini gosu \
- && pip3 install --no-cache-dir --break-system-packages openpyxl \
+ && apt-get install -y --no-install-recommends python3 python3-venv tini gosu \
+ && python3 -m venv /opt/quote-venv \
+ && /opt/quote-venv/bin/pip install --disable-pip-version-check --no-cache-dir \
+      --only-binary=:all: --no-deps --require-hashes -r /tmp/python-requirements.txt \
+ && rm -f /tmp/python-requirements.txt \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -50,7 +54,10 @@ RUN mkdir -p /app/data \
 # 容器里必须监听 0.0.0.0, 127.0.0.1 的话端口映射出去连不上
 ENV NODE_ENV=production \
     PORT=8792 \
-    HOST=0.0.0.0
+    HOST=0.0.0.0 \
+    QUOTE_PYTHON=/opt/quote-venv/bin/python \
+    QUOTE_IMPORT_CONCURRENCY=1 \
+    QUOTE_IMPORT_PREVIEW_MINUTES=30
 
 EXPOSE 8792
 

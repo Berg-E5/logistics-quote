@@ -75,3 +75,28 @@ test('后台和桌面菜单都提供前台报价入口', () => {
     assert.match(html, /<AppSidebar/);
   }
 });
+
+test('客户端安全检查更新且不静默安装未签名包', () => {
+  assert.match(main, /RELEASES_API/);
+  assert.match(main, /checkForUpdates/);
+  assert.match(main, /compareVersions/);
+  assert.match(main, /shell\.openExternal/);
+  assert.doesNotMatch(main, /electron-updater|autoUpdater\.quitAndInstall/);
+  assert.match(main, /检查更新/);
+  assert.equal(pkg.version, '1.4.0');
+  assert.match(pkg.scripts.dist, /config\.electronDist=node_modules\/electron\/dist/);
+  assert.ok(fs.existsSync(path.join(root, '.github', 'workflows', 'desktop.yml')));
+});
+
+test('桌面 Python 运行时和依赖都做完整性校验', () => {
+  const prepare = fs.readFileSync(path.join(desktop, 'scripts', 'prepare-python.ps1'), 'utf8');
+  const requirements = fs.readFileSync(path.join(root, 'deploy', 'python-requirements.txt'), 'utf8');
+  assert.match(prepare, /SHA256\]::Create/);
+  assert.match(prepare, /PythonZipSha256/);
+  assert.match(prepare, /--require-hashes/);
+  assert.match(prepare, /--only-binary=:all:/);
+  assert.match(requirements, /openpyxl==3\.1\.5/);
+  assert.match(requirements, /et_xmlfile==2\.0\.0/);
+  assert.match(requirements, /defusedxml==0\.7\.1/);
+  assert.match(requirements, /--hash=sha256:/);
+});

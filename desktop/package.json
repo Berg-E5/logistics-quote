@@ -1,6 +1,6 @@
 {
   "name": "logistics-quote-desktop",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "物流报价 Windows 桌面客户端",
   "main": "main.js",
@@ -9,12 +9,20 @@
   "scripts": {
     "prepare:python": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-python.ps1",
     "start": "npm run prepare:python && electron .",
-    "dist": "npm run prepare:python && electron-builder --win nsis",
-    "dist:dir": "npm run prepare:python && electron-builder --win dir"
+    "dist": "npm run prepare:python && electron-builder --win nsis --config.electronDist=node_modules/electron/dist",
+    "dist:dir": "npm run prepare:python && electron-builder --win dir --config.electronDist=node_modules/electron/dist"
   },
   "devDependencies": {
     "electron": "45.4.1",
     "electron-builder": "26.18.0"
+  },
+  "overrides": {
+    "@electron/universal": {
+      "minimatch": "11.0.1"
+    },
+    "app-builder-lib": {
+      "minimatch": "11.0.1"
+    }
   },
   "build": {
     "appId": "com.berg.logisticsquote",

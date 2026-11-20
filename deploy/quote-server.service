@@ -14,9 +14,23 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=8792
 Environment=HOST=127.0.0.1
+Environment=QUOTE_PYTHON=/var/www/quote.byberg.store/.venv/bin/python
+Environment=QUOTE_IMPORT_CONCURRENCY=1
+Environment=QUOTE_IMPORT_PREVIEW_MINUTES=30
+UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
 ReadWritePaths=/var/www/quote.byberg.store/data /var/www/quote.byberg.store/data_v2.js /var/www/quote.byberg.store/public/data_v2.js
 StandardOutput=journal
 StandardError=journal

@@ -251,21 +251,31 @@ function load(scope) {
   if (!fs.existsSync(RATES)) {
     return { rev: 0, updatedAt: null, data: null };
   }
+  let raw;
   try {
-    const raw = JSON.parse(fs.readFileSync(RATES, 'utf8'));
-    // 注意: 这里返回的是**原始数据**, 不套用人工改的除数。
-    // 因为 load() 的结果会被 atomicWrite 写回 rates.json —— 如果这里就套了覆盖,
-    // 人工改的除数会被固化进主数据文件, 以后「恢复自动」就没得恢复了。
-    // 读接口请用 loadView(scope)。
-    return {
-      rev: raw.rev || 0,
-      updatedAt: raw.updatedAt || null,
-      data: raw.data || null,
-    };
+    raw = JSON.parse(fs.readFileSync(RATES, 'utf8'));
   } catch (e) {
     console.error('[db] rates.json 解析失败:', e.message);
-    return { rev: 0, updatedAt: null, data: null };
+    const err = new Error('价格数据损坏，已停止写入。请从备份恢复 rates.json');
+    err.code = 'RATES_STORE_CORRUPT';
+    err.cause = e;
+    throw err;
   }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)
+      || (raw.data != null && (typeof raw.data !== 'object' || Array.isArray(raw.data)))) {
+    const err = new Error('价格数据结构错误，已停止写入。请从备份恢复 rates.json');
+    err.code = 'RATES_STORE_CORRUPT';
+    throw err;
+  }
+  // 注意: 这里返回的是**原始数据**, 不套用人工改的除数。
+  // 因为 load() 的结果会被 atomicWrite 写回 rates.json —— 如果这里就套了覆盖,
+  // 人工改的除数会被固化进主数据文件, 以后「恢复自动」就没得恢复了。
+  // 读接口请用 loadView(scope)。
+  return {
+    rev: raw.rev || 0,
+    updatedAt: raw.updatedAt || null,
+    data: raw.data || null,
+  };
 }
 
 /** 读视图: 原始数据 + 套用人工改过的除数 (只给读接口用) */
@@ -282,13 +292,22 @@ function loadView(scope) {
 function loadLocks(scope) {
   const LOCKS = locksPath(scope);
   if (!fs.existsSync(LOCKS)) return {};
+  let o;
   try {
-    const o = JSON.parse(fs.readFileSync(LOCKS, 'utf8'));
-    return (o && typeof o === 'object') ? o : {};
+    o = JSON.parse(fs.readFileSync(LOCKS, 'utf8'));
   } catch (e) {
     console.error('[db] locks.json 解析失败:', e.message);
-    return {};
+    const err = new Error('锁定价格数据损坏，已停止写入。请从备份恢复 locks.json');
+    err.code = 'LOCKS_STORE_CORRUPT';
+    err.cause = e;
+    throw err;
   }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) {
+    const err = new Error('锁定价格数据结构错误，已停止写入');
+    err.code = 'LOCKS_STORE_CORRUPT';
+    throw err;
+  }
+  return o;
 }
 
 /* ---------------- 人工改过的体积重除数 ----------------
@@ -304,13 +323,22 @@ function loadLocks(scope) {
 function loadDivs(scope) {
   const F = divsPath(scope);
   if (!fs.existsSync(F)) return {};
+  let o;
   try {
-    const o = JSON.parse(fs.readFileSync(F, 'utf8'));
-    return (o && typeof o === 'object') ? o : {};
+    o = JSON.parse(fs.readFileSync(F, 'utf8'));
   } catch (e) {
     console.error('[db] divs.json 解析失败:', e.message);
-    return {};
+    const err = new Error('人工体积重配置损坏，已停止写入。请从备份恢复 divs.json');
+    err.code = 'DIVS_STORE_CORRUPT';
+    err.cause = e;
+    throw err;
   }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) {
+    const err = new Error('人工体积重配置结构错误，已停止写入');
+    err.code = 'DIVS_STORE_CORRUPT';
+    throw err;
+  }
+  return o;
 }
 
 function saveDivs(scope, map) {
@@ -956,7 +984,13 @@ function getToken() {
     return envToken;
   }
   if (fs.existsSync(TOKEN_FILE)) {
-    return fs.readFileSync(TOKEN_FILE, 'utf8').trim();
+    const token = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
+    if (!/^[A-Za-z0-9_-]{24,128}$/.test(token)) {
+      const e = new Error('管理令牌文件损坏，请从备份恢复 admin.token');
+      e.code = 'ADMIN_TOKEN_CORRUPT';
+      throw e;
+    }
+    return token;
   }
   const t = crypto.randomBytes(24).toString('hex');
   atomicWrite(TOKEN_FILE, t);

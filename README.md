@@ -6,13 +6,15 @@
 数据用 JSON 文件存。总管理员可以创建多个独立管理员，每个管理员维护自己的价格表；
 普通账号由所属管理员创建，只读访问该管理员的价格表，不能看到其他管理员的数据。
 
-整表导入额外需要 Python 3 和 `openpyxl`；Docker 镜像和一键安装脚本会自动安装。
+整表导入额外需要 Python 3、固定版本的 `openpyxl` 和 `defusedxml`；
+Docker 镜像和一键安装脚本会用锁定哈希的独立 Python 环境自动安装。
 
 ---
 
 ## 一条命令装起来
 
-在一台新服务器上运行。脚本会自动安装 Node 18+、nginx、Python 3、openpyxl 和 certbot：
+在一台新服务器上运行。脚本会自动安装 Node 18+、nginx、Python 3、固定版本
+`openpyxl 3.1.5` 和 certbot：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/deploy/bootstrap.sh \
@@ -20,7 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/Berg-E5/logistics-quote/main/deploy
 ```
 
 脚本会下载程序包、安装系统依赖、配置 systemd 和 nginx、申请 HTTPS 证书、
-启用自动续签，并创建全新的 admin 账号。没有域名的测试环境可在末尾加 `skip-ssl`。
+启用自动续签、配置每日加密备份，并创建全新的 admin 账号。没有域名的测试环境可在末尾加 `skip-ssl`。
 
 起好之后：
 
@@ -90,6 +92,9 @@ npm run dist
 
 安装包输出到 `desktop/dist/LogisticsQuote-Setup-*.exe`。随包携带 Python 3.12
 和 openpyxl，客户电脑不需要另外安装 Node、Python 或 nginx。
+客户端会检查 GitHub 最新 Release 并给出下载入口，不会静默安装未签名更新。
+安装包未做代码签名，Windows 可能显示“未知发布者”；下载后请核对 Release 页公布的
+SHA-256。
 
 ---
 
@@ -138,7 +143,8 @@ npm run dist
 | 数据抽取 | Python 3 + openpyxl（读报价表 xlsx） |
 | 样式 | 原生 CSS，令牌单一来源在 `public/ui-common.css` |
 
-**没有 `package.json`，没有 `node_modules`，没有构建步骤。**
+服务端没有 `package.json`、`node_modules` 或构建步骤；桌面客户端单独使用
+`desktop/package.json` 构建。
 改完刷新就生效。前台支持离线双击，所以不能用 ESM / Vite。
 
 ## 目录
@@ -160,6 +166,8 @@ npm run dist
 | `deploy/install-remote.sh` | 在本地跑一条命令，远程装到别的服务器 |
 | `deploy/release.sh` | 打包 + 更新发布目录 |
 | `deploy/bootstrap.sh` | 一条命令安装 (curl \| bash) |
+| `deploy/backup.sh` | AES-256 加密备份，可推送私有 Git 异地仓库 |
+| `deploy/quote-backup.timer` | 每天自动备份，默认保留 14 份 |
 | `脚本/verify_calc.js` | 原计算器口径回归（264 组） |
 | `脚本/verify_rates.js` | 报价表口径交叉验证（401 组，独立实现） |
 | `脚本/sync_copies.py` | 多副本同步 + 一致性检查 |
@@ -173,24 +181,34 @@ npm run dist
 node --test
 ```
 
-测试覆盖起收重量边界、并发导入的数据隔离，以及管理令牌是否真正写入 `admin` 作用域。
+测试覆盖起收重量边界、租户隔离、损坏数据 fail-closed、跨站写入拦截、CLI 数据目录、
+导入预览 TTL、安全响应头、Python 哈希校验及桌面更新检查。
 
 ## 安全相关环境变量
 
 | 变量 | 默认值 | 作用 |
 |---|---|---|
-| `QUOTE_REGISTRATION_OPEN` | `1` | 设为 `0` 关闭公开注册，仅管理员可建号 |
-| `QUOTE_IMPORT_CONCURRENCY` | `2` | 同时运行的导入任务数 |
+| `QUOTE_REGISTRATION_OPEN` | `0` | 设为 `1` 才允许公开注册；生产环境建议保持关闭 |
+| `QUOTE_IMPORT_CONCURRENCY` | `1` | 同时运行的导入任务数 |
 | `QUOTE_IMPORT_MAX_MB` | `40` | 单个 XLSX 文件大小上限 |
-| `QUOTE_IMPORT_MAX_UNCOMPRESSED_MB` | `500` | XLSX 解压后总大小上限 |
+| `QUOTE_IMPORT_MAX_UNCOMPRESSED_MB` | `256` | XLSX 解压后总大小上限 |
+| `QUOTE_IMPORT_MAX_ZIP_ENTRIES` | `5000` | XLSX 内部文件数上限 |
+| `QUOTE_IMPORT_PREVIEW_MINUTES` | `30` | 待确认导入预览的保留时间 |
 | `QUOTE_IMPORT_TIMEOUT_MS` | `600000` | 单次导入超时时间 |
 | `QUOTE_IMPORT_MAX_TIERS` | `200000` | JSON 导入的最大费率档数量 |
 | `QUOTE_IMPORT_STALE_HOURS` | `24` | 启动时清理多久以前的临时导入目录 |
 | `QUOTE_CHANGELOG_MAX_BYTES` | `8388608` | 单个改动日志文件轮转大小 |
+| `QUOTE_AUDIT_MAX_BYTES` | `4194304` | 安全审计日志轮转大小 |
 
-公开部署前必须确认 `admin` 密码没有出现在源码、脚本或 Git 历史中。密码一旦泄露，
-除了改密码，还应轮换生产环境的 `data/secret.key`，否则已经签发的会话仍可继续使用。
+账号库、价格、锁定表和人工除数只要检测到 JSON 损坏，服务就会拒绝写入并停止启动，
+不会再把这些文件当成空数据覆盖。公开部署前必须确认密码没有出现在源码、脚本或 Git
+历史中。密码一旦泄露，除了改密码，还应轮换生产环境的 `data/secret.key`，否则已经
+签发的会话仍可继续使用。
 发布包不包含账号库、`secret.key` 或管理令牌，每个新站会生成自己的管理员账号和签名密钥。
+
+Nginx 和 Node 都会发送 CSP、HSTS、`Permissions-Policy`、`nosniff` 与禁止跨站写入的
+策略。登录 IP、User-Agent，以及账号创建、停用、重置密码和会话注销会写入
+`data/security-audit.jsonl`，总管理员可在“登录与安全”页面查看。
 
 ## 关于这个仓库
 

@@ -866,22 +866,22 @@ createApp({
       if ((rep.changed || []).length) {
         html += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">价格有变化的档位 (${rep.changed.length})</div>`
           + rows(rep.changed, [['渠道 / 国家 / 重量段', r => A.esc(r.label)],
-            ['原运费', r => `<span class="rep-old">${r.oldPrice}</span>`, 'num'],
-            ['新运费', r => `<b class="rep-new">${r.newPrice}</b>`, 'num'],
-            ['原挂号费', r => `<span class="rep-old">${r.oldFee}</span>`, 'num'],
-            ['新挂号费', r => `<b class="rep-new">${r.newFee}</b>`, 'num']]);
+            ['原运费', r => `<span class="rep-old">${A.esc(r.oldPrice)}</span>`, 'num'],
+            ['新运费', r => `<b class="rep-new">${A.esc(r.newPrice)}</b>`, 'num'],
+            ['原挂号费', r => `<span class="rep-old">${A.esc(r.oldFee)}</span>`, 'num'],
+            ['新挂号费', r => `<b class="rep-new">${A.esc(r.newFee)}</b>`, 'num']]);
       }
       if ((rep.added || []).length) {
         html += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">新增的档位 (${rep.added.length}) —— 多半是新渠道</div>`
           + rows(rep.added, [['渠道 / 国家 / 重量段', r => A.esc(r.label)],
-            ['运费', r => `<b class="rep-new">${r.price}</b>`, 'num'],
-            ['挂号费', r => r.fee, 'num']]);
+            ['运费', r => `<b class="rep-new">${A.esc(r.price)}</b>`, 'num'],
+            ['挂号费', r => A.esc(r.fee), 'num']]);
       }
       if ((rep.removed || []).length) {
         html += `<div class="muted" style="font-size:12.5px;margin:12px 0 6px">移除的档位 (${rep.removed.length}) —— 报价表里没有了</div>`
           + rows(rep.removed, [['渠道 / 国家 / 重量段', r => A.esc(r.label)],
-            ['原运费', r => `<span class="rep-del">${r.price}</span>`, 'num'],
-            ['原挂号费', r => r.fee, 'num']]);
+            ['原运费', r => `<span class="rep-del">${A.esc(r.price)}</span>`, 'num'],
+            ['原挂号费', r => A.esc(r.fee), 'num']]);
       }
       if (rep.truncated) html += '<div class="muted" style="font-size:12px;margin-top:8px">明细太多, 只显示前 300 条</div>';
       return html;
@@ -1056,7 +1056,7 @@ createApp({
                       :class="{ on: i + 1 === impProg.step, done: i + 1 <= impProg.stepDone }">{{ s }}</span>
               </div>
             </div>
-            <pre class="implog" :class="{show: welLog}" v-html="welLog"></pre>
+            <pre class="implog" :class="{show: welLog}">{{ welLog }}</pre>
             <div v-html="welReport"></div>
           </div>
 
@@ -1183,7 +1183,7 @@ createApp({
                       :class="{ on: i + 1 === impProg.step, done: i + 1 <= impProg.stepDone }">{{ s }}</span>
               </div>
             </div>
-            <pre class="implog" :class="{show: impLog}" v-html="impLog"></pre>
+            <pre class="implog" :class="{show: impLog}">{{ impLog }}</pre>
             <div v-html="impReport"></div>
           </div>
 

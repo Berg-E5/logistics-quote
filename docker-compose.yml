@@ -17,6 +17,8 @@ services:
     image: quote:latest
     container_name: quote-server
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8792:8792"
     volumes:
@@ -26,6 +28,8 @@ services:
       HOST: "0.0.0.0"
       NODE_ENV: "production"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      QUOTE_IMPORT_CONCURRENCY: "1"
+      QUOTE_IMPORT_PREVIEW_MINUTES: "30"
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8792/api/version',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s

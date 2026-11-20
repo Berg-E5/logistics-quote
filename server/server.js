@@ -15,7 +15,8 @@
  *   PORT        监听端口 (默认 8080)
  *   HOST        监听地址 (默认 127.0.0.1, 由 nginx 反代)
  *   QUOTE_TOKEN 管理令牌 (不给就用 data/admin.token)
- *   QUOTE_IMPORT_CONCURRENCY 同时运行的整表导入数 (默认 2)
+ *   QUOTE_IMPORT_CONCURRENCY 同时运行的整表导入数 (默认 1)
+ *   QUOTE_IMPORT_PREVIEW_MINUTES 待确认导入预览保留分钟数 (默认 30)
  */
 const http = require('http');
 const fs = require('fs');
@@ -39,12 +40,20 @@ const SCRIPTS = (() => {
 const UPLOAD_DIR = path.join(os.tmpdir(), 'quote-import');   // 用 os.tmpdir() 而不是硬编码 /tmp (Windows 下 /tmp 不是有效路径)
 const MAX_CONCURRENT_IMPORTS = Math.max(
   1,
-  Number.parseInt(process.env.QUOTE_IMPORT_CONCURRENCY || '2', 10) || 2
+  Number.parseInt(process.env.QUOTE_IMPORT_CONCURRENCY || '1', 10) || 1
 );
 const MAX_IMPORT_BYTES = Math.max(
   1,
   Number.parseInt(process.env.QUOTE_IMPORT_MAX_MB || '40', 10) || 40
 ) * 1024 * 1024;
+const MAX_IMPORT_UNCOMPRESSED_BYTES = Math.max(
+  1,
+  Number.parseInt(process.env.QUOTE_IMPORT_MAX_UNCOMPRESSED_MB || '256', 10) || 256
+) * 1024 * 1024;
+const MAX_IMPORT_ZIP_ENTRIES = Math.max(
+  100,
+  Number.parseInt(process.env.QUOTE_IMPORT_MAX_ZIP_ENTRIES || '5000', 10) || 5000
+);
 const IMPORT_TIMEOUT_MS = Math.max(
   30000,
   Number.parseInt(process.env.QUOTE_IMPORT_TIMEOUT_MS || '600000', 10) || 600000
@@ -59,6 +68,12 @@ const IMPORT_STALE_MS = Math.max(
   Number.parseInt(process.env.QUOTE_IMPORT_STALE_HOURS || '24', 10) * 60 * 60 * 1000
     || 24 * 60 * 60 * 1000
 );
+const IMPORT_PREVIEW_TTL_MS = Math.max(
+  5 * 60 * 1000,
+  Number.parseInt(process.env.QUOTE_IMPORT_PREVIEW_MINUTES || '30', 10)
+    * 60 * 1000
+    || 30 * 60 * 1000
+);
 let activeImportCount = 0;
 // 每个用户一个导入任务, 互不干扰
 const importJobs = new Map();
@@ -66,10 +81,97 @@ function getJob(scope) {
   if (!importJobs.has(scope)) {
     importJobs.set(scope, {
       state: 'idle', log: [], startedAt: null, result: null, error: null,
-      preview: false, pendingData: null, pendingSnapshot: null,
+      preview: false, pendingData: null, pendingSnapshot: null, pendingAt: null,
     });
   }
   return importJobs.get(scope);
+}
+
+/** 预览包含整份价格数据，必须按 TTL 释放，避免长期占内存。 */
+function expirePreviewIfNeeded(job, force) {
+  if (!job || job.state !== 'preview' || !job.pendingAt) return false;
+  if (!force && Date.now() - job.pendingAt < IMPORT_PREVIEW_TTL_MS) return false;
+  job.state = 'expired';
+  job.preview = false;
+  job.pendingData = null;
+  job.pendingSnapshot = null;
+  job.pendingAt = null;
+  job.result = null;
+  job.error = `导入预览已过期（保留 ${Math.round(IMPORT_PREVIEW_TTL_MS / 60000)} 分钟），请重新上传`;
+  job.log = [job.error];
+  return true;
+}
+
+function sweepImportJobs() {
+  let expired = 0;
+  for (const job of importJobs.values()) {
+    if (expirePreviewIfNeeded(job, false)) expired++;
+  }
+  return expired;
+}
+
+/**
+ * XLSX 是 ZIP。上传后、交给 openpyxl 前检查中央目录，
+ * 防止压缩炸弹把 1.9GB 内存的小服务器打崩。
+ */
+function inspectXlsxZip(buffer) {
+  const fail = (message, status) => {
+    const e = new Error(message);
+    e.status = status || 400;
+    throw e;
+  };
+  const eocdMin = Math.max(0, buffer.length - 22 - 0xffff);
+  let eocd = -1;
+  for (let i = buffer.length - 22; i >= eocdMin; i--) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) fail('文件不是完整有效的 .xlsx');
+  const disk = buffer.readUInt16LE(eocd + 4);
+  const cdDisk = buffer.readUInt16LE(eocd + 6);
+  const entries = buffer.readUInt16LE(eocd + 10);
+  const cdSize = buffer.readUInt32LE(eocd + 12);
+  const cdOffset = buffer.readUInt32LE(eocd + 16);
+  if (disk !== 0 || cdDisk !== 0 || entries === 0xffff
+      || cdSize === 0xffffffff || cdOffset === 0xffffffff) {
+    fail('不支持分卷或 ZIP64 格式的 .xlsx');
+  }
+  if (entries < 1 || entries > MAX_IMPORT_ZIP_ENTRIES) {
+    fail(`xlsx 内部文件数异常（${entries}）`, 413);
+  }
+  if (cdOffset + cdSize > buffer.length) fail('xlsx 中央目录损坏');
+
+  let offset = cdOffset;
+  let totalUncompressed = 0;
+  for (let i = 0; i < entries; i++) {
+    if (offset + 46 > buffer.length || buffer.readUInt32LE(offset) !== 0x02014b50) {
+      fail('xlsx 中央目录损坏');
+    }
+    const flags = buffer.readUInt16LE(offset + 8);
+    const method = buffer.readUInt16LE(offset + 10);
+    const compressed = buffer.readUInt32LE(offset + 20);
+    const uncompressed = buffer.readUInt32LE(offset + 24);
+    const nameLen = buffer.readUInt16LE(offset + 28);
+    const extraLen = buffer.readUInt16LE(offset + 30);
+    const commentLen = buffer.readUInt16LE(offset + 32);
+    const next = offset + 46 + nameLen + extraLen + commentLen;
+    if (next > buffer.length) fail('xlsx 中央目录越界');
+    if (flags & 0x1) fail('不支持加密的 .xlsx');
+    if (method !== 0 && method !== 8) fail('xlsx 使用了不支持的压缩算法');
+    if (compressed === 0xffffffff || uncompressed === 0xffffffff) {
+      fail('不支持 ZIP64 格式的 .xlsx');
+    }
+    const name = buffer.subarray(offset + 46, offset + 46 + nameLen).toString('utf8');
+    if (!name || name.includes('\0') || name.startsWith('/')
+        || name.split(/[\\/]/).includes('..')) {
+      fail('xlsx 包含不安全路径');
+    }
+    totalUncompressed += uncompressed;
+    if (totalUncompressed > MAX_IMPORT_UNCOMPRESSED_BYTES) {
+      fail(`xlsx 解压后超过 ${Math.round(MAX_IMPORT_UNCOMPRESSED_BYTES / 1024 / 1024)} MB`, 413);
+    }
+    offset = next;
+  }
+  return { entries, totalUncompressed };
 }
 
 // ---- 汇率: 服务端自动抓取 ----
@@ -140,9 +242,9 @@ function startFxWatcher() {
     console.log('[fx] 自动刷新已关闭 (QUOTE_FX_OFF=1)');
     return;
   }
-  if (fxAgeMs() > FX_MIN_AGE_MS) refreshFx('启动时数据过期');
+  const stale = fxAgeMs() > FX_MIN_AGE_MS;
   setInterval(() => refreshFx('定时任务'), FX_INTERVAL_MS);
-  refreshFx('启动检查');
+  refreshFx(stale ? '启动时数据过期' : '启动检查');
 }
 
 function cleanupImportWorkspace(workDir) {
@@ -249,6 +351,7 @@ function startImport(scope, filename, fileBuffer, options) {
   importJob.preview = !!(options && options.previewOnly);
   importJob.pendingData = null;
   importJob.pendingSnapshot = null;
+  importJob.pendingAt = null;
   importJob.startedAt = new Date().toISOString();
   importJob.file = filename;
   // ---- 进度条 ----
@@ -374,6 +477,7 @@ function startImport(scope, filename, fileBuffer, options) {
         const snap = path.join(jobScripts, 'data_v2.js');
         importJob.pendingData = data;
         importJob.pendingSnapshot = fs.existsSync(snap) ? fs.readFileSync(snap) : null;
+        importJob.pendingAt = Date.now();
         importJob.state = 'preview';
         importJob.progress = 100;
         importJob.stepDone = importJob.stepTotal || importJob.stepDone;
@@ -561,14 +665,49 @@ function cookies(req) {
   for (const part of raw.split(';')) {
     const i = part.indexOf('=');
     if (i < 0) continue;
-    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    try {
+      out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    } catch (e) { /* 忽略格式错误的单个 cookie */ }
   }
   return out;
+}
+
+function userAgent(req) {
+  return String(req.headers['user-agent'] || '').slice(0, 240);
 }
 
 function requestIsHttps(req) {
   const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
   return proto ? proto === 'https' : (req.socket.encrypted === true);
+}
+
+function applySecurityHeaders(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+    + "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    + "font-src 'self' data:; connect-src 'self'; object-src 'none'; "
+    + "base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
+  if (requestIsHttps(req)) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+}
+
+function isCrossOriginMutation(req) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(String(req.method || 'GET').toUpperCase())) {
+    return false;
+  }
+  const origin = String(req.headers.origin || '').trim();
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== String(req.headers.host || '');
+  } catch (e) {
+    return true;
+  }
 }
 
 function setSessionCookie(req, res, username) {
@@ -652,11 +791,15 @@ function serveStatic(res, filePath) {
 }
 
 const server = http.createServer(async (req, res) => {
+  applySecurityHeaders(req, res);
   const parsed = new URL(req.url, 'http://localhost');
   const pathname = decodeURIComponent(parsed.pathname);
   const q = Object.fromEntries(parsed.searchParams.entries());
 
   try {
+    if (isCrossOriginMutation(req)) {
+      return sendErr(res, 403, '拒绝跨站写入请求');
+    }
     // ---------- 公开 ----------
     // 管理员看自己的租户数据；普通用户看所属管理员的数据。
     const identity = currentIdentity(req);
@@ -727,14 +870,27 @@ const server = http.createServer(async (req, res) => {
       const u = users.findUser(body.username);
       const ok = u ? await users.verifyPasswordAsync(body.password || '', u) : false;
       if (!ok) {
-        users.noteFail(ip);
+        const lockedNow = users.noteFail(ip);
+        if (lockedNow) {
+          users.appendAudit({
+            actor: String(body.username || 'unknown').slice(0, 64),
+            action: 'login.locked',
+            target: String(body.username || '').slice(0, 128),
+            ip, userAgent: userAgent(req),
+            details: { reason: 'too_many_failures' },
+          });
+        }
         return sendErr(res, 401, '用户名或密码不对');
       }
       if (u.disabled) {
+        users.appendAudit({
+          actor: u.username, action: 'login.denied', target: u.username,
+          ip, userAgent: userAgent(req), details: { reason: 'disabled' },
+        });
         return sendErr(res, 403, '账号已停用，请联系所属管理员');
       }
       users.clearFail(ip);
-      users.recordLogin(u.username);
+      users.recordLogin(u.username, { ip, userAgent: userAgent(req) });
       setSessionCookie(req, res, u.username);
       return sendJson(res, 200, {
         ok: true, user: u.username, role: u.role, system: !!u.system,
@@ -781,6 +937,10 @@ const server = http.createServer(async (req, res) => {
       try {
         users.setPassword(u, body.newPassword || '');
       } catch (e) { return sendErr(res, 400, e.message); }
+      users.appendAudit({
+        actor: u, action: 'account.password.change', target: u,
+        ip: clientIp(req), userAgent: userAgent(req),
+      });
       // 其他设备上的旧会话已因 sessionVersion 变化失效；当前设备换发新会话。
       setSessionCookie(req, res, u);
       return sendJson(res, 200, { ok: true });
@@ -801,6 +961,10 @@ const server = http.createServer(async (req, res) => {
       try {
         const u = users.registerUser(body.username, body.password, body.confirm);
         users.noteRegistration(ip);
+        users.appendAudit({
+          actor: u.username, action: 'account.register', target: u.username,
+          ip, userAgent: userAgent(req),
+        });
         console.log(`[register] 新用户 ${u.username} (${clientIp(req)})`);
         // 注册完直接给会话, 免得再输一次
         setSessionCookie(req, res, u.username);
@@ -1002,6 +1166,7 @@ const server = http.createServer(async (req, res) => {
         if (fileBuffer.length > MAX_IMPORT_BYTES) {
           return sendErr(res, 413, `文件太大，最大 ${Math.round(MAX_IMPORT_BYTES / 1024 / 1024)} MB`);
         }
+        inspectXlsxZip(fileBuffer);
         startImport(scope, name, fileBuffer, { previewOnly: body.preview === true });
         return sendJson(res, 200, { ok: true, started: true, preview: body.preview === true });
       } catch (e) {
@@ -1011,6 +1176,7 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/import-status' && req.method === 'GET') {
       const job = getJob(scope);
+      expirePreviewIfNeeded(job, false);
       return sendJson(res, 200, {
         state: job.state,
         startedAt: job.startedAt,
@@ -1027,11 +1193,15 @@ const server = http.createServer(async (req, res) => {
         elapsed: job.elapsed || 0,
         stepMs: job.stepMs || 0,
         preview: !!job.preview,
+        previewExpiresAt: job.state === 'preview'
+          ? new Date(job.pendingAt + IMPORT_PREVIEW_TTL_MS).toISOString()
+          : null,
       });
     }
 
     if (pathname === '/api/import-commit' && req.method === 'POST') {
       const job = getJob(scope);
+      expirePreviewIfNeeded(job, false);
       if (job.state !== 'preview' || !job.pendingData) {
         return sendErr(res, 409, '没有等待确认的导入预览');
       }
@@ -1052,6 +1222,7 @@ const server = http.createServer(async (req, res) => {
         if (scope === globalScope) writeOfflineSnapshot(job.pendingSnapshot);
         job.pendingData = null;
         job.pendingSnapshot = null;
+        job.pendingAt = null;
         job.log.push(`已发布 · 数据版本 v${r.rev}`);
         return sendJson(res, 200, { ok: true, ...job.result });
       } catch (e) {
@@ -1066,6 +1237,7 @@ const server = http.createServer(async (req, res) => {
       job.preview = false;
       job.pendingData = null;
       job.pendingSnapshot = null;
+      job.pendingAt = null;
       job.result = null;
       job.error = null;
       job.log = [];
@@ -1126,14 +1298,12 @@ const server = http.createServer(async (req, res) => {
           : (u.ownerAdmin || publicScope);
         const p = db.ratesPath(dataOwner);
         let tiers = 0, rev = 0, hasData = false;
-        try {
-          if (fs.existsSync(p)) {
-            const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
-            tiers = ((raw.data && raw.data.tiers) || []).length;
-            rev = raw.rev || 0;
-            hasData = true;
-          }
-        } catch (e) { /* ignore */ }
+        if (fs.existsSync(p)) {
+          const raw = db.load(dataOwner);
+          tiers = ((raw.data && raw.data.tiers) || []).length;
+          rev = raw.rev || 0;
+          hasData = !!raw.data;
+        }
         return {
           ...u, tiers, rev, hasData,
           shared: u.role !== 'admin',
@@ -1167,6 +1337,13 @@ const server = http.createServer(async (req, res) => {
               ownerAdmin: viewerRecord.username,
               mustChangePassword: body.forcePasswordChange === true,
             });
+        users.appendAudit({
+          actor: viewerRecord.username,
+          action: role === 'admin' ? 'account.admin.create' : 'account.user.create',
+          target: u.username,
+          ip: clientIp(req), userAgent: userAgent(req),
+          details: { ownerAdmin: u.ownerAdmin || null },
+        });
         console.log(`[users] ${viewerRecord.username} 新增 ${role} ${u.username}` +
           (u.ownerAdmin ? ` owner=${u.ownerAdmin}` : ''));
         return sendJson(res, 200, {
@@ -1197,6 +1374,11 @@ const server = http.createServer(async (req, res) => {
         const dir = db.scopeDir(u.username);
         try { fs.rmSync(dir, { recursive: true, force: true }); }
         catch (e) { console.error('[users] 删数据目录失败:', e.message); }
+        users.appendAudit({
+          actor: viewerRecord.username, action: 'account.delete',
+          target: u.username, ip: clientIp(req), userAgent: userAgent(req),
+          details: { ownerAdmin: u.ownerAdmin || null },
+        });
         console.log(`[users] 管理员删除用户 ${u.username}`);
         return sendJson(res, 200, { ok: true, user: u.username });
       } catch (e) {
@@ -1219,6 +1401,10 @@ const server = http.createServer(async (req, res) => {
         if (action === 'reset-password' && req.method === 'POST') {
           const body = await readJsonBody(req);
           const u = users.adminResetPassword(target.username, body.password);
+          users.appendAudit({
+            actor: viewerRecord.username, action: 'account.password.reset',
+            target: u.username, ip: clientIp(req), userAgent: userAgent(req),
+          });
           return sendJson(res, 200, {
             ok: true,
             user: u.username,
@@ -1232,6 +1418,11 @@ const server = http.createServer(async (req, res) => {
             return sendErr(res, 400, '缺少 disabled 状态');
           }
           const u = users.setDisabled(target.username, body.disabled);
+          users.appendAudit({
+            actor: viewerRecord.username,
+            action: body.disabled ? 'account.disable' : 'account.enable',
+            target: u.username, ip: clientIp(req), userAgent: userAgent(req),
+          });
           return sendJson(res, 200, {
             ok: true,
             user: u.username,
@@ -1241,6 +1432,10 @@ const server = http.createServer(async (req, res) => {
         }
         if (action === 'sessions' && req.method === 'DELETE') {
           users.revokeSessions(target.username);
+          users.appendAudit({
+            actor: viewerRecord.username, action: 'account.sessions.revoke',
+            target: target.username, ip: clientIp(req), userAgent: userAgent(req),
+          });
           return sendJson(res, 200, { ok: true, user: target.username });
         }
         return sendErr(res, 405, '不支持的操作');
@@ -1258,6 +1453,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/rate-locks' && req.method === 'DELETE') {
       if (!isSystemAdmin(req)) return sendErr(res, 403, '只有总管理员能解封');
       const r = users.clearAllRates();
+      users.appendAudit({
+        actor: viewerRecord.username, action: 'rate-locks.clear-all',
+        ip: clientIp(req), userAgent: userAgent(req),
+        details: { cleared: r.cleared },
+      });
       console.log(`[rate] 管理员解封全部 IP (${r.cleared} 条)`);
       return sendJson(res, 200, { ok: true, ...r });
     }
@@ -1267,8 +1467,19 @@ const server = http.createServer(async (req, res) => {
       const ip = decodeURIComponent(pathname.slice('/api/rate-locks/'.length));
       if (!ip) return sendErr(res, 400, '缺少 IP');
       const r = users.unlockRate(ip);
+      users.appendAudit({
+        actor: viewerRecord.username, action: 'rate-locks.clear',
+        target: ip, ip: clientIp(req), userAgent: userAgent(req),
+      });
       console.log(`[rate] 管理员解封 IP ${ip}`);
       return sendJson(res, 200, { ok: true, ...r });
+    }
+
+    if (pathname === '/api/security-audit' && req.method === 'GET') {
+      if (!isSystemAdmin(req)) return sendErr(res, 403, '只有总管理员能查看安全审计');
+      return sendJson(res, 200, {
+        events: users.readAudit(q.limit || 100),
+      });
     }
 
     if (pathname === '/api/token-check' && req.method === 'GET') {
@@ -1344,57 +1555,49 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
+function initializeStorage() {
   try {
     const removed = cleanupStaleImportWorkspaces();
     if (removed) console.log(`[import] 已清理 ${removed} 个过期临时导入目录`);
   } catch (e) {
     console.error('[startup] 清理临时导入目录失败:', e.message);
   }
+
   // 管理令牌必须在启动时可用, 否则新装站点的 CLI / 自动化第一次调用会找不到文件。
-  try {
-    db.getToken();
-  } catch (e) {
-    console.error('[startup] 初始化管理令牌失败:', e.message);
-  }
+  db.getToken();
 
   // 旧版是全局一份数据, 现在按用户分开 —— 把旧的挪到 admin 名下
-  try { db.migrateLegacy(); }
-  catch (e) { console.error('[startup] 迁移旧数据失败:', e.message); }
+  db.migrateLegacy();
 
   // 首次启动自动建总管理员；旧账号库在这里补上 system / ownerAdmin 字段。
-  try {
-    users.migrateUsers();
-    if (users.listUsers().length === 0) {
-      const adminName = process.env.QUOTE_ADMIN_USERNAME || 'admin';
-      const pw = process.env.ADMIN_PASSWORD || (require('crypto').randomBytes(9).toString('base64url'));
-      users.createUser(adminName, pw, 'admin', { system: true });
-      console.log('=============================================');
-      console.log(' 已创建总管理员账号:');
-      console.log('   用户名: ' + adminName);
-      console.log('   密码  : ' + (process.env.QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG === '1'
-        ? '(由桌面客户端安全保存)'
-        : pw));
-      console.log(`   (改密码: node server/user.js passwd ${adminName})`);
-      console.log('=============================================');
-    }
-  } catch (e) {
-    console.error('[startup] 建管理员失败:', e.message);
+  users.migrateUsers();
+  users.getSecret();
+  if (users.listUsers().length === 0) {
+    const adminName = process.env.QUOTE_ADMIN_USERNAME || 'admin';
+    const pw = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
+    users.createUser(adminName, pw, 'admin', { system: true });
+    console.log('=============================================');
+    console.log(' 已创建总管理员账号:');
+    console.log('   用户名: ' + adminName);
+    console.log('   密码  : ' + (process.env.QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG === '1'
+      ? '(由桌面客户端安全保存)'
+      : pw));
+    console.log(`   (改密码: node server/user.js passwd ${adminName})`);
+    console.log('=============================================');
   }
 
   // 启动时补齐费率 id (保证后台能按 id 改价) —— 逐个管理员扫一遍
-  try {
-    for (const u of users.findAdmins()) {
-      const cur0 = db.load(u.username);
-      if (cur0.data && (cur0.data.tiers || []).some(t => !t.id)) {
-        db.ensureIds(cur0.data);
-        db.saveAll(u.username, cur0.data, '补齐费率 id', 'system');
-        console.log(`[startup] 已补齐 ${u.username} 的费率 id`);
-      }
+  for (const u of users.findAdmins()) {
+    const cur0 = db.load(u.username);
+    if (cur0.data && (cur0.data.tiers || []).some(t => !t.id)) {
+      db.ensureIds(cur0.data);
+      db.saveAll(u.username, cur0.data, '补齐费率 id', 'system');
+      console.log(`[startup] 已补齐 ${u.username} 的费率 id`);
     }
-  } catch (e) {
-    console.error('[startup] 补 id 失败:', e.message);
   }
+}
+
+function logStartupStatus() {
   // 汇率自动刷新
   try { startFxWatcher(); }
   catch (e) { console.error('[fx] 启动汇率刷新失败:', e.message); }
@@ -1411,4 +1614,32 @@ server.listen(PORT, HOST, () => {
     ? '开启'
     : '关闭 (普通账号由管理员创建)'}`);
   console.log(`  后台: http://${HOST}:${PORT}/admin`);
-});
+}
+
+let storageReady = false;
+try {
+  initializeStorage();
+  storageReady = true;
+} catch (e) {
+  console.error('[startup] 关键数据初始化失败，拒绝启动:', e.message);
+  process.exitCode = 1;
+}
+
+if (storageReady) {
+  const maintenanceTimer = setInterval(() => {
+    const expired = sweepImportJobs();
+    if (expired) console.log(`[import] 已释放 ${expired} 个过期预览`);
+    try { cleanupStaleImportWorkspaces(); }
+    catch (e) { console.error('[import] 定时清理临时目录失败:', e.message); }
+  }, 5 * 60 * 1000);
+  maintenanceTimer.unref();
+
+  server.on('error', e => {
+    console.error('[startup] HTTP 服务启动失败:', e.message);
+    process.exitCode = 1;
+  });
+
+  server.listen(PORT, HOST, () => {
+    logStartupStatus();
+  });
+}
