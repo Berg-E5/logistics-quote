@@ -28,7 +28,7 @@ test('桌面窗口只使用本地服务并保持渲染进程隔离', () => {
   assert.match(main, /nodeIntegration: false/);
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /sandbox: true/);
-  assert.match(main, /QUOTE_REGISTRATION_OPEN: '1'/);
+  assert.match(main, /QUOTE_REGISTRATION_OPEN: '0'/);
 });
 
 test('桌面端不在本地保存管理员明文密码', () => {
@@ -40,9 +40,15 @@ test('桌面端不在本地保存管理员明文密码', () => {
 
 test('首次启动要求用户创建管理员账户', () => {
   assert.match(main, /showAdminSetup/);
-  assert.match(main, /\['add', 'admin', value\.password\]/);
+  assert.match(main, /\['add', value\.username, value\.password\]/);
+  assert.match(main, /pending\.resolve\(null\)/);
+  assert.match(main, /if \(!initialAdmin\) return/);
   assert.match(main, /创建管理员账户/);
   assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
+  const setupHtml = fs.readFileSync(path.join(desktop, 'setup.html'), 'utf8');
+  const preload = fs.readFileSync(path.join(desktop, 'preload.js'), 'utf8');
+  assert.match(setupHtml, /id="username"/);
+  assert.match(preload, /username/);
 });
 
 test('后台和桌面菜单都提供前台报价入口', () => {

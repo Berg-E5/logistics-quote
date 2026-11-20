@@ -312,16 +312,13 @@ const { createApp, ref, reactive, computed, onMounted, onUnmounted } = Vue;
 
 const MODE_CN = { band: '按重分段', firstnext: '首重续重', divider: '体积除数' };
 
-/* 登录 / 注册 门 (本页专属: 带 Tab) */
+/* 登录门 */
 const AuthGate = {
-  emits: ['login', 'register'],
+  emits: ['login'],
   setup(props, { emit }) {
-    const tab = ref('login');
     const username = ref(''), password = ref('');
-    const regUser = ref(''), regPass = ref(''), regPass2 = ref('');
     const err = ref('');
     const busy = ref(false);
-    function switchTab(t) { tab.value = t; err.value = ''; }
     async function doLogin() {
       if (!username.value.trim() || !password.value) { err.value = '用户名和密码都要填'; return; }
       err.value = ''; busy.value = true;
@@ -331,47 +328,18 @@ const AuthGate = {
       } catch (e) { err.value = e.message; }
       finally { busy.value = false; }
     }
-    async function doRegister() {
-      if (!regUser.value.trim() || !regPass.value) { err.value = '用户名和密码都要填'; return; }
-      if (regPass.value !== regPass2.value) { err.value = '两次输入的密码不一样'; return; }
-      if (regPass.value.length < 8) { err.value = '密码至少 8 位'; return; }
-      err.value = ''; busy.value = true;
-      try {
-        await A.api('/api/register', { method: 'POST', body: { username: regUser.value.trim(), password: regPass.value } });
-        emit('register');
-      } catch (e) { err.value = e.message; }
-      finally { busy.value = false; }
-    }
-    return { tab, username, password, regUser, regPass, regPass2, err, busy, switchTab, doLogin, doRegister };
+    return { username, password, err, busy, doLogin };
   },
   template: `
     <div class="gate">
-      <div class="tabs">
-        <button :class="{on: tab==='login'}" @click="switchTab('login')">登录</button>
-        <button :class="{on: tab==='reg'}" @click="switchTab('reg')">注册</button>
+      <h2>登录</h2>
+      <p>管理员登录后可以改价、整表导入和管理普通账号；普通用户登录后只读查看管理员的价格表。</p>
+      <label>用户名<input v-model="username" autocomplete="username" @keyup.enter="doLogin"></label>
+      <label>密码<input v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin"></label>
+      <div class="err">{{ err }}</div>
+      <div class="row">
+        <button class="primary" style="flex:1" :disabled="busy" @click="doLogin">{{ busy ? '登录中…' : '登录' }}</button>
       </div>
-      <template v-if="tab==='login'">
-        <h2>登录</h2>
-        <p>用你的账号登录, 就能改价、整表导入、看改动记录。</p>
-        <label>用户名<input v-model="username" autocomplete="username" @keyup.enter="doLogin"></label>
-        <label>密码<input v-model="password" type="password" autocomplete="current-password" @keyup.enter="doLogin"></label>
-        <div class="err">{{ err }}</div>
-        <div class="row">
-          <button class="primary" style="flex:1" :disabled="busy" @click="doLogin">{{ busy ? '登录中…' : '登录' }}</button>
-        </div>
-      </template>
-      <template v-else>
-        <h2>注册</h2>
-        <p>注册后<strong>数据是空的</strong> —— 你需要自己上传渠道价格表才能开始报价。
-           每个账号的数据互相隔离, 只有你自己能看到。</p>
-        <label>用户名<input v-model="regUser" placeholder="字母数字, 2-32 位" autocomplete="username"></label>
-        <label>密码<input v-model="regPass" type="password" placeholder="至少 8 位" autocomplete="new-password"></label>
-        <label>确认密码<input v-model="regPass2" type="password" placeholder="再输一次密码" autocomplete="new-password"></label>
-        <div class="err">{{ err }}</div>
-        <div class="row">
-          <button class="primary" style="flex:1" :disabled="busy" @click="doRegister">{{ busy ? '注册中…' : '注册并登录' }}</button>
-        </div>
-      </template>
     </div>
   `,
 };
@@ -944,6 +912,10 @@ createApp({
     /* ---------------- 登录 / 启动 ---------------- */
         /** 登录成功后加载本页数据 (由 useAuth 的回调触发) */
     async function onAuthed() {
+      if (me.value.role !== 'admin') {
+        location.replace('/');
+        return;
+      }
       await refreshVersion();
       await loadAll();
       await loadLocks();
@@ -1033,19 +1005,19 @@ createApp({
         </template>
 
         <template v-else-if="!logged">
-          <AuthGate @login="afterLogin" @register="afterLogin" />
+          <AuthGate @login="afterLogin" />
         </template>
 
 
         <template v-else>
           <!-- 空数据引导 -->
           <div class="welcome" v-if="showWelcome">
-            <h2>先上传你的渠道价格表</h2>
-            <p>你的账号现在是空的 —— 没有任何渠道报价。上传一份《渠道整合报价》xlsx,
+            <h2>先上传共享渠道价格表</h2>
+            <p>管理员价格表现在是空的 —— 没有任何渠道报价。上传一份《渠道整合报价》xlsx,
                系统会自动抽取所有渠道、国家、重量段, 之后就能报价、改价了。</p>
             <p class="muted">表格格式和盛途那份一样就行 (每个渠道一个 sheet,
                表头写「国家 / 尺寸限制 / 运费 / 重量 / 普货 / 带电」这类)。
-               你的数据只有你自己能看到, 不会跟别人混。</p>
+               上传后所有普通用户只读查看这份共享价格表。</p>
             <div class="wrow">
               <input type="file" accept=".xlsx" style="font-size:13px" @change="welFile = $event.target.files[0]">
               <button class="primary" ref="welBtn" @click="uploadTable(welFile, true)">上传并导入</button>

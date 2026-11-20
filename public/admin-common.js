@@ -209,6 +209,7 @@
         const here = location.pathname.replace(/\/$/, '');
         return props.links
           .filter(l => !/^←/.test(l.text) && l.text !== '用户管理')
+          .filter(l => props.role === 'admin' || !String(l.href || '').startsWith('/admin'))
           .map(l => ({ ...l, on: here === l.href.replace(/\/$/, '') }));
       });
       const back = computed(() => props.links.find(l => /^←/.test(l.text)) || null);
@@ -257,8 +258,8 @@
               <div class="dd-role">{{ roleCn }}</div>
             </div>
             <a class="dd-item" href="/"><span>前台报价</span></a>
-            <a class="dd-item" href="/admin"><span>后台改价</span></a>
-            <a class="dd-item" href="/admin/changes"><span>改动记录</span></a>
+            <a class="dd-item" href="/admin" v-if="role === 'admin'"><span>后台改价</span></a>
+            <a class="dd-item" href="/admin/changes" v-if="role === 'admin'"><span>改动记录</span></a>
             <a class="dd-item" href="/admin/users" v-if="role === 'admin'"><span>用户管理</span></a>
             <div class="dd-sep"></div>
             <button class="dd-item" @click="emit('password')"><span>修改密码</span></button>

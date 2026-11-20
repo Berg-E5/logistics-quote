@@ -86,16 +86,13 @@ async function responseJson(res) {
   return body;
 }
 
-async function register(base, username, password) {
-  const res = await fetch(base + '/api/register', {
+async function createUser(base, adminCookie, username, password) {
+  const res = await fetch(base + '/api/users', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, confirm: password }),
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
   });
   await responseJson(res);
-  const raw = res.headers.getSetCookie?.()[0] || res.headers.get('set-cookie');
-  assert.ok(raw, '注册响应应带会话 cookie');
-  return raw.split(';')[0];
 }
 
 async function login(base, username, password) {
@@ -142,7 +139,7 @@ async function waitImport(base, cookie) {
   throw new Error('导入没有在 10 秒内完成');
 }
 
-test('并发导入隔离且管理令牌写入 admin 作用域', { timeout: 30000 }, async t => {
+test('管理员维护共享价格表且普通用户只读访问', { timeout: 30000 }, async t => {
   const repo = path.resolve(__dirname, '..');
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'quote-review-'));
   const scriptsDir = path.join(tempRoot, 'scripts');
@@ -188,6 +185,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
       PORT: String(port),
       HOST: '127.0.0.1',
       ADMIN_PASSWORD: 'ReviewAdmin123',
+      QUOTE_ADMIN_USERNAME: 'owner',
       QUOTE_FX_OFF: '1',
       QUOTE_IMPORT_CONCURRENCY: '2',
       PYTHONIOENCODING: 'utf-8',
@@ -207,23 +205,54 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
 
   await waitForServer(base, () => output);
 
-  const cookieA = await register(base, 'userA', 'ReviewUser123');
-  const cookieB = await register(base, 'userB', 'ReviewUser123');
-  await Promise.all([
-    submitImport(base, cookieA, 'A', '0.5'),
-    submitImport(base, cookieB, 'B', '0.25'),
-  ]);
-  await Promise.all([
-    waitImport(base, cookieA),
-    waitImport(base, cookieB),
-  ]);
+  const adminCookie = await login(base, 'owner', 'ReviewAdmin123');
+  await createUser(base, adminCookie, 'userA', 'ReviewUser123');
+  await createUser(base, adminCookie, 'userB', 'ReviewUser123');
+  const cookieA = await login(base, 'userA', 'ReviewUser123');
+  const cookieB = await login(base, 'userB', 'ReviewUser123');
+
+  await submitImport(base, adminCookie, 'A', '0.1');
+  await waitImport(base, adminCookie);
 
   const [dataA, dataB] = await Promise.all([
     getJson(base, '/api/data', cookieA),
     getJson(base, '/api/data', cookieB),
   ]);
   assert.equal(dataA.data.tiers[0].price, 111);
-  assert.equal(dataB.data.tiers[0].price, 222);
+  assert.equal(dataB.data.tiers[0].price, 111);
+  assert.equal(dataA.scope, 'owner');
+  assert.equal(dataB.scope, 'owner');
+  const sharedUsers = await getJson(base, '/api/users', adminCookie);
+  const userARecord = sharedUsers.users.find(u => u.username === 'userA');
+  assert.equal(userARecord.shared, true);
+  assert.equal(userARecord.tiers, 1);
+
+  const deniedImport = await fetch(base + '/api/import', {
+    method: 'POST',
+    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: fakeDataset(222) }),
+  });
+  assert.equal(deniedImport.status, 403);
+  const deniedUsers = await fetch(base + '/api/users', {
+    headers: { Cookie: cookieA },
+  });
+  assert.equal(deniedUsers.status, 403);
+  const deniedChanges = await fetch(base + '/api/changes', {
+    headers: { Cookie: cookieA },
+  });
+  assert.equal(deniedChanges.status, 403);
+  const deniedRates = await fetch(base + '/api/rates', {
+    headers: { Cookie: cookieA },
+  });
+  assert.equal(deniedRates.status, 403);
+  const deniedRegister = await fetch(base + '/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'selfRegister', password: 'ReviewUser123', confirm: 'ReviewUser123',
+    }),
+  });
+  assert.equal(deniedRegister.status, 403);
 
   const tokenFile = path.join(tempRoot, 'data', 'admin.token');
   assert.equal(fs.existsSync(tokenFile), true, '服务启动时应自动生成管理令牌');
@@ -231,7 +260,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   const tokenMe = await responseJson(await fetch(base + '/api/me', {
     headers: { 'x-admin-token': token },
   }));
-  assert.equal(tokenMe.user, 'admin');
+  assert.equal(tokenMe.user, 'owner');
   assert.equal(tokenMe.role, 'admin');
 
   await responseJson(await fetch(base + '/api/import', {
@@ -242,7 +271,6 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
     },
     body: JSON.stringify({ note: 'token scope test', data: fakeDataset(333) }),
   }));
-  const adminCookie = await login(base, 'admin', 'ReviewAdmin123');
   const adminData = await getJson(base, '/api/data', adminCookie);
   assert.equal(adminData.data.tiers[0].price, 333);
   assert.equal(fs.existsSync(path.join(tempRoot, 'data', 'users', 'api-token')), false);
@@ -250,7 +278,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   // 手工新增“首重续重”必须保留首重/续重参数，并且新渠道币种要与国家一致。
   await responseJson(await fetch(base + '/api/rates', {
     method: 'POST',
-    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sheet: '首重测试', country: '美国', zone: '-', line: '-', attr: '',
       mode: 'firstnext', lo: 0, hi: 10, price: 20, fee: 3,
@@ -267,21 +295,21 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   assert.equal(fnGroup.currency, 'USD');
 
   // 客户端不能伪造改动记录里的操作者。
-  await responseJson(await fetch(base + '/api/rates?by=admin', {
+  await responseJson(await fetch(base + '/api/rates?by=userA', {
     method: 'POST',
-    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sheet: '分段测试', country: '美国', zone: '-', line: '-', attr: '',
       mode: 'band', lo: 0, hi: 10, price: 10, fee: 0,
     }),
   }));
-  const changes = await getJson(base, '/api/changes?kind=add&limit=5', cookieA);
-  assert.equal(changes.changes[0].by, 'userA');
+  const changes = await getJson(base, '/api/changes?kind=add&limit=5', adminCookie);
+  assert.equal(changes.changes[0].by, 'owner');
 
   // 同方式重量段重叠必须拒绝，否则一个计费重会命中多条并重复收费。
   const overlapRes = await fetch(base + '/api/rates', {
     method: 'POST',
-    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sheet: '分段测试', country: '美国', zone: '-', line: '-', attr: '',
       mode: 'band', lo: 5, hi: 20, price: 12, fee: 0,
@@ -290,14 +318,14 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   assert.equal(overlapRes.status, 400);
 
   // 删除已锁定档位时，应同时清理孤儿锁。
-  const rateRows = await getJson(base, '/api/rates?limit=5', cookieA);
+  const rateRows = await getJson(base, '/api/rates?limit=5', adminCookie);
   const lockedId = rateRows.rows.find(r => r.sheet === '测试渠道').id;
   await responseJson(await fetch(base + '/api/rates/' + lockedId + '/lock', {
     method: 'PUT',
-    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({ locked: true }),
   }));
-  const locksBefore = await getJson(base, '/api/locks', cookieA);
+  const locksBefore = await getJson(base, '/api/locks', adminCookie);
   assert.equal(locksBefore.count, 1);
 
   const emptyData = fakeDataset(0);
@@ -306,15 +334,15 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   emptyData.countries = [];
   await responseJson(await fetch(base + '/api/import', {
     method: 'POST',
-    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
     body: JSON.stringify({ note: 'remove locked tier', data: emptyData }),
   }));
-  const locksAfter = await getJson(base, '/api/locks', cookieA);
+  const locksAfter = await getJson(base, '/api/locks', adminCookie);
   assert.equal(locksAfter.count, 0);
 
   const badJson = await fetch(base + '/api/rates/' + lockedId, {
     method: 'PUT',
-    headers: { Cookie: cookieA, 'Content-Type': 'application/json' },
+    headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
     body: '{bad json',
   });
   assert.equal(badJson.status, 400);
@@ -331,7 +359,7 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   const oldMe = await getJson(base, '/api/me', adminCookie);
   const newMe = await getJson(base, '/api/me', refreshedCookie);
   assert.equal(oldMe.user, null);
-  assert.equal(newMe.user, 'admin');
+  assert.equal(newMe.user, 'owner');
 
   // 显式退出会撤销该账号的所有无状态会话，抓包重放的旧 Cookie 也不能继续用。
   await responseJson(await fetch(base + '/api/logout', {

@@ -78,7 +78,8 @@ function persistSettings(saved) {
   fs.renameSync(tmp, settingsPath());
 }
 
-function markAdminSetup() {
+function markAdminSetup(username) {
+  settings.saved.adminUsername = username;
   settings.saved.adminSetupVersion = 1;
   settings.saved.adminSetupAt = new Date().toISOString();
   delete settings.saved.encryptedPassword;
@@ -91,14 +92,16 @@ function saveWindowBounds(bounds) {
   persistSettings(settings.saved);
 }
 
-function adminUserExists() {
+function findAdminUser() {
   const usersFile = path.join(dataDir(), 'users.json');
-  if (!fs.existsSync(usersFile)) return false;
+  if (!fs.existsSync(usersFile)) return null;
   try {
     const users = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-    return Array.isArray(users) && users.some(u => String(u.username || '').toLowerCase() === 'admin');
+    return Array.isArray(users)
+      ? users.find(u => u && u.role === 'admin') || null
+      : null;
   } catch (e) {
-    return false;
+    return null;
   }
 }
 
@@ -108,7 +111,7 @@ function serverEnvironment() {
     HOST: '127.0.0.1',
     QUOTE_DATA_DIR: dataDir(),
     QUOTE_DESKTOP: '1',
-    QUOTE_REGISTRATION_OPEN: '1',
+    QUOTE_REGISTRATION_OPEN: '0',
     QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG: '1',
     QUOTE_PYTHON: pythonPath(),
     PYTHONUTF8: '1',
@@ -177,11 +180,11 @@ async function waitForServer(timeoutMs = 20000) {
   throw new Error(`本地服务未在 ${timeoutMs / 1000} 秒内启动`);
 }
 
-async function loginDesktop(password) {
+async function loginDesktop(username, password) {
   const res = await fetch(baseUrl + '/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password }),
+    body: JSON.stringify({ username, password }),
   });
   if (!res.ok) return false;
   const raw = res.headers.getSetCookie?.()[0] || res.headers.get('set-cookie') || '';
@@ -240,7 +243,7 @@ function runAdminCli(args, serviceName) {
   });
 }
 
-function showAdminSetup(reset) {
+function showAdminSetup(reset, username) {
   return new Promise((resolve, reject) => {
     const win = new BrowserWindow({
       width: 560,
@@ -267,11 +270,14 @@ function showAdminSetup(reset) {
       if (setupResolver) {
         const pending = setupResolver;
         setupResolver = null;
-        pending.reject(new Error('管理员账户设置已取消'));
+        pending.resolve(null);
       }
     });
     win.loadFile(path.join(__dirname, 'setup.html'), {
-      query: { mode: reset ? 'reset' : 'create' },
+      query: {
+        mode: reset ? 'reset' : 'create',
+        username: username || '',
+      },
     });
   });
 }
@@ -281,15 +287,19 @@ ipcMain.handle('admin-setup:submit', (event, payload) => {
   if (!senderUrl.startsWith('file://')) {
     return { ok: false, error: '非法请求来源' };
   }
+  const username = String(payload?.username || '').trim();
   const password = String(payload?.password || '');
   const confirmPassword = String(payload?.confirmPassword || '');
+  if (!/^[A-Za-z0-9_.-]{2,32}$/.test(username)) {
+    return { ok: false, error: '管理员用户名只能使用字母、数字、下划线、点和横线，2–32 位' };
+  }
   if (password.length < 8) return { ok: false, error: '密码至少 8 位' };
   if (password.length > 128) return { ok: false, error: '密码不能超过 128 位' };
   if (password !== confirmPassword) return { ok: false, error: '两次输入的密码不一致' };
   if (!setupResolver) return { ok: false, error: '设置窗口已经关闭' };
   const pending = setupResolver;
   setupResolver = null;
-  pending.resolve({ password });
+  pending.resolve({ username, password });
   if (setupWindow) setupWindow.close();
   return { ok: true };
 });
@@ -301,7 +311,8 @@ ipcMain.on('admin-setup:cancel', event => {
 });
 
 async function ensureAdminAccount() {
-  const hasAdmin = adminUserExists();
+  const adminUser = findAdminUser();
+  const hasAdmin = !!adminUser;
   const setupComplete = Number(settings.saved.adminSetupVersion || 0) >= 1;
   if (hasAdmin && setupComplete) {
     // 旧版可能保存过自动登录密码，统一清理；后续启动必须正常登录。
@@ -313,12 +324,17 @@ async function ensureAdminAccount() {
   }
 
   if (hasAdmin) {
+    const username = adminUser.username;
     while (true) {
-      const value = await showAdminSetup(true);
+      const value = await showAdminSetup(true, username);
+      if (!value) {
+        app.quit();
+        return null;
+      }
       try {
-        await runAdminCli(['passwd', 'admin', value.password], 'LogisticsQuote Admin Password Reset');
-        markAdminSetup();
-        return value.password;
+        await runAdminCli(['passwd', value.username, value.password], 'LogisticsQuote Admin Password Reset');
+        markAdminSetup(value.username);
+        return value;
       } catch (e) {
         dialog.showErrorBox(APP_NAME, e.message);
       }
@@ -326,21 +342,25 @@ async function ensureAdminAccount() {
   }
 
   while (true) {
-    const value = await showAdminSetup(false);
+    const value = await showAdminSetup(false, settings.saved.adminUsername || '');
+    if (!value) {
+      app.quit();
+      return null;
+    }
     try {
-      await runAdminCli(['add', 'admin', value.password], 'LogisticsQuote Admin Creation');
-      markAdminSetup();
-      return value.password;
+      await runAdminCli(['add', value.username, value.password], 'LogisticsQuote Admin Creation');
+      markAdminSetup(value.username);
+      return value;
     } catch (e) {
       dialog.showErrorBox(APP_NAME, e.message);
     }
   }
 }
 
-async function ensureDesktopLogin(password) {
+async function ensureDesktopLogin(credentials) {
   await waitForServer();
-  if (!password) return false;
-  if (await loginDesktop(password)) return true;
+  if (!credentials) return false;
+  if (await loginDesktop(credentials.username, credentials.password)) return true;
   throw new Error('新管理员账户登录失败，请查看日志目录');
 }
 
@@ -450,12 +470,13 @@ function installMenu() {
 async function bootstrap() {
   settings = loadSettings();
   installMenu();
-  const initialAdminPassword = await ensureAdminAccount();
+  const initialAdmin = await ensureAdminAccount();
+  if (!initialAdmin) return;
   await startServerWithPort();
   try { await session.defaultSession.cookies.remove(baseUrl, 'quote_session'); }
   catch (e) { /* cookie did not exist */ }
   sessionCookieHeader = '';
-  await ensureDesktopLogin(initialAdminPassword);
+  await ensureDesktopLogin(initialAdmin);
   const win = createWindow();
   let initialPath = '/';
   try {

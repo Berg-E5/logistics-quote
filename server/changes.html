@@ -248,6 +248,10 @@ createApp({
 
     /** 登录成功后加载本页数据 (由 useAuth 的回调触发) */
     async function onAuthed() {
+      if (me.value.role !== 'admin') {
+        location.replace('/');
+        return;
+      }
       page.value = 1;
       await refreshVersion();
       await load();

@@ -91,6 +91,10 @@ function findUser(username) {
   return loadUsers().find(x => x.username.toLowerCase() === u) || null;
 }
 
+function findAdmin() {
+  return loadUsers().find(x => x.role === 'admin') || null;
+}
+
 /** 角色: admin = 站主 (能看所有用户), user = 普通用户 (只有自己的数据) */
 function createUser(username, password, role) {
   const name = String(username || '').trim();
@@ -102,6 +106,9 @@ function createUser(username, password, role) {
   }
   const users = loadUsers();
   if (findUser(name)) throw new Error('用户已存在: ' + name);
+  if ((role || 'admin') === 'admin' && users.some(x => x.role === 'admin')) {
+    throw new Error('系统只能有一个管理员账号');
+  }
   const { salt, hash } = hashPassword(password);
   const u = {
     username: name, salt, hash,
@@ -162,6 +169,7 @@ function deleteUser(username) {
   const i = users.findIndex(x => x.username.toLowerCase() === String(username).toLowerCase());
   if (i < 0) throw new Error('用户不存在: ' + username);
   if (users.length === 1) throw new Error('至少要留一个用户');
+  if (users[i].role === 'admin') throw new Error('管理员账号不能删除');
   const [u] = users.splice(i, 1);
   saveUsers(users);
   return u;
@@ -339,6 +347,7 @@ function clearAllRates() {
 
 module.exports = {
   createUser, registerUser, setPassword, revokeSessions, deleteUser, listUsers, findUser,
+  findAdmin,
   verifyPassword, verifyPasswordAsync,
   hashPassword, loadUsers, saveUsers,
   makeSession, readSession, cookieHeader,

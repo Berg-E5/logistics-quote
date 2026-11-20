@@ -146,7 +146,6 @@ createApp({
     // 新增用户表单
     const nUser = ref('');
     const nPass = ref('');
-    const nRole = ref('user');
     const addErr = ref('');
     const addOk = ref('');
 
@@ -205,7 +204,7 @@ createApp({
     }
 
     async function delUser(u) {
-      const isAdmin = u.username.toLowerCase() === 'admin';
+      const isAdmin = u.role === 'admin';
       const canDel = !isAdmin && u.username !== me.value.user;
       if (!canDel) return;
       const extra = u.hasData ? `，包括它的 ${u.tiers} 条费率数据和全部改动记录` : '';
@@ -249,7 +248,7 @@ createApp({
       if (nPass.value.length < 8) { addErr.value = '初始密码至少 8 位'; return; }
       busy.value = true;
       try {
-        await A.api('/api/users', { method: 'POST', body: { username, password: nPass.value, role: nRole.value } });
+        await A.api('/api/users', { method: 'POST', body: { username, password: nPass.value } });
         addOk.value = `已创建账号「${username}」`;
         nUser.value = ''; nPass.value = '';
         await loadUsers();
@@ -262,6 +261,10 @@ createApp({
 
     /** 登录成功后加载本页数据 (由 useAuth 的回调触发) */
     async function onAuthed() {
+      if (me.value.role !== 'admin') {
+        location.replace('/');
+        return;
+      }
       await refreshVersion();
       await loadUsers();
       await loadLocks();
@@ -279,7 +282,7 @@ createApp({
 
     return {
       logged, checking, me, version, users, locks, lockErr, loadErr, showPwd, busy,
-      nUser, nPass, nRole, addErr, addOk, unlockMsg,
+      nUser, nPass, addErr, addOk, unlockMsg,
       countText, usersWithData, adminCount, lockCountText, userSpark, loadUsers, loadLocks, lockRemain,
       delUser, unlockOne, unlockAll, addUser, afterLogin, logout,
     };
@@ -350,14 +353,14 @@ createApp({
                 <span class="avatar" :class="{admin: u.role === 'admin'}">{{ u.username.charAt(0).toUpperCase() }}</span>
                 <div class="uc-id">
                   <b>{{ u.username }}</b>
-                  <span class="muted" v-if="u.username.toLowerCase() === 'admin'">站主</span>
+                  <span class="muted" v-if="u.role === 'admin'">站主</span>
                 </div>
                 <span class="role" :class="u.role">{{ u.role === 'admin' ? '管理员' : '普通用户' }}</span>
               </div>
               <div class="uc-meta">
                 <div class="uc-cell">
                   <span>价格表</span>
-                  <b v-if="u.hasData" class="ok">{{ u.tiers }} 条</b>
+                  <b v-if="u.hasData" class="ok">{{ u.shared ? '共享 ' + u.tiers + ' 条' : u.tiers + ' 条' }}</b>
                   <b v-else class="muted">未上传</b>
                 </div>
                 <div class="uc-cell">
@@ -375,8 +378,8 @@ createApp({
               </div>
               <div class="uc-acts">
                 <button class="delbtn"
-                  :disabled="u.username.toLowerCase() === 'admin' || u.username === me.user"
-                  :title="u.username.toLowerCase() === 'admin' ? 'admin 账号不能删除'
+                  :disabled="u.role === 'admin' || u.username === me.user"
+                  :title="u.role === 'admin' ? '管理员账号不能删除'
                            : (u.username === me.user ? '不能删除当前登录的账号' : '删除这个账号和它的全部数据')"
                   @click="delUser(u)">删除账号</button>
               </div>
@@ -436,15 +439,12 @@ createApp({
             <div class="newgrid">
               <label>用户名<input v-model="nUser" placeholder="字母数字, 2-32 位"></label>
               <label>初始密码<input v-model="nPass" type="text" placeholder="至少 8 位"></label>
-              <label>角色<select v-model="nRole">
-                <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select></label>
+              <label>账号类型<input value="普通用户" disabled></label>
               <label style="justify-content:flex-end">
                 <button class="primary" :disabled="busy" @click="addUser">{{ busy ? '创建中…' : '新增' }}</button>
               </label>
             </div>
-            <div class="hint">新建的账号数据是空的 —— 需要自己去后台上传渠道价格表。</div>
+            <div class="hint">新账号为普通用户，登录后只读查看管理员维护的共享价格表。</div>
             <div class="err" style="margin-top:6px" v-if="addErr">{{ addErr }}</div>
             <div class="ok" style="font-size:12.5px" v-if="addOk">{{ addOk }}</div>
           </div>

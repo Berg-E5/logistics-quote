@@ -376,7 +376,7 @@ function startImport(scope, filename, fileBuffer) {
       // 没同步的话离线打开是空壳 (线上没事, 线上走后端 /api/data)。
       // 离线快照是全站共享的, 只允许站主数据写入; 普通用户的数据不能落到公共文件。
       try {
-        if (scope === db.DEFAULT_SCOPE && syncOfflineSnapshot(jobScripts)) {
+        if (syncOfflineSnapshot(jobScripts)) {
           importJob.log.push('离线快照已同步到站点根目录');
         }
       } catch (e) { /* ignore */ }
@@ -554,8 +554,9 @@ function currentIdentity(req) {
     return { user: byCookie, via: 'session' };
   }
   if (db.checkToken(tokenFrom(req))) {
-    // 管理令牌代表站主, 不能创建虚构的 api-token 数据目录。
-    return { user: db.DEFAULT_SCOPE, via: 'token' };
+    // 管理令牌代表当前管理员账号，管理员用户名允许自定义。
+    const admin = users.findAdmin();
+    return { user: admin ? admin.username : db.DEFAULT_SCOPE, via: 'token' };
   }
   return null;
 }
@@ -610,8 +611,13 @@ const server = http.createServer(async (req, res) => {
     // 已登录 -> 看自己的数据; 未登录 -> 看站主的 (公开页还能用)
     const identity = currentIdentity(req);
     const viewer = identity ? identity.user : null;
-    const scope = viewer || db.DEFAULT_SCOPE;
-    const actor = scope;
+    const viewerRecord = viewer ? users.findUser(viewer) : null;
+    const viewerIsAdmin = !!(viewerRecord && viewerRecord.role === 'admin');
+    const adminRecord = users.findAdmin();
+    const adminScope = adminRecord ? adminRecord.username : db.DEFAULT_SCOPE;
+    // 管理员维护唯一共享价格表；普通用户只读访问管理员的同一份数据。
+    const scope = viewerIsAdmin ? viewer : adminScope;
+    const actor = viewer || scope;
 
     if (pathname === '/api/data' && req.method === 'GET') {
       // 未登录不给数据 —— 前台必须登录才能看报价
@@ -620,20 +626,20 @@ const server = http.createServer(async (req, res) => {
       if (!cur.data) return sendErr(res, 503, '还没有导入数据');
       return sendJson(res, 200, {
         rev: cur.rev, updatedAt: cur.updatedAt, data: cur.data,
-        scope, mine: true,
+        scope, mine: viewerIsAdmin,
       });
     }
 
     if (pathname === '/api/version' && req.method === 'GET') {
       // 未登录只给版本号, 不暴露是谁的数据
       if (!viewer) {
-        const c0 = db.load(db.DEFAULT_SCOPE);
+        const c0 = db.load(adminScope);
         return sendJson(res, 200, { rev: c0.rev, updatedAt: c0.updatedAt });
       }
       const cur = db.load(scope);
       return sendJson(res, 200, {
         rev: cur.rev, updatedAt: cur.updatedAt, hasData: !!cur.data,
-        scope, mine: true,
+        scope, mine: viewerIsAdmin,
       });
     }
 
@@ -703,9 +709,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true });
     }
 
-    // ---------- 注册 (公开) ----------
+    // ---------- 注册 (默认关闭；普通账号由管理员创建) ----------
     if (pathname === '/api/register' && req.method === 'POST') {
-      if (process.env.QUOTE_REGISTRATION_OPEN === '0') {
+      if (process.env.QUOTE_REGISTRATION_OPEN !== '1') {
         return sendErr(res, 403, '公开注册已关闭，请联系管理员创建账号');
       }
       const ip = clientIp(req);
@@ -728,16 +734,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---------- 管理接口 ----------
-    if (pathname.startsWith('/api/') && pathname !== '/api/data' && pathname !== '/api/version'
-        && pathname !== '/api/login' && pathname !== '/api/logout' && pathname !== '/api/me'
-        && pathname !== '/api/password' && pathname !== '/api/register'
-        && pathname !== '/api/fx' && pathname !== '/api/users'
-        && !pathname.startsWith('/api/users/')
-        && pathname !== '/api/rate-locks'
-        && !pathname.startsWith('/api/rate-locks/')) {
-      if (!currentUser(req, q)) {
-        return sendErr(res, 401, '请先登录');
-      }
+    const publicApi = new Set([
+      '/api/data', '/api/version', '/api/login', '/api/logout',
+      '/api/me', '/api/password', '/api/register', '/api/fx',
+    ]);
+    if (pathname.startsWith('/api/') && !publicApi.has(pathname)) {
+      if (!viewer) return sendErr(res, 401, '请先登录');
+      if (!viewerIsAdmin) return sendErr(res, 403, '只有管理员能访问该功能');
     }
 
 
@@ -992,7 +995,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/users' && req.method === 'GET') {
       if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能看用户列表');
       const list = users.listUsers().map(u => {
-        const p = db.ratesPath(u.username);
+        // 普通用户读取管理员共享价格表，因此用户管理里也显示同一份数据规模。
+        const dataOwner = u.role === 'admin' ? u.username : adminScope;
+        const p = db.ratesPath(dataOwner);
         let tiers = 0, rev = 0, hasData = false;
         try {
           if (fs.existsSync(p)) {
@@ -1002,7 +1007,7 @@ const server = http.createServer(async (req, res) => {
             hasData = true;
           }
         } catch (e) { /* ignore */ }
-        return { ...u, tiers, rev, hasData };
+        return { ...u, tiers, rev, hasData, shared: u.role !== 'admin' };
       });
       return sendJson(res, 200, { users: list });
     }
@@ -1012,7 +1017,8 @@ const server = http.createServer(async (req, res) => {
       let body;
       try { body = JSON.parse((await readBody(req, 8192)) || '{}'); }
       catch (e) { return sendErr(res, 400, '请求格式不对'); }
-      const role = body.role === 'admin' ? 'admin' : 'user';
+      // 用户管理只创建普通用户；站点保持唯一管理员。
+      const role = 'user';
       try {
         const u = users.createUser(body.username, body.password, role);
         console.log(`[users] 管理员新增用户 ${u.username} (${role})`);
@@ -1026,7 +1032,6 @@ const server = http.createServer(async (req, res) => {
       if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能删除用户');
       const name = decodeURIComponent(pathname.slice('/api/users/'.length));
       if (!name) return sendErr(res, 400, '缺少用户名');
-      if (name.toLowerCase() === 'admin') return sendErr(res, 400, 'admin 账号不能删除');
       const me = currentUser(req, q);
       if (name === me) return sendErr(res, 400, '不能删除当前登录的账号');
       try {
@@ -1146,11 +1151,12 @@ server.listen(PORT, HOST, () => {
   // 首次启动自动建一个 admin 用户
   try {
     if (users.listUsers().length === 0) {
+      const adminName = process.env.QUOTE_ADMIN_USERNAME || 'admin';
       const pw = process.env.ADMIN_PASSWORD || (require('crypto').randomBytes(9).toString('base64url'));
-      users.createUser('admin', pw, 'admin');
+      users.createUser(adminName, pw, 'admin');
       console.log('=============================================');
       console.log(' 已创建管理员账号:');
-      console.log('   用户名: admin');
+      console.log('   用户名: ' + adminName);
       console.log('   密码  : ' + (process.env.QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG === '1'
         ? '(由桌面客户端安全保存)'
         : pw));
@@ -1178,14 +1184,16 @@ server.listen(PORT, HOST, () => {
   try { startFxWatcher(); }
   catch (e) { console.error('[fx] 启动汇率刷新失败:', e.message); }
 
-  const cur = db.load(db.DEFAULT_SCOPE);
+  const startupAdmin = users.findAdmin();
+  const startupScope = startupAdmin ? startupAdmin.username : db.DEFAULT_SCOPE;
+  const cur = db.load(startupScope);
   console.log(`物流报价服务 已启动  http://${HOST}:${PORT}`);
   console.log(`  站主数据: ${cur.data ? (cur.data.tiers || []).length + ' 条费率' : '未导入'}` +
               `  rev=${cur.rev}`);
   const ul = users.listUsers();
   console.log(`  用户数: ${ul.length}  (管理: node server/user.js list)`);
-  console.log(`  公开注册: ${process.env.QUOTE_REGISTRATION_OPEN === '0'
-    ? '关闭'
-    : '开启 (新用户数据为空, 需自己上传价格表)'}`);
+  console.log(`  公开注册: ${process.env.QUOTE_REGISTRATION_OPEN === '1'
+    ? '开启'
+    : '关闭 (普通账号由管理员创建)'}`);
   console.log(`  后台: http://${HOST}:${PORT}/admin`);
 });

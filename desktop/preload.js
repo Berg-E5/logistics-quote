@@ -3,8 +3,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('adminSetup', {
-  submit(password, confirmPassword) {
+  submit(username, password, confirmPassword) {
     return ipcRenderer.invoke('admin-setup:submit', {
+      username,
       password,
       confirmPassword,
     });

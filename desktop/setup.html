@@ -54,8 +54,9 @@
       <div><small>LOGISTICS QUOTE</small><h1 id="title">创建管理员账户</h1></div>
     </div>
     <p class="lead" id="lead">首次使用需要设置本地管理员密码。密码仅以加盐哈希保存，不会保存明文。</p>
-    <div class="account"><span>管理员用户名</span><b>admin</b></div>
     <form id="form">
+      <label for="username">管理员用户名</label>
+      <input id="username" type="text" autocomplete="username" minlength="2" maxlength="32" value="admin" required>
       <label for="password">管理员密码</label>
       <input id="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required>
       <label for="confirm">确认密码</label>
@@ -67,7 +68,7 @@
         <button class="primary" id="submit" type="submit">创建管理员并进入系统</button>
       </div>
     </form>
-    <div class="foot">创建后登录管理员。普通用户可在登录页自行注册，或由管理员在“用户管理”中创建。</div>
+    <div class="foot">创建后登录管理员。普通账号由管理员在“用户管理”中创建，并只读访问共享价格表。</div>
   </main>
   <script src="setup.js"></script>
 </body>
