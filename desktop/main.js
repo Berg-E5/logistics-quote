@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-  app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, session, shell, utilityProcess,
+  app, BrowserWindow, Menu, dialog, ipcMain, session, shell, utilityProcess,
 } = require('electron');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -10,7 +10,6 @@ const { spawn, spawnSync } = require('node:child_process');
 
 const APP_NAME = '物流报价';
 const APP_ID = 'com.berg.logisticsquote';
-const gotLock = app.requestSingleInstanceLock();
 
 let mainWindow = null;
 let serverProcess = null;
@@ -23,12 +22,15 @@ let setupWindow = null;
 let setupResolver = null;
 let bootstrapping = true;
 
-app.setName(APP_NAME);
+app.setName(process.env.QUOTE_DESKTOP_USER_DATA ? `${APP_NAME} Dev` : APP_NAME);
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID);
-  app.setPath('userData', path.join(app.getPath('appData'), APP_NAME));
+  app.setPath('userData', process.env.QUOTE_DESKTOP_USER_DATA
+    ? path.resolve(process.env.QUOTE_DESKTOP_USER_DATA)
+    : path.join(app.getPath('appData'), APP_NAME));
 }
 
+const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 }
@@ -66,35 +68,20 @@ function readSettingsFile() {
 
 function loadSettings() {
   const saved = readSettingsFile();
-  let password = '';
-  if (saved.encryptedPassword) {
-    try {
-      password = safeStorage.decryptString(Buffer.from(saved.encryptedPassword, 'base64'));
-    } catch (e) {
-      password = '';
-    }
-  }
-  return { saved, password };
+  return { saved };
 }
 
 function persistSettings(saved) {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('Windows 凭据加密不可用，无法安全保存本地管理员凭据');
-  }
   saved.version = 1;
   const tmp = settingsPath() + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(saved, null, 2), { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(tmp, settingsPath());
 }
 
-function saveAdminPassword(password) {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('Windows 凭据加密不可用，无法安全保存本地管理员凭据');
-  }
-  settings.password = password;
-  settings.saved.encryptedPassword = safeStorage.encryptString(password).toString('base64');
+function markAdminSetup() {
   settings.saved.adminSetupVersion = 1;
   settings.saved.adminSetupAt = new Date().toISOString();
+  delete settings.saved.encryptedPassword;
   persistSettings(settings.saved);
 }
 
@@ -121,7 +108,7 @@ function serverEnvironment() {
     HOST: '127.0.0.1',
     QUOTE_DATA_DIR: dataDir(),
     QUOTE_DESKTOP: '1',
-    QUOTE_REGISTRATION_OPEN: '0',
+    QUOTE_REGISTRATION_OPEN: '1',
     QUOTE_SUPPRESS_ADMIN_PASSWORD_LOG: '1',
     QUOTE_PYTHON: pythonPath(),
     PYTHONUTF8: '1',
@@ -129,7 +116,6 @@ function serverEnvironment() {
   };
   const port = baseUrl ? new URL(baseUrl).port : process.env.PORT;
   if (port) env.PORT = String(port);
-  if (settings?.password) env.ADMIN_PASSWORD = settings.password;
   if (app.isPackaged) env.NODE_ENV = 'production';
   return env;
 }
@@ -191,11 +177,11 @@ async function waitForServer(timeoutMs = 20000) {
   throw new Error(`本地服务未在 ${timeoutMs / 1000} 秒内启动`);
 }
 
-async function loginDesktop() {
+async function loginDesktop(password) {
   const res = await fetch(baseUrl + '/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: settings.password }),
+    body: JSON.stringify({ username: 'admin', password }),
   });
   if (!res.ok) return false;
   const raw = res.headers.getSetCookie?.()[0] || res.headers.get('set-cookie') || '';
@@ -252,11 +238,6 @@ function runAdminCli(args, serviceName) {
       else reject(new Error(`管理员账户操作失败（${code}）: ${output.trim()}`));
     });
   });
-}
-
-async function resetAdminPassword() {
-  await stopServer();
-  await runAdminCli(['passwd', 'admin', settings.password], 'LogisticsQuote Password Reset');
 }
 
 function showAdminSetup(reset) {
@@ -322,48 +303,45 @@ ipcMain.on('admin-setup:cancel', event => {
 async function ensureAdminAccount() {
   const hasAdmin = adminUserExists();
   const setupComplete = Number(settings.saved.adminSetupVersion || 0) >= 1;
-  if (hasAdmin && settings.password && setupComplete) return;
+  if (hasAdmin && setupComplete) {
+    // 旧版可能保存过自动登录密码，统一清理；后续启动必须正常登录。
+    if (settings.saved.encryptedPassword) {
+      delete settings.saved.encryptedPassword;
+      persistSettings(settings.saved);
+    }
+    return null;
+  }
 
-  if (hasAdmin && (!settings.password || !setupComplete)) {
+  if (hasAdmin) {
     while (true) {
       const value = await showAdminSetup(true);
       try {
         await runAdminCli(['passwd', 'admin', value.password], 'LogisticsQuote Admin Password Reset');
-        saveAdminPassword(value.password);
-        return;
+        markAdminSetup();
+        return value.password;
       } catch (e) {
         dialog.showErrorBox(APP_NAME, e.message);
       }
     }
   }
 
-  if (!hasAdmin && settings.password && setupComplete) {
-    await runAdminCli(['add', 'admin', settings.password], 'LogisticsQuote Admin Creation');
-    return;
-  }
-
   while (true) {
     const value = await showAdminSetup(false);
     try {
       await runAdminCli(['add', 'admin', value.password], 'LogisticsQuote Admin Creation');
-      saveAdminPassword(value.password);
-      return;
+      markAdminSetup();
+      return value.password;
     } catch (e) {
       dialog.showErrorBox(APP_NAME, e.message);
     }
   }
 }
 
-async function ensureDesktopLogin() {
+async function ensureDesktopLogin(password) {
   await waitForServer();
-  if (await loginDesktop()) return;
-  if (fs.existsSync(path.join(dataDir(), 'users.json'))) {
-    await resetAdminPassword();
-    await startServerWithPort();
-    await waitForServer();
-    if (await loginDesktop()) return;
-  }
-  throw new Error('桌面客户端自动登录失败，请查看日志目录');
+  if (!password) return false;
+  if (await loginDesktop(password)) return true;
+  throw new Error('新管理员账户登录失败，请查看日志目录');
 }
 
 async function startServerWithPort() {
@@ -472,9 +450,12 @@ function installMenu() {
 async function bootstrap() {
   settings = loadSettings();
   installMenu();
-  await ensureAdminAccount();
+  const initialAdminPassword = await ensureAdminAccount();
   await startServerWithPort();
-  await ensureDesktopLogin();
+  try { await session.defaultSession.cookies.remove(baseUrl, 'quote_session'); }
+  catch (e) { /* cookie did not exist */ }
+  sessionCookieHeader = '';
+  await ensureDesktopLogin(initialAdminPassword);
   const win = createWindow();
   let initialPath = '/';
   try {
