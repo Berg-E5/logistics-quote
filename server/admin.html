@@ -349,7 +349,7 @@ createApp({
     AppHeader: A.AppHeader, AuthGate, Pager: A.Pager, PasswordModal: A.PasswordModal,
   },
   setup() {
-    const { logged, checking, me, afterLogin, reset: resetAuth } = A.useAuth(async () => {
+    const { logged, checking, me, mustChange, afterLogin, reset: resetAuth } = A.useAuth(async () => {
       await onAuthed();
     });
     const version = ref('读取中…');
@@ -971,7 +971,7 @@ createApp({
     });
 
     return {
-      logged, checking, me, version, rev, rows, groups, totalGroups, summary, collapsed, total, page, size, pages, hasZone, hasLine, hasMode,
+      logged, checking, me, mustChange, version, rev, rows, groups, totalGroups, summary, collapsed, total, page, size, pages, hasZone, hasLine, hasMode,
       isOpen, toggleGroup, expandAll, collapseAll, colspan, openCount, chgBadge, chgSpark, showPwd, loadErr,
       q, fSheet, fCountry, fAttr, sheetOpts, countryOpts, attrOpts,
       showImport, showAdd, showWelcome,
@@ -992,6 +992,8 @@ createApp({
         :user="me.user"
         :role="me.role"
         :system="me.system"
+        :workspace="me.dataScope"
+        :workspace-meta="version"
         :badge="chgBadge"
         refresh
         :links="[{href:'/', text:'前台报价'}, {href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
@@ -1013,12 +1015,25 @@ createApp({
         <template v-else>
           <!-- 空数据引导 -->
           <div class="welcome" v-if="showWelcome">
-            <h2>先上传共享渠道价格表</h2>
-            <p>管理员价格表现在是空的 —— 没有任何渠道报价。上传一份《渠道整合报价》xlsx,
-               系统会自动抽取所有渠道、国家、重量段, 之后就能报价、改价了。</p>
-            <p class="muted">表格格式和盛途那份一样就行 (每个渠道一个 sheet,
-               表头写「国家 / 尺寸限制 / 运费 / 重量 / 普货 / 带电」这类)。
-               上传后该管理员名下的普通用户只读查看这份价格表。</p>
+            <h2>开始配置「{{ me.dataScope }}」工作区</h2>
+            <p>按下面三步完成配置。当前工作区的价格表和数据只对本管理员及名下普通用户可见。</p>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px">
+              <div class="pane" style="margin:0;padding:12px">
+                <b style="color:var(--accenthi)">1. 导入价格表</b>
+                <p class="muted" style="font-size:12px;margin:5px 0 0">上传渠道 XLSX，生成当前工作区的基础报价。</p>
+              </div>
+              <div class="pane" style="margin:0;padding:12px">
+                <b style="color:var(--accenthi)">2. 创建普通用户</b>
+                <p class="muted" style="font-size:12px;margin:5px 0 0">只有你名下的成员能查看这份价格表。</p>
+                <a href="/admin/users" style="font-size:12px">打开用户管理 →</a>
+              </div>
+              <div class="pane" style="margin:0;padding:12px">
+                <b style="color:var(--accenthi)">3. 发送登录信息</b>
+                <p class="muted" style="font-size:12px;margin:5px 0 0">成员使用同一服务器地址和你提供的账号登录。</p>
+              </div>
+            </div>
+            <p>上传一份《渠道整合报价》xlsx，系统会自动抽取渠道、国家、重量段和附加费规则。</p>
+            <p class="muted">每个渠道一个 sheet，表头写「国家 / 尺寸限制 / 运费 / 重量 / 普货 / 带电」这类即可。</p>
             <div class="wrow">
               <input type="file" accept=".xlsx" style="font-size:13px" @change="welFile = $event.target.files[0]">
               <button class="primary" ref="welBtn" @click="uploadTable(welFile, true)">上传并导入</button>
@@ -1312,7 +1327,7 @@ createApp({
         <div class="toast" :class="t.kind" v-for="t in toasts" :key="t.id">{{ t.msg }}</div>
       </div>
 
-      <PasswordModal :show="showPwd" @close="showPwd = false" />
+      <PasswordModal :show="showPwd || mustChange" :required="mustChange" @close="showPwd = false" />
     </div>
   `,
 }).mount('#root');

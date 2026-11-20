@@ -92,12 +92,16 @@ function normalizeUsers(users) {
     if (u.role === 'admin') {
       u.system = !!systemAdmin && u.username === systemAdmin.username;
       if (!Object.prototype.hasOwnProperty.call(u, 'ownerAdmin')) u.ownerAdmin = null;
+      u.disabled = u.disabled === true;
+      u.mustChangePassword = u.mustChangePassword === true;
       continue;
     }
     if (u.role !== 'user') u.role = 'user';
     const owner = admins.find(a =>
       a.username.toLowerCase() === String(u.ownerAdmin || '').toLowerCase());
     if (!owner && systemAdmin) u.ownerAdmin = systemAdmin.username;
+    u.disabled = u.disabled === true;
+    u.mustChangePassword = u.mustChangePassword === true;
   }
   return users;
 }
@@ -164,6 +168,8 @@ function createUser(username, password, role, options) {
     role: wantedRole,
     system,
     ownerAdmin,
+    disabled: opts.disabled === true,
+    mustChangePassword: opts.mustChangePassword === true,
     sessionVersion: 0,
     createdAt: new Date().toISOString(),
   };
@@ -198,6 +204,7 @@ function setPassword(username, password) {
   if (!u) throw new Error('用户不存在: ' + username);
   const { salt, hash } = hashPassword(password);
   u.salt = salt; u.hash = hash;
+  u.mustChangePassword = false;
   u.sessionVersion = Number(u.sessionVersion || 0) + 1;
   u.changedAt = new Date().toISOString();
   saveUsers(users);
@@ -211,6 +218,43 @@ function revokeSessions(username) {
   if (!u) return false;
   u.sessionVersion = Number(u.sessionVersion || 0) + 1;
   u.sessionsRevokedAt = new Date().toISOString();
+  saveUsers(users);
+  return true;
+}
+
+function adminResetPassword(username, password) {
+  const users = loadUsers();
+  const u = users.find(x => x.username.toLowerCase() === String(username).toLowerCase());
+  if (!u) throw new Error('用户不存在: ' + username);
+  if (!password || String(password).length < 8) throw new Error('密码至少 8 位');
+  if (String(password).length > 128) throw new Error('密码不能超过 128 位');
+  const { salt, hash } = hashPassword(password);
+  u.salt = salt;
+  u.hash = hash;
+  u.mustChangePassword = true;
+  u.sessionVersion = Number(u.sessionVersion || 0) + 1;
+  u.changedAt = new Date().toISOString();
+  saveUsers(users);
+  return u;
+}
+
+function setDisabled(username, disabled) {
+  const users = loadUsers();
+  const u = users.find(x => x.username.toLowerCase() === String(username).toLowerCase());
+  if (!u) throw new Error('用户不存在: ' + username);
+  u.disabled = !!disabled;
+  u.sessionVersion = Number(u.sessionVersion || 0) + 1;
+  u.disabledAt = disabled ? new Date().toISOString() : null;
+  u.updatedAt = new Date().toISOString();
+  saveUsers(users);
+  return u;
+}
+
+function recordLogin(username) {
+  const users = loadUsers();
+  const u = users.find(x => x.username.toLowerCase() === String(username).toLowerCase());
+  if (!u) return false;
+  u.lastLoginAt = new Date().toISOString();
   saveUsers(users);
   return true;
 }
@@ -230,6 +274,9 @@ function listUsers() {
   return loadUsers().map(u => ({
     username: u.username, role: u.role, system: !!u.system,
     ownerAdmin: u.role === 'user' ? u.ownerAdmin : null,
+    disabled: u.disabled === true,
+    mustChangePassword: u.mustChangePassword === true,
+    lastLoginAt: u.lastLoginAt || null,
     createdAt: u.createdAt, changedAt: u.changedAt,
   }));
 }
@@ -406,7 +453,8 @@ function clearAllRates() {
 }
 
 module.exports = {
-  createUser, registerUser, setPassword, revokeSessions, deleteUser, listUsers, findUser,
+  createUser, registerUser, setPassword, adminResetPassword, setDisabled, recordLogin,
+  revokeSessions, deleteUser, listUsers, findUser,
   findSystemAdmin, findAdmins, migrateUsers, normalizeUsers,
   verifyPassword, verifyPasswordAsync,
   hashPassword, loadUsers, saveUsers,

@@ -133,7 +133,7 @@ async function verifyRemoteServer(serverUrl) {
   if (!body || !Number.isFinite(Number(body.rev))) {
     throw new Error('中央服务器版本信息不正确');
   }
-  if (Number(body.apiVersion) < 2) {
+  if (Number(body.apiVersion) < 3) {
     throw new Error('中央服务器版本过旧，请先升级服务器版');
   }
   return body;
@@ -305,8 +305,8 @@ function showAdminSetup(options) {
       return;
     }
     const win = new BrowserWindow({
-      width: 560,
-      height: 720,
+      width: 600,
+      height: 780,
       resizable: false,
       maximizable: false,
       minimizable: true,
@@ -391,6 +391,36 @@ ipcMain.on('admin-setup:cancel', event => {
   if ((event.senderFrame?.url || '').startsWith('file://') && setupWindow) {
     setupWindow.close();
   }
+});
+
+async function loadConnectionError(win, message) {
+  if (!win || win.isDestroyed()) return;
+  await win.loadFile(path.join(__dirname, 'connection.html'), {
+    query: {
+      server: baseUrl || settings?.saved?.serverUrl || '',
+      error: String(message || '连接失败'),
+    },
+  });
+}
+
+async function retryRemoteConnection() {
+  if (!mainWindow || settings.saved.connectionMode !== 'remote' || !baseUrl) return;
+  try {
+    await verifyRemoteServer(baseUrl);
+    await mainWindow.loadURL(baseUrl + '/');
+  } catch (e) {
+    await loadConnectionError(mainWindow, e.message);
+  }
+}
+
+ipcMain.on('connection:retry', event => {
+  if (!(event.senderFrame?.url || '').startsWith('file://')) return;
+  retryRemoteConnection();
+});
+
+ipcMain.on('connection:settings', event => {
+  if (!(event.senderFrame?.url || '').startsWith('file://')) return;
+  changeConnection();
 });
 
 async function ensureAdminAccount() {
@@ -511,6 +541,10 @@ function isAppUrl(url) {
   catch (e) { return false; }
 }
 
+function isConnectionPage(url) {
+  return url.startsWith('file://') && url.includes('/connection.html');
+}
+
 function externalUrl(url) {
   return /^https?:\/\//i.test(url) && !isAppUrl(url);
 }
@@ -545,9 +579,28 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
-    if (isAppUrl(url)) return;
+    if (isAppUrl(url) || isConnectionPage(url)) return;
     event.preventDefault();
     if (externalUrl(url)) shell.openExternal(url);
+  });
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription,
+    validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3 || !/^https?:\/\//i.test(validatedURL)) return;
+    if (settings?.saved?.connectionMode === 'remote') {
+      loadConnectionError(win, `${errorDescription} (${errorCode})`);
+    }
+  });
+  win.webContents.on('did-finish-load', () => {
+    if (settings?.saved?.connectionMode === 'remote' && isAppUrl(win.webContents.getURL())) {
+      win.setTitle(`${APP_NAME} · 中央服务器已连接`);
+    } else if (settings?.saved?.connectionMode === 'remote'
+        && isConnectionPage(win.webContents.getURL())) {
+      win.setTitle(`${APP_NAME} · 服务器未连接`);
+    } else if (settings?.saved?.connectionMode === 'local') {
+      win.setTitle(`${APP_NAME} · 本机模式`);
+    } else {
+      win.setTitle(APP_NAME);
+    }
   });
 
   win.once('ready-to-show', () => win.show());
@@ -615,10 +668,14 @@ async function bootstrap() {
   const connection = await ensureAdminAccount();
   if (!connection) return;
   if (connection.mode === 'remote') {
-    await verifyRemoteServer(connection.serverUrl);
     baseUrl = connection.serverUrl;
     const win = createWindow();
-    await win.loadURL(baseUrl + '/');
+    try {
+      await verifyRemoteServer(baseUrl);
+      await win.loadURL(baseUrl + '/');
+    } catch (e) {
+      await loadConnectionError(win, e.message);
+    }
     bootstrapping = false;
     return;
   }

@@ -17,7 +17,7 @@ test('Electron 桌面配置会携带 Web、Node 和 Python 资源', () => {
   }
   assert.equal(pkg.build.win.icon, 'assets/icon.ico');
   assert.ok(fs.existsSync(path.join(desktop, 'assets', 'icon.ico')));
-  for (const file of ['setup.html', 'setup.js', 'preload.js']) {
+  for (const file of ['setup.html', 'setup.js', 'preload.js', 'connection.html', 'connection.js']) {
     assert.ok(pkg.build.files.includes(file), `missing packaged file: ${file}`);
   }
 });
@@ -46,7 +46,10 @@ test('首次启动支持本机管理员和中央服务器两种模式', () => {
   assert.match(main, /verifyRemoteServer/);
   assert.match(main, /connectionMode = 'remote'/);
   assert.match(main, /body\.apiVersion/);
+  assert.match(main, /apiVersion\) < 3/);
   assert.match(main, /function isAppUrl/);
+  assert.match(main, /loadConnectionError/);
+  assert.match(main, /connection:retry/);
   assert.match(main, /await waitForServer\(\);\s+if \(!connection\.existing\)/);
   assert.match(main, /设置登录方式/);
   assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
@@ -57,6 +60,7 @@ test('首次启动支持本机管理员和中央服务器两种模式', () => {
   assert.match(setupHtml, /id="serverUrl"/);
   assert.match(setupHtml, /data-mode="remote"/);
   assert.match(setupJs, /mode: 'remote'/);
+  assert.match(setupJs, /quote\.byberg\.store/);
   assert.match(preload, /submit\(payload\)/);
 });
 

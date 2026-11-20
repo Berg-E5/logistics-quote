@@ -206,6 +206,8 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
   await waitForServer(base, () => output);
 
   const adminCookie = await login(base, 'owner', 'ReviewAdmin123');
+  const apiVersion = await getJson(base, '/api/version', adminCookie);
+  assert.equal(apiVersion.apiVersion, 3);
   const adminA = await createUser(base, adminCookie, 'adminA', 'ReviewAdmin123', 'admin');
   const adminB = await createUser(base, adminCookie, 'adminB', 'ReviewAdmin123', 'admin');
   assert.equal(adminA.system, false);
@@ -387,6 +389,62 @@ with open(sys.argv[2], "w", encoding="utf-8") as f:
     body: '{bad json',
   });
   assert.equal(badJson.status, 400);
+
+  // 管理员重置密码后旧会话失效，临时密码首次登录必须先改密。
+  await responseJson(await fetch(base + '/api/users/userA/reset-password', {
+    method: 'POST',
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'TempReset123' }),
+  }));
+  const invalidatedMe = await getJson(base, '/api/me', cookieA);
+  assert.equal(invalidatedMe.user, null);
+  const tempLogin = await login(base, 'userA', 'TempReset123');
+  const blockedData = await fetch(base + '/api/data', { headers: { Cookie: tempLogin } });
+  assert.equal(blockedData.status, 403);
+  assert.equal((await blockedData.json()).code, 'PASSWORD_CHANGE_REQUIRED');
+  const forcedChange = await fetch(base + '/api/password', {
+    method: 'POST',
+    headers: { Cookie: tempLogin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ oldPassword: 'TempReset123', newPassword: 'UserAChanged123' }),
+  });
+  await responseJson(forcedChange);
+  const changedCookieA = (forcedChange.headers.getSetCookie?.()[0]
+    || forcedChange.headers.get('set-cookie')).split(';')[0];
+  const dataAfterChange = await getJson(base, '/api/data', changedCookieA);
+  assert.equal(dataAfterChange.scope, 'adminA');
+
+  // 停用账号后不能登录，重新启用后可以登录。
+  await responseJson(await fetch(base + '/api/users/userA/status', {
+    method: 'PATCH',
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled: true }),
+  }));
+  const disabledLogin = await fetch(base + '/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'userA', password: 'UserAChanged123' }),
+  });
+  assert.equal(disabledLogin.status, 403);
+  await responseJson(await fetch(base + '/api/users/userA/status', {
+    method: 'PATCH',
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled: false }),
+  }));
+  const enabledLogin = await login(base, 'userA', 'UserAChanged123');
+  assert.ok(enabledLogin);
+  await responseJson(await fetch(base + '/api/users/userA/sessions', {
+    method: 'DELETE',
+    headers: { Cookie: cookieAdminA },
+  }));
+  assert.equal((await getJson(base, '/api/me', enabledLogin)).user, null);
+
+  // 租户管理员不能管理其他租户的管理员账号。
+  const deniedResetAdminB = await fetch(base + '/api/users/adminB/reset-password', {
+    method: 'POST',
+    headers: { Cookie: cookieAdminA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: 'ShouldNotWork123' }),
+  });
+  assert.equal(deniedResetAdminB.status, 403);
 
   // 改密码后旧会话立即失效，当前设备拿到新会话。
   const passwordRes = await fetch(base + '/api/password', {

@@ -145,6 +145,7 @@
   function useAuth(onLoggedIn) {
     const logged = ref(false);
     const checking = ref(true);
+    const mustChange = ref(false);
     const me = ref({ user: '', role: '' });
 
     async function afterLogin() {
@@ -159,8 +160,12 @@
           role: j.role || '',
           system: !!j.system,
           ownerAdmin: j.ownerAdmin || null,
+          dataScope: j.dataScope || j.user || '',
+          serverMode: j.serverMode || 'central',
         };
+        mustChange.value = !!j.mustChangePassword;
         logged.value = true;
+        if (mustChange.value) return;
         if (onLoggedIn) await onLoggedIn();
       } catch (e) {
         checking.value = false;
@@ -171,10 +176,11 @@
     function reset() {
       logged.value = false;
       checking.value = false;      // 退出后别停在「检查中」
+      mustChange.value = false;
       me.value = { user: '', role: '' };
     }
 
-    return { logged, checking, me, afterLogin, reset };
+    return { logged, checking, me, mustChange, afterLogin, reset };
   }
 
   /* ------------------------------------------------------------ 组件们 */
@@ -187,6 +193,8 @@
       user: { type: String, default: '' },
       role: { type: String, default: '' },
       system: { type: Boolean, default: false },
+      workspace: { type: String, default: '' },
+      workspaceMeta: { type: String, default: '' },
       badge: { type: Number, default: 0 },
       links: { type: Array, default: () => [] },   // [{href, text}]
       refresh: { type: Boolean, default: false },
@@ -227,6 +235,11 @@
       <header>
         <span class="hmark"><i></i><i></i><i></i><i></i></span>
         <h1>{{ title }}</h1>
+        <span class="workspacechip" v-if="workspace" :title="workspaceMeta || ('当前工作区：' + workspace)">
+          <span class="ws-label">工作区</span>
+          <b>{{ workspace }}</b>
+          <span class="ws-meta" v-if="workspaceMeta">{{ workspaceMeta }}</span>
+        </span>
         <nav class="hnav" v-if="nav.length">
           <a v-for="l in nav" :key="l.href" class="hn" :class="{on: l.on}" :href="l.href">{{ l.text }}</a>
         </nav>
@@ -360,7 +373,10 @@
 
   /** 改密码弹窗 */
   const PasswordModal = {
-    props: { show: { type: Boolean, default: false } },
+    props: {
+      show: { type: Boolean, default: false },
+      required: { type: Boolean, default: false },
+    },
     emits: ['close', 'done'],
     setup(props, { emit }) {
       const oldPw = ref('');
@@ -379,23 +395,30 @@
           ok.value = '密码已改好';
           oldPw.value = ''; newPw.value = ''; newPw2.value = '';
           emit('done');
+          if (props.required) location.reload();
         } catch (e) { err.value = e.message; }
         finally { busy.value = false; }
       }
-      function close() { err.value = ''; ok.value = ''; emit('close'); }
+      function close() {
+        if (props.required) return;
+        err.value = ''; ok.value = ''; emit('close');
+      }
       return { oldPw, newPw, newPw2, err, ok, busy, submit, close };
     },
     template: `
       <div class="modal" v-if="show" @click.self="close">
         <div class="mbox">
           <h3>修改密码</h3>
+          <p v-if="required" class="muted" style="font-size:12.5px;line-height:1.6">
+            首次登录或管理员重置密码后，必须设置新密码才能查看价格和进入后台。
+          </p>
           <label>当前密码<input v-model="oldPw" type="password" autocomplete="current-password"></label>
           <label>新密码<input v-model="newPw" type="password" autocomplete="new-password"></label>
           <label>确认新密码<input v-model="newPw2" type="password" autocomplete="new-password"></label>
           <div class="err">{{ err }}</div>
           <div style="color:var(--good);font-size:12.5px;min-height:18px">{{ ok }}</div>
           <div class="row">
-            <button @click="close">取消</button>
+            <button v-if="!required" @click="close">取消</button>
             <button class="primary" :disabled="busy" @click="submit">保存</button>
           </div>
         </div>

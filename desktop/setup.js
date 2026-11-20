@@ -18,10 +18,12 @@ const localPanel = document.getElementById('localPanel');
 const remotePanel = document.getElementById('remotePanel');
 const localExisting = document.getElementById('localExisting');
 const localFields = document.getElementById('localFields');
-let selectedMode = params.get('currentMode') || 'local';
+const DEFAULT_SERVER = 'https://quote.byberg.store';
+let selectedMode = params.get('currentMode')
+  || (reset ? 'local' : (purpose === 'setup' ? 'remote' : 'local'));
 
 username.value = params.get('username') || 'admin';
-serverUrl.value = params.get('serverUrl') || '';
+serverUrl.value = params.get('serverUrl') || (purpose === 'setup' ? DEFAULT_SERVER : '');
 
 function submitLabel() {
   if (reset) return '保存新密码并进入系统';

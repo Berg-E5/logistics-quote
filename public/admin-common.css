@@ -71,6 +71,23 @@ header .spacer { flex: 1; }
   border-radius: var(--r-sm); padding: 1px 6px; font-weight: 510;
   font-family: var(--mono); letter-spacing: -.2px;
 }
+.workspacechip {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--accent);
+  background: var(--accentdim); color: var(--fg); font-size: 11.5px;
+}
+.workspacechip .ws-label { color: var(--muted); font-size: 10px; }
+.workspacechip b {
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--mono); font-size: 11.5px;
+}
+.workspacechip .ws-meta {
+  max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted); border-left: 1px solid var(--line2); padding-left: 7px;
+}
+@media (max-width: 1180px) {
+  .workspacechip .ws-meta { display: none; }
+}
 
 /* ---------------- 控件 ---------------- */
 input, select, button {
@@ -80,6 +97,9 @@ input, select, button {
   box-shadow: inset 0 1px 0 var(--ov-2);
 }
 button:hover { transform: translateY(-1px); }
+button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accentdim); outline-offset: 2px;
+}
 input, select { background: var(--panel2); border-color: var(--line); color: var(--fg); font-weight: 510; }
 input:focus, select:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accentdim);

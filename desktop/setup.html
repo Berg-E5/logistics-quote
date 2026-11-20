@@ -14,22 +14,22 @@
       color: #e8f0fa;
     }
     .card {
-      width: 470px; padding: 34px 36px 30px; border-radius: 20px;
+      width: 500px; padding: 28px 34px 26px; border-radius: 20px;
       background: rgba(15, 29, 48, .94); border: 1px solid rgba(124, 210, 230, .24);
       box-shadow: 0 28px 70px rgba(0, 0, 0, .45); backdrop-filter: blur(16px);
     }
-    .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+    .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
     .brand img { width: 56px; height: 56px; border-radius: 13px; }
     .brand small { color: #77d7ce; font-size: 12px; letter-spacing: .12em; }
     h1 { margin: 0; font-size: 24px; line-height: 1.25; }
-    .lead { color: #a9bad0; font-size: 13.5px; line-height: 1.7; margin: 0 0 24px; }
+    .lead { color: #a9bad0; font-size: 13.5px; line-height: 1.65; margin: 0 0 17px; }
     .account {
       display: flex; justify-content: space-between; padding: 11px 13px;
       border-radius: 9px; background: #0a1727; border: 1px solid #223954;
       margin-bottom: 17px; color: #9fb3ca; font-size: 13px;
     }
     .account b { color: #e8f0fa; font-family: ui-monospace, Consolas, monospace; }
-    label { display: block; color: #c8d6e7; font-size: 12.5px; margin: 14px 0 7px; }
+    label { display: block; color: #c8d6e7; font-size: 12.5px; margin: 11px 0 6px; }
     input {
       width: 100%; padding: 12px 13px; border-radius: 9px; border: 1px solid #29425e;
       background: #081422; color: #fff; font: inherit; font-size: 14px; outline: none;
@@ -38,7 +38,7 @@
     .hint { min-height: 18px; margin-top: 8px; color: #e7b86d; font-size: 12px; }
     .err { min-height: 20px; margin: 12px 0 4px; color: #ff8c93; font-size: 12.5px; }
     .actions { display: flex; gap: 10px; margin-top: 14px; }
-    .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 18px; }
+    .modes { display: grid; grid-template-columns: 1.25fr .75fr; gap: 10px; margin: 0 0 14px; }
     .modebtn {
       text-align: left; padding: 14px; min-height: 92px; background: #0a1727;
       border-color: #223954; line-height: 1.5;
@@ -64,16 +64,16 @@
       <img src="assets/icon.png" alt="">
       <div><small>LOGISTICS QUOTE</small><h1 id="title">设置登录方式</h1></div>
     </div>
-    <p class="lead" id="lead">选择本机独立使用，或连接一台中央服务器，与其他电脑共用管理员和价格表。</p>
+      <p class="lead" id="lead">推荐连接中央服务器，与管理员和其他电脑共用同一套账号和价格表。</p>
     <form id="form">
       <div class="modes" id="modes">
-        <button type="button" class="modebtn" data-mode="local">
-          <b>本机独立模式</b>
-          <span>数据保存在这台电脑，需要创建本机管理员。</span>
-        </button>
         <button type="button" class="modebtn" data-mode="remote">
-          <b>中央服务器模式</b>
-          <span>连接已有服务器，直接使用服务器上的账号。</span>
+          <b>中央服务器（推荐）</b>
+          <span>连接已有服务器，直接使用服务器上的账号和价格表。</span>
+        </button>
+        <button type="button" class="modebtn" data-mode="local">
+          <b>高级：本机独立</b>
+          <span>仅在这台电脑保存数据。</span>
         </button>
       </div>
 
@@ -104,7 +104,7 @@
         <button class="primary" id="submit" type="submit">继续</button>
       </div>
     </form>
-    <div class="foot">中央服务器模式下，本机不创建管理员；请使用服务器管理员分配的账号登录。普通用户只能查看所属管理员的价格表。</div>
+    <div class="foot">中央模式不会在本机创建管理员。普通用户只能查看所属管理员的价格表。</div>
   </main>
   <script src="setup.js"></script>
 </body>

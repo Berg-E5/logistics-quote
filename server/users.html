@@ -15,7 +15,10 @@
     border: 1px solid var(--line2); white-space: nowrap; font-weight: 590;
   }
   .role.admin { border-color: var(--accent); color: var(--accenthi); background: var(--accentdim); }
-  .role.user  { border-color: var(--line2); color: var(--muted); background: var(--ov-3); }
+  .role.user  { border-color: #5b9fe8; color: #8fc5ff; background: rgba(64, 139, 220, .12); }
+  .role.system { border-color: var(--warn); color: var(--warn); background: var(--warndim); }
+  .status-off { color: var(--bad); border-color: var(--bad); background: var(--baddim); }
+  .status-temp { color: var(--warn); border-color: var(--warn); background: var(--warndim); }
 
   .delbtn {
     color: var(--bad); border-color: transparent; background: transparent;
@@ -59,8 +62,18 @@
     overflow: hidden; text-overflow: ellipsis;
   }
   .uc-cell b.ok { color: var(--good); }
-  .uc-acts { display: flex; gap: 8px; justify-content: flex-end; padding-top: 2px;
+  .uc-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; padding-top: 2px;
              border-top: 1px solid var(--line); margin-top: -2px; padding-top: 11px; }
+  .uc-acts button { padding: 5px 8px; font-size: 11.5px; }
+  .ucard.disabled { opacity: .72; }
+  .utabs { display: inline-flex; gap: 3px; padding: 3px; border-radius: 9px;
+           border: 1px solid var(--line); background: var(--ov-3); margin: 3px 0 14px; }
+  .utabs button { border: 0; background: transparent; box-shadow: none; padding: 7px 16px; color: var(--muted); }
+  .utabs button.on { background: var(--panel-3); color: var(--fg); font-weight: 590; box-shadow: inset 0 1px 0 var(--ov-4); }
+  .utabs .n { margin-left: 5px; color: var(--muted); font-size: 10.5px; }
+  .copybox { white-space: pre-wrap; background: var(--panel2); border: 1px solid var(--line2);
+             border-radius: 8px; padding: 12px; font: 12px/1.7 var(--mono); color: var(--fg2);
+             user-select: text; }
 
   .nodata {
     display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
@@ -132,7 +145,7 @@ createApp({
     AppHeader: A.AppHeader, LoginGate: A.LoginGate, PasswordModal: A.PasswordModal,
   },
   setup() {
-    const { logged, checking, me, afterLogin, reset: resetAuth } = A.useAuth(async () => {
+    const { logged, checking, me, mustChange, afterLogin, reset: resetAuth } = A.useAuth(async () => {
       await onAuthed();
     });
     const version = ref('读取中…');
@@ -146,13 +159,22 @@ createApp({
     // 新增用户表单
     const nUser = ref('');
     const nPass = ref('');
-    const nRole = ref('user');
     const addErr = ref('');
     const addOk = ref('');
+    const userTab = ref('members');
+    const createdAccount = ref(null);
+    const copyMsg = ref('');
+    const resetTarget = ref(null);
+    const resetPass = ref('');
+    const resetErr = ref('');
 
     const isSystem = computed(() => !!me.value.system);
+    const tabUsers = computed(() => users.value.filter(u =>
+      userTab.value === 'admins' ? u.role === 'admin' : u.role === 'user'));
     const countText = computed(() =>
-      isSystem.value ? `全站共 ${users.value.length} 个账号` : `我的账号共 ${users.value.length} 个`);
+      userTab.value === 'admins'
+        ? `共 ${tabUsers.value.length} 个管理员`
+        : `共 ${tabUsers.value.length} 个普通用户`);
     const lockCountText = computed(() => {
       if (lockErr.value) return '读取失败: ' + lockErr.value;
       return locks.value.length ? `有 ${locks.value.length} 个 IP 被锁` : '没有被锁的 IP';
@@ -179,6 +201,10 @@ createApp({
       return a.map(u => Math.round(12 + 88 * (Number(u.tiers || u.tierCount || 0)) / mx));
     });
     const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length);
+    const memberCount = computed(() => users.value.filter(u => u.role === 'user').length);
+    const serverAddress = computed(() => me.value.serverMode === 'local'
+      ? '本机独立模式（账号和价格表仅本机可用）'
+      : location.origin);
 
     async function loadUsers() {
       loadErr.value = '';
@@ -210,6 +236,89 @@ createApp({
     function lockRemain(sec) {
       const m = Math.floor(sec / 60), s = sec % 60;
       return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        return ok;
+      }
+    }
+
+    function inviteText(account) {
+      return `服务器：${account.server}\n用户名：${account.username}\n所属管理员：${account.owner || '无（管理员账号）'}\n临时密码：${account.password}\n\n首次登录必须修改密码。`;
+    }
+
+    async function copyCreated() {
+      if (!createdAccount.value) return;
+      const ok = await copyText(inviteText(createdAccount.value));
+      copyMsg.value = ok ? '登录信息已复制' : '复制失败，请手动选择文本';
+    }
+
+    async function toggleDisabled(u) {
+      const next = !u.disabled;
+      if (!confirm(`${next ? '停用' : '启用'}账号「${u.username}」吗？\n${next ? '停用后该账号的现有登录会立即失效。' : '启用后账号可以重新登录。'}`)) return;
+      try {
+        await A.api('/api/users/' + encodeURIComponent(u.username) + '/status', {
+          method: 'PATCH', body: { disabled: next },
+        });
+        await loadUsers();
+      } catch (e) {
+        loadErr.value = (next ? '停用失败: ' : '启用失败: ') + e.message;
+      }
+    }
+
+    function openReset(u) {
+      resetTarget.value = u;
+      resetPass.value = '';
+      resetErr.value = '';
+    }
+
+    async function submitReset() {
+      resetErr.value = '';
+      if (resetPass.value.length < 8) { resetErr.value = '临时密码至少 8 位'; return; }
+      busy.value = true;
+      try {
+        await A.api('/api/users/' + encodeURIComponent(resetTarget.value.username) + '/reset-password', {
+          method: 'POST', body: { password: resetPass.value },
+        });
+        createdAccount.value = {
+          server: serverAddress.value,
+          username: resetTarget.value.username,
+          owner: resetTarget.value.role === 'user' ? resetTarget.value.ownerAdmin : null,
+          password: resetPass.value,
+          role: resetTarget.value.role,
+          reset: true,
+        };
+        copyMsg.value = '';
+        resetTarget.value = null;
+        resetPass.value = '';
+        await loadUsers();
+      } catch (e) {
+        resetErr.value = e.message;
+      } finally {
+        busy.value = false;
+      }
+    }
+
+    async function revokeSessions(u) {
+      if (!confirm(`让「${u.username}」在所有设备退出登录吗？`)) return;
+      try {
+        await A.api('/api/users/' + encodeURIComponent(u.username) + '/sessions', { method: 'DELETE' });
+        loadErr.value = `已让「${u.username}」退出所有设备`;
+      } catch (e) {
+        loadErr.value = '操作失败: ' + e.message;
+      }
     }
 
     async function delUser(u) {
@@ -257,12 +366,26 @@ createApp({
       if (nPass.value.length < 8) { addErr.value = '初始密码至少 8 位'; return; }
       busy.value = true;
       try {
-        const role = isSystem.value ? nRole.value : 'user';
+        const role = userTab.value === 'admins' ? 'admin' : 'user';
         await A.api('/api/users', {
           method: 'POST',
-          body: { username, password: nPass.value, role },
+          body: {
+            username,
+            password: nPass.value,
+            role,
+            forcePasswordChange: true,
+          },
         });
-        addOk.value = `已创建${role === 'admin' ? '管理员' : '普通用户'}「${username}」`;
+        createdAccount.value = {
+          server: serverAddress.value,
+          username,
+          owner: role === 'user' ? me.value.user : null,
+          password: nPass.value,
+          role,
+          reset: false,
+        };
+        copyMsg.value = '';
+        addOk.value = `已创建${role === 'admin' ? '管理员' : '普通用户'}「${username}」，请把登录信息交给对方`;
         nUser.value = ''; nPass.value = '';
         await loadUsers();
       } catch (e) {
@@ -278,6 +401,7 @@ createApp({
         location.replace('/');
         return;
       }
+      if (!me.value.system) userTab.value = 'members';
       await refreshVersion();
       await loadUsers();
       await loadLocks();
@@ -294,10 +418,12 @@ createApp({
     });
 
     return {
-      logged, checking, me, version, users, locks, lockErr, loadErr, showPwd, busy,
-      nUser, nPass, nRole, addErr, addOk, unlockMsg, isSystem,
+      logged, checking, me, mustChange, version, users, locks, lockErr, loadErr, showPwd, busy,
+      nUser, nPass, addErr, addOk, unlockMsg, isSystem, userTab, tabUsers,
+      createdAccount, copyMsg, resetTarget, resetPass, resetErr, memberCount, serverAddress,
       countText, dataOwnerCount, adminCount, lockCountText, userSpark, loadUsers, loadLocks, lockRemain,
       delUser, unlockOne, unlockAll, addUser, afterLogin, logout,
+      copyCreated, inviteText, toggleDisabled, openReset, submitReset, revokeSessions,
     };
   },
   template: `
@@ -308,6 +434,8 @@ createApp({
         :user="me.user"
         :role="me.role"
         :system="me.system"
+        :workspace="me.dataScope"
+        :workspace-meta="version"
         :links="[{href:'/', text:'前台报价'}, {href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
         @logout="logout"
         @password="showPwd = true"
@@ -361,9 +489,20 @@ createApp({
             <button @click="loadUsers">刷新</button>
           </div>
 
+          <div class="utabs" v-if="isSystem" role="tablist" aria-label="账号类型">
+            <button role="tab" :aria-selected="userTab === 'admins'"
+                    :class="{on: userTab === 'admins'}" @click="userTab = 'admins'">
+              管理员账号<span class="n">{{ adminCount }}</span>
+            </button>
+            <button role="tab" :aria-selected="userTab === 'members'"
+                    :class="{on: userTab === 'members'}" @click="userTab = 'members'">
+              普通用户<span class="n">{{ memberCount }}</span>
+            </button>
+          </div>
+
           <!-- 账号用卡片, 不用表格: 账号本来就少, 卡片能一眼看全每个账号的状态 -->
-          <div class="ucards" v-if="users.length">
-            <div class="ucard" v-for="u in users" :key="u.username">
+          <div class="ucards" v-if="tabUsers.length">
+            <div class="ucard" :class="{disabled: u.disabled}" v-for="u in tabUsers" :key="u.username">
               <div class="uc-top">
                 <span class="avatar" :class="{admin: u.role === 'admin'}">{{ u.username.charAt(0).toUpperCase() }}</span>
                 <div class="uc-id">
@@ -372,9 +511,11 @@ createApp({
                   <span class="muted" v-else-if="u.role === 'admin'">独立租户</span>
                   <span class="muted" v-else>归属 {{ u.ownerAdmin }}</span>
                 </div>
-                <span class="role" :class="u.role">
+                <span class="role" :class="[u.system ? 'system' : u.role, { 'status-off': u.disabled }]">
                   {{ u.system ? '总管理员' : (u.role === 'admin' ? '管理员' : '普通用户') }}
                 </span>
+                <span class="role status-off" v-if="u.disabled">已停用</span>
+                <span class="role status-temp" v-else-if="u.mustChangePassword">待改密</span>
               </div>
               <div class="uc-meta">
                 <div class="uc-cell">
@@ -387,8 +528,8 @@ createApp({
                   <b>{{ u.hasData ? 'v' + u.rev : '–' }}</b>
                 </div>
                 <div class="uc-cell">
-                  <span>创建</span>
-                  <b>{{ u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '—' }}</b>
+                  <span>最后登录</span>
+                  <b>{{ u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('zh-CN') : '从未登录' }}</b>
                 </div>
                 <div class="uc-cell">
                   <span>数据归属</span>
@@ -396,8 +537,15 @@ createApp({
                 </div>
               </div>
               <div class="uc-acts">
+                <template v-if="u.username !== me.user">
+                  <button @click="openReset(u)">重置密码</button>
+                  <button @click="revokeSessions(u)">退出设备</button>
+                  <button @click="toggleDisabled(u)">{{ u.disabled ? '启用账号' : '停用账号' }}</button>
+                </template>
+                <span class="muted" v-if="u.username === me.user" style="font-size:11.5px">当前登录账号</span>
                 <button class="delbtn"
-                  :disabled="u.role === 'admin' || u.username === me.user"
+                  v-if="u.role !== 'admin'"
+                  :disabled="u.username === me.user"
                   :title="u.role === 'admin' ? '管理员账号不能删除'
                            : (u.username === me.user ? '不能删除当前登录的账号' : '删除这个账号和它的全部数据')"
                   @click="delUser(u)">删除账号</button>
@@ -405,7 +553,7 @@ createApp({
             </div>
           </div>
           <div class="tablewrap" v-else style="margin-bottom:16px">
-            <div class="empty">还没有任何账号</div>
+            <div class="empty">{{ userTab === 'admins' ? '还没有其他管理员账号' : '还没有普通用户账号' }}</div>
           </div>
 
           <!-- 登录锁定面板 -->
@@ -454,26 +602,23 @@ createApp({
 
           <!-- 新增用户 -->
           <div class="pane">
-            <h3>新增用户</h3>
+            <h3>{{ userTab === 'admins' ? '新增管理员' : '新增普通用户' }}</h3>
             <div class="newgrid">
               <label>用户名<input v-model="nUser" placeholder="字母数字, 2-32 位"></label>
-              <label>初始密码<input v-model="nPass" type="text" placeholder="至少 8 位"></label>
-              <label v-if="isSystem">账号类型
-                <select v-model="nRole">
-                  <option value="user">普通用户（归属当前总管理员）</option>
-                  <option value="admin">管理员（创建独立价格表）</option>
-                </select>
+              <label>{{ userTab === 'admins' ? '管理员初始密码' : '普通用户初始密码' }}
+                <input v-model="nPass" type="text" placeholder="至少 8 位，只显示一次">
               </label>
-              <label v-else>账号类型<input value="普通用户（归属当前管理员）" disabled></label>
               <label style="justify-content:flex-end">
-                <button class="primary" :disabled="busy" @click="addUser">{{ busy ? '创建中…' : '新增' }}</button>
+                <button class="primary" :disabled="busy" @click="addUser">
+                  {{ busy ? '创建中…' : (userTab === 'admins' ? '创建管理员' : '创建普通用户') }}
+                </button>
               </label>
             </div>
-            <div class="hint" v-if="isSystem">
-              管理员拥有独立价格表和管理入口；普通用户归属当前总管理员，只读查看总管理员的价格表。
+            <div class="hint" v-if="userTab === 'admins'">
+              管理员拥有独立工作区、价格表和成员列表，看不到其他管理员的数据。
             </div>
             <div class="hint" v-else>
-              新账号只归属当前管理员，登录后只读查看当前管理员的价格表，不能看到其他管理员的数据。
+              新账号归属 {{ me.user }}，只读查看 {{ me.user }} 的价格表。首次登录必须修改临时密码。
             </div>
             <div class="err" style="margin-top:6px" v-if="addErr">{{ addErr }}</div>
             <div class="ok" style="font-size:12.5px" v-if="addOk">{{ addOk }}</div>
@@ -481,7 +626,37 @@ createApp({
         </template>
       </main>
 
-      <PasswordModal :show="showPwd" @close="showPwd = false" />
+      <PasswordModal :show="showPwd || mustChange" :required="mustChange" @close="showPwd = false" />
+
+      <div class="modal" v-if="createdAccount" @click.self="createdAccount = null">
+        <div class="mbox" style="max-width:520px">
+          <h3>{{ createdAccount.reset ? '密码已重置' : '账号已创建' }}</h3>
+          <p class="muted" style="font-size:12.5px">
+            临时密码只显示这一次。对方首次登录后必须修改密码。
+          </p>
+          <div class="copybox">{{ inviteText(createdAccount) }}</div>
+          <div class="ok" style="font-size:12.5px;min-height:18px;margin-top:8px">{{ copyMsg }}</div>
+          <div class="row">
+            <button class="primary" @click="copyCreated">复制登录信息</button>
+            <button @click="createdAccount = null">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" v-if="resetTarget" @click.self="resetTarget = null">
+        <div class="mbox">
+          <h3>重置「{{ resetTarget.username }}」的密码</h3>
+          <p class="muted" style="font-size:12.5px">
+            重置后该账号所有设备立即退出，下次登录必须修改临时密码。
+          </p>
+          <label>临时密码<input v-model="resetPass" type="text" autocomplete="off" placeholder="至少 8 位"></label>
+          <div class="err">{{ resetErr }}</div>
+          <div class="row">
+            <button @click="resetTarget = null">取消</button>
+            <button class="primary" :disabled="busy" @click="submitReset">确认重置</button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
 }).mount('#root');

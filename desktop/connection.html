@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>无法连接中央服务器</title>
+  <style>
+    :root { color-scheme: light dark; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: radial-gradient(circle at 18% 10%, #17445d 0, #0b1220 42%, #070d18 100%);
+      color: #e8f0fa;
+    }
+    .card {
+      width: 560px; padding: 34px; border-radius: 20px;
+      background: rgba(15, 29, 48, .96); border: 1px solid rgba(124, 210, 230, .24);
+      box-shadow: 0 28px 70px rgba(0, 0, 0, .45);
+    }
+    .icon {
+      width: 54px; height: 54px; display: grid; place-items: center; border-radius: 15px;
+      background: rgba(255, 160, 80, .13); border: 1px solid rgba(255, 176, 95, .42);
+      color: #ffb45d; font-size: 28px; margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 9px; font-size: 23px; }
+    p { margin: 0; color: #a9bad0; font-size: 13.5px; line-height: 1.7; }
+    .error {
+      margin: 18px 0; padding: 12px 14px; border-radius: 9px;
+      background: #1b1115; border: 1px solid #6d3540; color: #ffb4bb;
+      font: 12px/1.6 ui-monospace, Consolas, monospace; user-select: text;
+    }
+    .server {
+      color: #d9e8f7; font: 12px/1.6 ui-monospace, Consolas, monospace;
+      overflow-wrap: anywhere; margin-top: 4px;
+    }
+    .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+    button {
+      border: 1px solid #35506e; border-radius: 9px; padding: 10px 16px;
+      font: inherit; cursor: pointer; color: #d7e3f0; background: #15273c;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #17a8b4, #34c4a9); border: 0;
+      color: #04141a; font-weight: 700;
+    }
+    button:focus-visible { outline: 3px solid rgba(40, 184, 191, .38); outline-offset: 2px; }
+    .foot { margin-top: 18px; color: #71859d; font-size: 11.5px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="icon" aria-hidden="true">!</div>
+    <h1>无法连接中央服务器</h1>
+    <p>中央服务器当前不可达，或网络连接暂时中断。账号和价格表仍保存在服务器上，本机数据没有被删除。</p>
+    <div class="error" id="error">连接失败</div>
+    <p>服务器地址</p>
+    <div class="server" id="server"></div>
+    <div class="actions">
+      <button class="primary" id="retry">重新连接</button>
+      <button id="settings">检查服务器设置</button>
+      <button id="copy">复制服务器地址</button>
+    </div>
+    <div class="foot">如果服务器正在升级，请稍后重试。若地址填写错误，可在“连接设置”中修改。</div>
+  </main>
+  <script src="connection.js"></script>
+</body>
+</html>

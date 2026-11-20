@@ -53,7 +53,7 @@ const MAX_IMPORT_TIERS = Math.max(
   1000,
   Number.parseInt(process.env.QUOTE_IMPORT_MAX_TIERS || '200000', 10) || 200000
 );
-const API_VERSION = 2;
+const API_VERSION = 3;
 const IMPORT_STALE_MS = Math.max(
   60 * 60 * 1000,
   Number.parseInt(process.env.QUOTE_IMPORT_STALE_HOURS || '24', 10) * 60 * 60 * 1000
@@ -592,6 +592,13 @@ function dataScopeFor(record) {
   return null;
 }
 
+function canManageAccount(viewer, target) {
+  if (!viewer || !target) return false;
+  if (viewer.username === target.username) return false;
+  if (viewer.system) return true;
+  return target.role === 'user' && target.ownerAdmin === viewer.username;
+}
+
 function serveStatic(res, filePath) {
   fs.readFile(filePath, (err, buf) => {
     if (err) {
@@ -634,6 +641,18 @@ const server = http.createServer(async (req, res) => {
     const publicScope = systemAdmin ? systemAdmin.username : db.DEFAULT_SCOPE;
     const scope = dataScopeFor(viewerRecord) || publicScope;
     const actor = viewer || scope;
+    const passwordChangeAllowed = new Set([
+      '/api/login', '/api/logout', '/api/me', '/api/password',
+      '/api/register', '/api/version', '/api/fx',
+    ]);
+    if (viewerRecord && viewerRecord.mustChangePassword
+        && pathname.startsWith('/api/') && !passwordChangeAllowed.has(pathname)) {
+      return sendJson(res, 403, {
+        error: '首次登录或管理员重置密码后，请先修改密码',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        mustChangePassword: true,
+      });
+    }
 
     if (pathname === '/api/data' && req.method === 'GET') {
       // 未登录不给数据 —— 前台必须登录才能看报价
@@ -685,11 +704,16 @@ const server = http.createServer(async (req, res) => {
         users.noteFail(ip);
         return sendErr(res, 401, '用户名或密码不对');
       }
+      if (u.disabled) {
+        return sendErr(res, 403, '账号已停用，请联系所属管理员');
+      }
       users.clearFail(ip);
+      users.recordLogin(u.username);
       setSessionCookie(req, res, u.username);
       return sendJson(res, 200, {
         ok: true, user: u.username, role: u.role, system: !!u.system,
         ownerAdmin: u.role === 'user' ? u.ownerAdmin : null,
+        mustChangePassword: u.mustChangePassword === true,
       });
     }
 
@@ -709,6 +733,9 @@ const server = http.createServer(async (req, res) => {
         system: !!(rec && rec.system),
         ownerAdmin: rec && rec.role === 'user' ? rec.ownerAdmin : null,
         dataScope: dataScopeFor(rec),
+        disabled: !!(rec && rec.disabled),
+        mustChangePassword: !!(rec && rec.mustChangePassword),
+        serverMode: process.env.QUOTE_DESKTOP === '1' ? 'local' : 'central',
         createdAt: rec ? rec.createdAt : null,
       });
     }
@@ -1063,22 +1090,27 @@ const server = http.createServer(async (req, res) => {
       }
       try {
         const u = role === 'admin'
-          ? users.createUser(body.username, body.password, 'admin', { system: false })
+          ? users.createUser(body.username, body.password, 'admin', {
+              system: false,
+              mustChangePassword: body.forcePasswordChange === true,
+            })
           : users.createUser(body.username, body.password, 'user', {
               ownerAdmin: viewerRecord.username,
+              mustChangePassword: body.forcePasswordChange === true,
             });
         console.log(`[users] ${viewerRecord.username} 新增 ${role} ${u.username}` +
           (u.ownerAdmin ? ` owner=${u.ownerAdmin}` : ''));
         return sendJson(res, 200, {
           ok: true, user: u.username, role: u.role,
           system: !!u.system, ownerAdmin: u.ownerAdmin,
+          mustChangePassword: u.mustChangePassword === true,
         });
       } catch (e) {
         return sendErr(res, 400, e.message);
       }
     }
 
-    if (pathname.startsWith('/api/users/') && req.method === 'DELETE') {
+    if (/^\/api\/users\/[^/]+$/.test(pathname) && req.method === 'DELETE') {
       if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能删除用户');
       const name = decodeURIComponent(pathname.slice('/api/users/'.length));
       if (!name) return sendErr(res, 400, '缺少用户名');
@@ -1086,9 +1118,9 @@ const server = http.createServer(async (req, res) => {
       if (name === me) return sendErr(res, 400, '不能删除当前登录的账号');
       const target = users.findUser(name);
       if (!target) return sendErr(res, 400, '用户不存在: ' + name);
-      if (target.role === 'admin') return sendErr(res, 400, '管理员账号不能删除');
-      if (!viewerRecord.system && target.ownerAdmin !== viewerRecord.username) {
-        return sendErr(res, 403, '只能删除自己名下的普通用户');
+      if (target.role === 'admin') return sendErr(res, 400, '管理员账号不能删除，请先停用');
+      if (!canManageAccount(viewerRecord, target)) {
+        return sendErr(res, 403, '只能删除权限范围内的普通用户');
       }
       try {
         const u = users.deleteUser(name);
@@ -1098,6 +1130,51 @@ const server = http.createServer(async (req, res) => {
         catch (e) { console.error('[users] 删数据目录失败:', e.message); }
         console.log(`[users] 管理员删除用户 ${u.username}`);
         return sendJson(res, 200, { ok: true, user: u.username });
+      } catch (e) {
+        return sendErr(res, 400, e.message);
+      }
+    }
+
+    const managedUserAction = pathname.match(
+      /^\/api\/users\/([^/]+)\/(reset-password|status|sessions)$/);
+    if (managedUserAction) {
+      if (!isAdmin(req)) return sendErr(res, 403, '只有管理员能管理账号');
+      const targetName = decodeURIComponent(managedUserAction[1]);
+      const action = managedUserAction[2];
+      const target = users.findUser(targetName);
+      if (!target) return sendErr(res, 400, '用户不存在: ' + targetName);
+      if (!canManageAccount(viewerRecord, target)) {
+        return sendErr(res, 403, '只能管理权限范围内的账号');
+      }
+      try {
+        if (action === 'reset-password' && req.method === 'POST') {
+          const body = await readJsonBody(req);
+          const u = users.adminResetPassword(target.username, body.password);
+          return sendJson(res, 200, {
+            ok: true,
+            user: u.username,
+            mustChangePassword: true,
+            sessionsRevoked: true,
+          });
+        }
+        if (action === 'status' && req.method === 'PATCH') {
+          const body = await readJsonBody(req);
+          if (typeof body.disabled !== 'boolean') {
+            return sendErr(res, 400, '缺少 disabled 状态');
+          }
+          const u = users.setDisabled(target.username, body.disabled);
+          return sendJson(res, 200, {
+            ok: true,
+            user: u.username,
+            disabled: u.disabled,
+            sessionsRevoked: true,
+          });
+        }
+        if (action === 'sessions' && req.method === 'DELETE') {
+          users.revokeSessions(target.username);
+          return sendJson(res, 200, { ok: true, user: target.username });
+        }
+        return sendErr(res, 405, '不支持的操作');
       } catch (e) {
         return sendErr(res, 400, e.message);
       }
@@ -1145,7 +1222,7 @@ const server = http.createServer(async (req, res) => {
     // 用空壳而不是 401, 是因为 <script src> 是同步加载的, 401 会让整页脚本挂掉,
     // 连登录按钮都用不了。空壳让页面外壳正常跑, 登录后 reload 就有数据了。
     if (pathname === '/data_v2.js' || pathname === '/data_v2.js/') {
-      if (!viewer) {
+      if (!viewer || (viewerRecord && viewerRecord.mustChangePassword)) {
         const stub = 'window.DATA = null;\n';
         res.writeHead(200, {
           'Content-Type': MIME['.js'],

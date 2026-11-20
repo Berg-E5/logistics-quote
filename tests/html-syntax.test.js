@@ -16,6 +16,7 @@ test('HTML 内联 JavaScript 语法正确', () => {
     'server/changes.html',
     'server/users.html',
     'desktop/setup.html',
+    'desktop/connection.html',
   ];
   for (const relative of files) {
     const html = fs.readFileSync(path.join(root, relative), 'utf8');

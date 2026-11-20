@@ -102,7 +102,7 @@ createApp({
     Pager: A.Pager, PasswordModal: A.PasswordModal,
   },
   setup() {
-    const { logged, checking, me, afterLogin, reset: resetAuth } = A.useAuth(async () => {
+    const { logged, checking, me, mustChange, afterLogin, reset: resetAuth } = A.useAuth(async () => {
       await onAuthed();
     });
     const version = ref('读取中…');
@@ -320,7 +320,7 @@ createApp({
     });
 
     return {
-      logged, checking, me, version, rows, total, kind, q, page, size, pages, showPwd, loading, loadErr,
+      logged, checking, me, mustChange, version, rows, total, kind, q, page, size, pages, showPwd, loading, loadErr,
       countText, kindName, kindCount, openIdx, spark, chColor, afterLogin, logout, onFilter, setPage, setSize, onRefresh,
     };
   },
@@ -332,6 +332,8 @@ createApp({
         :user="me.user"
         :role="me.role"
         :system="me.system"
+        :workspace="me.dataScope"
+        :workspace-meta="version"
         refresh
         :links="[{href:'/', text:'前台报价'}, {href:'/admin', text:'改价'}, {href:'/admin/changes', text:'改动记录'}]"
         @logout="logout"
@@ -499,7 +501,7 @@ createApp({
         </template>
       </main>
 
-      <PasswordModal :show="showPwd" @close="showPwd = false" />
+      <PasswordModal :show="showPwd || mustChange" :required="mustChange" @close="showPwd = false" />
     </div>
   `,
 }).mount('#root');

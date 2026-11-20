@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>物流报价查询</title>
+<title>物流报价</title>
 <style>
   /* ============================================================
      前台专属样式。设计令牌与通用组件在 ui-common.css (内联注入),
@@ -1214,7 +1214,7 @@
     </button>
     <div class="gintro">
       <div class="gbrand">物流报价查询</div>
-      <h2>按你自己的价格表<br>算到手价</h2>
+      <h2>按所属工作区价格表<br>算到手价</h2>
       <p class="gmuted">登录后用你上传的渠道报价表比价 —— 运费、挂号费、附加费、体积重一次算清，直接给出最低价和该收多少。</p>
       <ul class="glist">
         <li>多渠道实时比价，自动标出最低价</li>
@@ -1247,7 +1247,7 @@
   <div class="mbox">
     <h3>登录</h3>
     <p class="muted" style="margin:0 0 14px;font-size:12.5px">
-      登录后使用<b>你自己上传的</b>渠道价格表。未登录时显示站主的公开数据。
+      登录后查看<b>所属管理员</b>维护的价格表。普通用户为只读访问。
     </p>
     <label>用户名<input id="liUser" type="text" autocomplete="username" value=""></label>
     <label>密码<input id="liPass" type="password" autocomplete="current-password" value=""></label>
@@ -1258,6 +1258,23 @@
     </div>
     <div class="liother">
       账号由管理员创建，请联系管理员
+    </div>
+  </div>
+</div>
+
+<!-- 首次登录 / 管理员重置密码后，必须改密 -->
+<div class="modal" id="forcepwdmodal" style="display:none">
+  <div class="mbox">
+    <h3>请先设置新密码</h3>
+    <p class="muted" style="margin:0 0 14px;font-size:12.5px">
+      <b id="forcepwduser"></b> 首次登录或密码被管理员重置，必须修改密码后才能查看价格表。
+    </p>
+    <label>当前临时密码<input id="forceOld" type="password" autocomplete="current-password"></label>
+    <label>新密码<input id="forceNew" type="password" autocomplete="new-password"></label>
+    <label>确认新密码<input id="forceNew2" type="password" autocomplete="new-password"></label>
+    <div class="err" id="forceErr"></div>
+    <div class="row">
+      <button class="primary" id="forceSave" style="flex:1">保存新密码</button>
     </div>
   </div>
 </div>
@@ -1653,15 +1670,18 @@ async function refreshLoginState() {
       $('ddName').textContent = j.user;
       $('ddUser').textContent = j.user;
       $('ddAvatar').textContent = String(j.user).charAt(0);
-      $('ddRole').textContent = j.role === 'admin'
+      const roleCn = j.role === 'admin'
         ? (j.system ? '总管理员' : '管理员')
         : '普通用户';
+      $('ddRole').textContent = roleCn + (j.dataScope ? ' · 工作区 ' + j.dataScope : '');
       const ul = $('usersLink');
       if (ul) ul.style.display = (j.role === 'admin') ? '' : 'none';
       for (const id of ['adminLink', 'changesLink']) {
         const el = $(id);
         if (el) el.style.display = (j.role === 'admin') ? '' : 'none';
       }
+      if (j.mustChangePassword) openForcePassword(j.user);
+      else $('forcepwdmodal').style.display = 'none';
     } else {
       menu.style.display = 'none';
       btn.style.display = 'inline-block';
@@ -1679,6 +1699,39 @@ function openLoginModal() {
   $('liUser').focus();
 }
 function closeLoginModal() { $('loginmodal').style.display = 'none'; }
+
+function openForcePassword(user) {
+  $('forcepwduser').textContent = user || '';
+  $('forceErr').textContent = '';
+  $('forceOld').value = '';
+  $('forceNew').value = '';
+  $('forceNew2').value = '';
+  $('forcepwdmodal').style.display = 'flex';
+  $('forceOld').focus();
+}
+
+async function submitForcePassword() {
+  const oldPassword = $('forceOld').value;
+  const newPassword = $('forceNew').value;
+  const confirm = $('forceNew2').value;
+  const err = $('forceErr');
+  const btn = $('forceSave');
+  err.textContent = '';
+  if (!oldPassword || !newPassword) { err.textContent = '当前密码和新密码都要填'; return; }
+  if (newPassword.length < 8) { err.textContent = '新密码至少 8 位'; return; }
+  if (newPassword !== confirm) { err.textContent = '两次输入的新密码不一致'; return; }
+  btn.disabled = true;
+  try {
+    await apiPost('/api/password', { oldPassword, newPassword });
+    $('forcepwdmodal').style.display = 'none';
+    await refreshLoginState();
+    location.reload();
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 $('loginbtn').onclick = openLoginModal;
 $('liCancel').onclick = closeLoginModal;
@@ -1713,6 +1766,8 @@ async function doLogin() {
   return submitLogin($('liUser'), $('liPass'), $('liErr'), $('liGo'));
 }
 $('liGo').onclick = doLogin;
+$('forceSave').onclick = submitForcePassword;
+$('forceNew2').onkeydown = e => { if (e.key === 'Enter') submitForcePassword(); };
 /* 登录墙上的表单: 直接在墙上登录, 不用再点一次弹窗 */
 const gGo = $('gGo');
 if (gGo) {
@@ -1794,11 +1849,11 @@ function updateScopeBadge() {
   if (DATA_SCOPE && DATA_MINE) {
     b.hidden = false;
     b.className = 'scopebadge mine';
-    b.textContent = DATA_SCOPE + ' 的价格表';
+    b.textContent = '工作区 ' + DATA_SCOPE + ' · 可编辑';
   } else if (DATA_SCOPE) {
     b.hidden = false;
     b.className = 'scopebadge';
-    b.textContent = DATA_SCOPE + ' 的管理员价格表';
+    b.textContent = '工作区 ' + DATA_SCOPE + ' · 只读';
   } else {
     b.hidden = true;
   }
