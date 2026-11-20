@@ -98,6 +98,22 @@
   @media (max-width: 940px) {
     .workbench { grid-template-columns: 1fr; }
     .side { position: static; max-height: none; overflow: visible; }
+    .rec-cards { grid-template-columns: 1fr; }
+    .workspace-status { gap: 9px 14px; }
+    .rescap { flex-wrap: wrap; }
+    .res-actions { width: 100%; margin-left: 0; }
+    .toolbar select, .toolbar input.fnum { flex: 1 1 130px; }
+    .tablewrap { max-height: 62vh; }
+  }
+  @media (max-width: 620px) {
+    .wrap { padding: 0 10px 50px; }
+    header { gap: 8px; }
+    .workspace-status .ws-permission { margin-left: 0; }
+    .toolbar { gap: 7px; }
+    .toolbar input[type=search] { min-width: 100%; }
+    .historybox { width: 96vw; padding: 16px; }
+    .hitem { grid-template-columns: 1fr; }
+    .hitem .hacts { grid-row:auto; grid-column:1; }
   }
 
   /* ---------------- 顶部控制条 ---------------- */
@@ -109,6 +125,21 @@
     border-bottom: 1px solid var(--line);
   }
   .brand { display: flex; align-items: center; gap: 10px; }
+  .workspace-status {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin: -8px 0 14px; padding: 8px 12px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--muted); font-size: 11.5px;
+  }
+  .workspace-status span { display: inline-flex; align-items: center; gap: 5px; }
+  .workspace-status b { color: var(--fg2); font: 590 11.5px var(--mono); }
+  .workspace-status span:first-child i {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--good);
+  }
+  .workspace-status .ws-permission {
+    margin-left: auto; color: var(--accent-hi); border: 1px solid var(--accent);
+    border-radius: 999px; padding: 1px 8px; background: var(--accent-dim);
+  }
   /* 几何标识: 2x2 小方块, 右上那个用强调色 —— 纯 CSS, 不用图片 */
   .mark {
     width: 22px; height: 22px; display: grid; grid-template: 1fr 1fr / 1fr 1fr;
@@ -429,6 +460,41 @@
     font-size: 11.5px; font-weight: 590; color: var(--fg-2);
   }
   .rescap span { font-size: 11.5px; color: var(--dim); }
+  .res-actions { margin-left: auto; display: inline-flex; gap: 5px; flex-wrap: wrap; }
+  .res-actions button {
+    font: inherit; font-size: 11px; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--line2); background: var(--panel3); color: var(--fg2);
+    cursor: pointer;
+  }
+  .res-actions button:hover { border-color: var(--accent); color: var(--accent-hi); }
+
+  /* 推荐渠道卡片 */
+  .rec-panel { padding: 0; }
+  .rec-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1px; background: var(--line); }
+  .rec-cards.single { grid-template-columns: 1fr; }
+  .rec-cards.two { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .reccard {
+    min-width: 0; background: var(--panel); border: 0; padding: 14px 15px;
+    text-align: left; color: var(--fg); cursor: pointer;
+  }
+  .reccard:hover { background: var(--panel-2); }
+  .reccard.best { background: linear-gradient(180deg,var(--good-dim),transparent 75%); }
+  .reccard .rr-top { display: flex; align-items: center; gap: 7px; }
+  .reccard .rr-rank {
+    font-size: 9.5px; border: 1px solid var(--line2); border-radius: 999px;
+    padding: 1px 7px; color: var(--muted);
+  }
+  .reccard.best .rr-rank { color: var(--good); border-color: var(--good); }
+  .reccard .rr-name {
+    display: block; margin-top: 8px; font-weight: 590; font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .reccard .rr-price {
+    display: block; margin-top: 5px; color: var(--good);
+    font: 620 20px var(--mono); font-variant-numeric: tabular-nums;
+  }
+  .reccard .rr-meta { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .rec-empty { grid-column: 1/-1; padding: 22px; text-align:center; color:var(--muted); font-size:12px; }
 
   /* 结果卡 (顶线语义在 ui-common 的 .stat::before) */
   /* 中文标题不要 uppercase / 字距, 否则发虚 */
@@ -517,10 +583,35 @@
     transition: border-color .15s, box-shadow .15s;
   }
   .toolbar input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .toolbar select, .toolbar input.fnum {
+    padding: 5px 8px; font-size: 11.5px; background: var(--panel-2);
+    color: var(--fg); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .toolbar input.fnum { width: 92px; }
+  .toolbar button.small { padding: 5px 8px; font-size: 11.5px; }
+  .toolbar button.ghost { background: transparent; color: var(--muted); }
   .toolbar label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .toolbar input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; }
   .toolbar .count { color: var(--muted); font-size: 11.5px; font-family: var(--mono); }
   .toolbar .grow { flex: 1; }
+
+  /* 报价历史 */
+  .historybox { width: min(760px, 94vw); max-height: 78vh; display: flex; flex-direction: column; }
+  .history-head { display:flex; align-items:flex-start; gap:12px; }
+  .history-head h3 { margin:0 0 2px; }
+  .history-head p { margin:0; font-size:11.5px; }
+  .history-head button { margin-left:auto; }
+  .history-list { overflow:auto; margin-top:14px; display:flex; flex-direction:column; gap:7px; }
+  .hitem {
+    border:1px solid var(--line); border-radius:8px; padding:10px 11px;
+    background:var(--panel-2); display:grid; grid-template-columns:1fr auto;
+    gap:4px 10px;
+  }
+  .hitem b { font-size:12.5px; }
+  .hitem .hmeta { color:var(--muted); font-size:11px; }
+  .hitem .hacts { grid-row:1/3; grid-column:2; display:flex; align-items:center; gap:6px; }
+  .hitem button { padding:4px 8px; font-size:11px; }
+  .history-actions { display:flex; justify-content:flex-end; margin-top:12px; }
 
   /* ---------------- 表格 ---------------- */
   .tablewrap {
@@ -1185,7 +1276,7 @@
 <header>
   <div class="brand">
     <span class="mark"><i></i><i></i><i></i><i></i></span>
-    <h1>物流报价查询</h1>
+    <h1>物流报价</h1>
   </div>
   <p id="meta">加载中…</p>
   <span class="scopebadge" id="scopeBadge" hidden></span>
@@ -1215,6 +1306,13 @@
   <button class="loginbtn" id="loginbtn">登录</button>
 </header>
 
+<div class="workspace-status" id="workspaceStatus" hidden>
+  <span><i></i>当前工作区 <b id="wsScope">—</b></span>
+  <span>价格表 <b id="wsRev">—</b></span>
+  <span>更新于 <b id="wsUpdated">—</b></span>
+  <span class="ws-permission" id="wsPermission">—</span>
+</div>
+
 <!-- 登录墙: 未登录时挡住计算区。
      原来要点「登录」再弹一次窗, 两步; 现在表单直接放在墙上。
      主题切换按钮也放在这里 —— 顶栏被登录墙盖住, 之前未登录时切不了主题。 -->
@@ -1225,7 +1323,7 @@
       <span class="tlab" id="gThemeLab">跟随系统</span>
     </button>
     <div class="gintro">
-      <div class="gbrand">物流报价查询</div>
+      <div class="gbrand">物流报价</div>
       <h2>按所属工作区价格表<br>算到手价</h2>
       <p class="gmuted">登录后用你上传的渠道报价表比价 —— 运费、挂号费、附加费、体积重一次算清，直接给出最低价和该收多少。</p>
       <ul class="glist">
@@ -1300,6 +1398,20 @@
     <div class="err" id="forceErr"></div>
     <div class="row">
       <button class="primary" id="forceSave" style="flex:1">保存新密码</button>
+    </div>
+  </div>
+</div>
+
+<!-- 报价历史 -->
+<div class="modal" id="historymodal" style="display:none">
+  <div class="mbox historybox">
+    <div class="history-head">
+      <div><h3>最近报价</h3><p class="muted">保存在当前浏览器和当前账号下。</p></div>
+      <button id="historyClose">关闭</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+    <div class="history-actions">
+      <button id="historyClear" class="ghost">清空历史</button>
     </div>
   </div>
 </div>
@@ -1392,7 +1504,15 @@
  <section class="main">
   <div class="panel">
   <!-- 结果卡片 (JS 填充) -->
-  <div class="rescap"><b>结果</b><span>改上面任一参数即时重算 · 下方表格按定价成本升序</span></div>
+  <div class="rescap">
+    <b>结果</b><span>改上面任一参数即时重算 · 下方表格按定价成本升序</span>
+    <span class="res-actions">
+      <button id="copySummary">复制摘要</button>
+      <button id="shareQuote">分享参数</button>
+      <button id="saveQuote">保存报价</button>
+      <button id="openHistory">历史</button>
+    </span>
+  </div>
   <!-- 推荐方案卡: 报价员要的是结论, 不是一排指标。
        左边是主角 (最低定价成本 + 是哪条渠道), 右边四个次要指标跟着。
        绿色仍然只表示「最便宜」, 跟表格里的「最低」标记同一语义。 -->
@@ -1436,6 +1556,11 @@
   </div>
   </div>
 
+  <div class="panel rec-panel">
+    <div class="cmp-h"><b>推荐渠道</b><span>按当前包裹和财务参数，优先展示成本最低的可发渠道</span></div>
+    <div class="rec-cards" id="recCards"></div>
+  </div>
+
   <!-- 成本对比: 把各渠道的定价成本画成横向条, 一眼看出谁便宜、差距多大 -->
   <div class="panel cmp">
     <div class="cmp-h">
@@ -1447,7 +1572,16 @@
 
   <div class="toolbar">
   <input type="search" id="q" placeholder="搜渠道名…" autocomplete="off">
+  <select id="fChannel" aria-label="筛选渠道"><option value="">全部渠道</option></select>
+  <input id="fMin" class="fnum" type="number" min="0" step="1" placeholder="最低成本">
+  <input id="fMax" class="fnum" type="number" min="0" step="1" placeholder="最高成本">
+  <select id="fSort" aria-label="排序">
+    <option value="cost-asc">成本从低到高</option>
+    <option value="cost-desc">成本从高到低</option>
+    <option value="name">渠道名称</option>
+  </select>
   <label title="不可发 = 超尺寸/超重/属性不符等被规则挡掉的渠道"><input type="checkbox" id="onlyavail" checked> 只显示可发的</label>
+  <button id="resetFilters" class="ghost small">重置筛选</button>
   <span class="count" id="count"></span>
   <span class="grow"></span>
 </div>
@@ -1504,6 +1638,7 @@
 let DATA = window.DATA;
 let DATA_REV = null, DATA_UPDATED = null, DATA_FROM = 'offline';
 let DATA_SCOPE = null, DATA_MINE = false;   // 数据归属: scope=用户名, mine=是否本人
+let CURRENT_USER = '', CURRENT_ROLE = '', CURRENT_SCOPE = '', CURRENT_MUST_CHANGE = false;
 const $ = id => document.getElementById(id);
 
 /* ---------------- 主题 (跟随系统 / 浅色 / 深色) ----------------
@@ -1690,6 +1825,10 @@ async function refreshLoginState() {
     const r = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
     const j = await r.json();
     if (j && j.user) {
+      CURRENT_USER = j.user;
+      CURRENT_ROLE = j.role || '';
+      CURRENT_SCOPE = j.dataScope || DATA_SCOPE || j.user;
+      CURRENT_MUST_CHANGE = !!j.mustChangePassword;
       menu.style.display = 'inline-block';
       btn.style.display = 'none';
       $('ddName').textContent = j.user;
@@ -1711,7 +1850,11 @@ async function refreshLoginState() {
       if ($('gUserNoData')) $('gUserNoData').hidden = !(noData && j.role === 'user');
       if (j.mustChangePassword) openForcePassword(j.user);
       else $('forcepwdmodal').style.display = 'none';
+      updateWorkspaceStatus(j);
     } else {
+      CURRENT_USER = ''; CURRENT_ROLE = ''; CURRENT_SCOPE = '';
+      CURRENT_MUST_CHANGE = false;
+      $('workspaceStatus').hidden = true;
       if ($('gLoginFields')) $('gLoginFields').hidden = false;
       if ($('gAdminNoData')) $('gAdminNoData').hidden = true;
       if ($('gUserNoData')) $('gUserNoData').hidden = true;
@@ -1719,9 +1862,24 @@ async function refreshLoginState() {
       btn.style.display = 'inline-block';
     }
   } catch (e) {
+    CURRENT_USER = ''; CURRENT_ROLE = ''; CURRENT_SCOPE = '';
+    $('workspaceStatus').hidden = true;
     menu.style.display = 'none';
     btn.style.display = 'inline-block';
   }
+}
+
+function updateWorkspaceStatus(j) {
+  const box = $('workspaceStatus');
+  if (!box) return;
+  box.hidden = false;
+  $('wsScope').textContent = j.dataScope || DATA_SCOPE || j.user || '—';
+  $('wsRev').textContent = DATA_REV ? 'v' + DATA_REV : '未导入';
+  $('wsUpdated').textContent = DATA_UPDATED
+    ? new Date(DATA_UPDATED).toLocaleString('zh-CN') : '—';
+  $('wsPermission').textContent = j.mustChangePassword
+    ? '待修改密码'
+    : (j.role === 'admin' ? '管理员 · 可编辑' : '普通用户 · 只读');
 }
 
 function openLoginModal() {
@@ -1826,7 +1984,7 @@ document.addEventListener('click', (e) => {
   if (um && !um.contains(e.target)) closeUserMenu();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeUserMenu(); closeLoginModal(); }
+  if (e.key === 'Escape') { closeUserMenu(); closeLoginModal(); closeHistory(); }
 });
 
 function flashSync() {
@@ -2051,6 +2209,51 @@ function renderCmp(res, list, best) {
   box.innerHTML = html;
 }
 
+function blockedReason(r) {
+  if (!r) return '没有可用报价';
+  if (!r.matched) return '当前国家、重量或属性没有匹配的价格档';
+  if (r.blocked) return r.note || '超出渠道限制';
+  return r.note || '当前包裹不可发';
+}
+
+function renderRecommendations(res, best, inp) {
+  const box = $('recCards');
+  if (!box) return;
+  const available = res.rows
+    .filter(r => r.matched && !r.blocked
+      && (TRANS === 'all' || ((TRANS === 'sea') === isSeaLead(r.lead))))
+    .sort((a, b) => a.total - b.total)
+    .slice(0, 3);
+  if (!available.length) {
+    box.className = 'rec-cards single';
+    box.innerHTML = '<div class="rec-empty">当前条件下没有可发渠道，请调整重量、尺寸或属性。</div>';
+    return;
+  }
+  box.className = 'rec-cards ' + (available.length === 1 ? 'single' : available.length === 2 ? 'two' : '');
+  box.innerHTML = available.map((r, i) => {
+    const diff = best && r !== best && best.total > 0
+      ? `比最低 +¥${fmt(r.total - best.total)} (+${((r.total - best.total) / best.total * 100).toFixed(1)}%)`
+      : (i === 0 ? '当前成本最低' : '');
+    return `<button class="reccard${i === 0 ? ' best' : ''}" data-rec="${i}">
+      <span class="rr-top"><span class="rr-rank">${i === 0 ? '推荐' : '备选 ' + i}</span>
+        <span class="rr-price">¥${fmt(r.total)}</span></span>
+      <span class="rr-name">${esc(r.sheet)}${r.line && r.line !== '-' ? ' · ' + esc(r.line) : ''}</span>
+      <span class="rr-meta">${esc(diff)} · 建议报价 ¥${fmt(r.sells.custom)}${r.lead ? ' · ' + esc(leadText(r.lead)) : ''}</span>
+    </button>`;
+  }).join('');
+  box.querySelectorAll('[data-rec]').forEach(el => {
+    el.addEventListener('click', () => {
+      const r = available[Number(el.dataset.rec)];
+      if (!r) return;
+      PICKED = rowKey(r);
+      render();
+      document.querySelector('.tablewrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
+let LAST_CONTEXT = null;
+
 function render() {
   const inp = readInputs();
   const groups = DATA.groups.filter(g => g.country === inp.country);
@@ -2164,6 +2367,22 @@ function render() {
   if (onlyAvail) list = list.filter(r => r.matched && !r.blocked);
   // 运输方式: 按报价表时效分海运/空运 (没写时效的算空运)
   if (TRANS !== 'all') list = list.filter(r => (TRANS === 'sea') === isSeaLead(r.lead));
+  const fChannel = $('fChannel')?.value || '';
+  const fMin = Number($('fMin')?.value || 0);
+  const fMax = Number($('fMax')?.value || 0);
+  if (fChannel) list = list.filter(r => String(r.sheet) === fChannel);
+  if (fMin > 0) list = list.filter(r => r.matched && !r.blocked && r.total >= fMin);
+  if (fMax > 0) list = list.filter(r => r.matched && !r.blocked && r.total <= fMax);
+  const sortMode = $('fSort')?.value || 'cost-asc';
+  if (sortMode === 'name') {
+    list.sort((a, b) => String(a.sheet).localeCompare(String(b.sheet), 'zh-CN'));
+  } else if (sortMode === 'cost-desc') {
+    list.sort((a, b) => {
+      const aOk = a.matched && !a.blocked, bOk = b.matched && !b.blocked;
+      if (aOk !== bOk) return aOk ? -1 : 1;
+      return aOk ? b.total - a.total : String(a.sheet).localeCompare(String(b.sheet));
+    });
+  }
 
   // 价格条刻度: 用全部结果的最便宜/最贵定标, 搜索筛选时不跳动
   const totals = res.rows.filter(x => x.matched && !x.blocked).map(x => x.total);
@@ -2197,6 +2416,7 @@ function render() {
     }
   }
 
+  renderRecommendations(res, best, inp);
   renderCmp(res, list, best);
 
   const tb = $('rows');
@@ -2216,7 +2436,7 @@ function render() {
                  : r.mode === 'firstnext' ? '首重续重' : '体积除数';
 
     let note = '';
-    if (r.blocked) note = `<div class="note"><span class="tag bad">不可发</span>${esc(r.note)}</div>`;
+    if (!r.matched || r.blocked) note = `<div class="note"><span class="tag bad">不可发</span>${esc(blockedReason(r))}</div>`;
     else if (r.oversize) note = `<div class="note"><span class="tag warn">超尺寸</span>${esc(r.note)}（仍可发，加收超尺寸费）</div>`;
 
     const limTxt = limText(r.lim) || (r.limits && String(r.limits).length > 6
@@ -2269,6 +2489,7 @@ function render() {
     : `${list.length} 个渠道${transTxt}`;
 
   renderPick(list, res.rows, best, inp);
+  LAST_CONTEXT = { input: inp, best, picked: PICKED, rev: DATA_REV, scope: DATA_SCOPE };
 }
 
 /** 时效写法统一: 报价表里有 "6-12天" / "6-12工作日" / "7-12" / "—" 四种混排 */
@@ -2331,7 +2552,7 @@ function renderPick(list, allRows, best, inp) {
   }
 
   let note = '';
-  if (r.blocked) note = `<div class="pdiff"><span class="up">不可发: ${esc(r.note || '超出限制')}</span></div>`;
+  if (!r.matched || r.blocked) note = `<div class="pdiff"><span class="up">不可发: ${esc(blockedReason(r))}</span></div>`;
   else if (r.oversize) note = `<div class="pdiff"><span class="up">${esc(r.note || '')}（仍可发，加收超尺寸费）</span></div>`;
 
   const grid = ok ? `
@@ -2423,6 +2644,141 @@ function fallbackCopy(text) {
   return okc;
 }
 
+/* ---------------- 报价摘要 / 历史 / 分享 ---------------- */
+function currentQuoteSnapshot() {
+  const c = LAST_CONTEXT;
+  if (!c || !c.best) return null;
+  const r = c.best;
+  return {
+    id: String(Date.now()),
+    createdAt: new Date().toISOString(),
+    user: CURRENT_USER || 'offline',
+    scope: c.scope || DATA_SCOPE || '本机',
+    rev: c.rev || DATA_REV || 0,
+    input: { ...c.input },
+    channel: [r.sheet, r.line && r.line !== '-' ? r.line : '',
+      r.zone && r.zone !== '-' ? r.zone : ''].filter(Boolean).join(' · '),
+    cost: r.total,
+    sell: r.sells.custom,
+    local: r.locals.custom,
+    currency: curOf(r.country),
+    fx: r.fx,
+    profit: r.profit,
+    lead: r.lead || '',
+    chargeKg: r.chargeKg,
+  };
+}
+
+function quoteSummaryText(q) {
+  if (!q) return '';
+  const i = q.input;
+  return [
+    '物流报价',
+    `工作区：${q.scope}  价格表：v${q.rev}`,
+    `货物：${i.country} / ${i.kg}kg / ${i.L}×${i.W}×${i.H}cm / ${i.attr}`,
+    `推荐渠道：${q.channel}`,
+    `定价成本：¥${fmt(q.cost)}`,
+    `建议对客报价：¥${fmt(q.sell)}`,
+    q.fx > 0 ? `当地售价：${q.currency || ''} ${fmt(q.local)}` : '当地售价：未换算',
+    `毛利：¥${fmt(q.profit)}`,
+    q.lead ? `参考时效：${leadText(q.lead)}` : '',
+    `报价时间：${new Date(q.createdAt).toLocaleString('zh-CN')}`,
+    '请人工核对偏远、超长、旺季、VAT/关税和尺寸限制。',
+  ].filter(Boolean).join('\n');
+}
+
+function historyKey() {
+  return 'quote.history.v1.' + String(CURRENT_USER || 'offline').toLowerCase();
+}
+function readHistory() {
+  try {
+    const a = JSON.parse(localStorage.getItem(historyKey()) || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch (e) { return []; }
+}
+function writeHistory(items) {
+  try { localStorage.setItem(historyKey(), JSON.stringify(items.slice(0, 50))); }
+  catch (e) { /* localStorage unavailable */ }
+}
+async function clipboardWrite(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (e) { /* fallback below */ }
+  }
+  return fallbackCopy(text);
+}
+async function copyCurrentSummary() {
+  const q = currentQuoteSnapshot();
+  if (!q) return;
+  const btn = $('copySummary');
+  const ok = await clipboardWrite(quoteSummaryText(q));
+  btn.textContent = ok ? '已复制 ✓' : '复制失败';
+  setTimeout(() => { btn.textContent = '复制摘要'; }, 1500);
+}
+function saveCurrentQuote() {
+  const q = currentQuoteSnapshot();
+  if (!q) return;
+  const items = readHistory();
+  items.unshift(q);
+  writeHistory(items);
+  const btn = $('saveQuote');
+  btn.textContent = '已保存 ✓';
+  setTimeout(() => { btn.textContent = '保存报价'; }, 1500);
+}
+async function shareCurrentQuote() {
+  const q = currentQuoteSnapshot();
+  if (!q) return;
+  const u = new URL(location.href);
+  u.search = '';
+  const i = q.input;
+  for (const k of ['country','kg','L','W','H','attr','buy','recv','margin','extra','fx']) {
+    if (i[k] != null && i[k] !== '') u.searchParams.set(k, String(i[k]));
+  }
+  const ok = await clipboardWrite(u.toString());
+  const btn = $('shareQuote');
+  btn.textContent = ok ? '链接已复制 ✓' : '复制失败';
+  setTimeout(() => { btn.textContent = '分享参数'; }, 1800);
+}
+function openHistory() {
+  renderHistoryList();
+  $('historymodal').style.display = 'flex';
+}
+function closeHistory() { $('historymodal').style.display = 'none'; }
+function renderHistoryList() {
+  const box = $('historyList');
+  const items = readHistory();
+  if (!items.length) {
+    box.innerHTML = '<div class="rec-empty">还没有保存过报价</div>';
+    return;
+  }
+  box.innerHTML = items.map(q => {
+    const i = q.input || {};
+    return `<div class="hitem">
+      <b>${esc(q.channel || '—')} · ¥${fmt(q.sell)}</b>
+      <span class="hmeta">${esc(i.country || '')} / ${esc(i.kg || '')}kg / ${esc(i.attr || '')} · ${new Date(q.createdAt).toLocaleString('zh-CN')}</span>
+      <div class="hacts"><button data-restore="${esc(q.id)}">再次使用</button><button data-del="${esc(q.id)}">删除</button></div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-restore]').forEach(btn => btn.addEventListener('click', () => restoreHistory(btn.dataset.restore)));
+  box.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', () => {
+    writeHistory(readHistory().filter(x => String(x.id) !== String(btn.dataset.del)));
+    renderHistoryList();
+  }));
+}
+function restoreHistory(id) {
+  const q = readHistory().find(x => String(x.id) === String(id));
+  if (!q) return;
+  const i = q.input;
+  for (const k of ['country','kg','L','W','H','buy','recv','margin','extra','fx']) {
+    if (i[k] != null && $(k)) $(k).value = i[k];
+  }
+  ATTR = i.attr || '普货';
+  for (const b of $('attr').children) b.classList.toggle('on', b.dataset.v === ATTR);
+  PICKED = null;
+  render();
+  closeHistory();
+}
+
 function init() {
   if (!DATA) {
     // 线上没登录时 data_v2.js 只给空壳; 本地文件缺失也是这个分支
@@ -2486,6 +2842,14 @@ function init() {
 
   // 渠道清单
   const cl = DATA.meta.channelList || [];
+  const channelFilter = $('fChannel');
+  if (channelFilter) {
+    const selected = channelFilter.value;
+    channelFilter.innerHTML = '<option value="">全部渠道</option>' +
+      [...new Set((DATA.tiers || []).map(t => t.sheet))].sort().map(s =>
+        `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    if ([...channelFilter.options].some(o => o.value === selected)) channelFilter.value = selected;
+  }
   $('chancount').textContent = cl.length;
   $('chans').innerHTML = cl.map(c =>
     `<span class="ctag${c.attr.includes('带电') ? ' b' : ''}${c.attr.includes('普货') ? ' p' : ''}">` +
@@ -2524,6 +2888,34 @@ function init() {
 
   render();
 }
+
+$('copySummary').onclick = copyCurrentSummary;
+$('saveQuote').onclick = saveCurrentQuote;
+$('shareQuote').onclick = shareCurrentQuote;
+$('openHistory').onclick = openHistory;
+$('historyClose').onclick = closeHistory;
+$('historymodal').onclick = e => { if (e.target === $('historymodal')) closeHistory(); };
+$('historyClear').onclick = () => {
+  if (!readHistory().length) return;
+  if (confirm('确定清空当前账号保存的全部报价历史吗？')) {
+    writeHistory([]);
+    renderHistoryList();
+  }
+};
+for (const id of ['fChannel', 'fMin', 'fMax', 'fSort']) {
+  const el = $(id);
+  if (el) el.addEventListener(id === 'fChannel' || id === 'fSort' ? 'change' : 'input', render);
+}
+$('resetFilters').onclick = () => {
+  $('q').value = '';
+  $('fChannel').value = '';
+  $('fMin').value = '';
+  $('fMax').value = '';
+  $('fSort').value = 'cost-asc';
+  $('onlyavail').checked = true;
+  render();
+};
+
 (async function boot() {
   await loadRemoteData();
   init();
