@@ -9,61 +9,57 @@ const root = path.join(__dirname, '..');
 const desktop = path.join(root, 'desktop');
 const pkg = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'utf8'));
 const main = fs.readFileSync(path.join(desktop, 'main.js'), 'utf8');
+const setupHtml = fs.readFileSync(path.join(desktop, 'setup.html'), 'utf8');
+const setupJs = fs.readFileSync(path.join(desktop, 'setup.js'), 'utf8');
+const preload = fs.readFileSync(path.join(desktop, 'preload.js'), 'utf8');
 
-test('Electron 桌面配置会携带 Web、Node 和 Python 资源', () => {
-  const resources = pkg.build.extraResources.map(x => x.to);
-  for (const target of ['app/server', 'app/public', 'app/scripts', 'python']) {
-    assert.ok(resources.includes(target), `missing extra resource: ${target}`);
-  }
+test('Windows 客户端是只包含远程界面的轻量安装包', () => {
+  assert.equal(pkg.version, '1.5.0');
+  assert.equal(pkg.build.extraResources, undefined);
+  assert.doesNotMatch(pkg.scripts.start, /prepare:python/);
+  assert.doesNotMatch(pkg.scripts.dist, /prepare:python/);
   assert.equal(pkg.build.win.icon, 'assets/icon.ico');
   assert.ok(fs.existsSync(path.join(desktop, 'assets', 'icon.ico')));
   for (const file of ['setup.html', 'setup.js', 'preload.js', 'connection.html', 'connection.js']) {
     assert.ok(pkg.build.files.includes(file), `missing packaged file: ${file}`);
   }
+  assert.equal(fs.existsSync(path.join(desktop, 'scripts', 'prepare-python.ps1')), false);
 });
 
-test('桌面端保持渲染进程隔离并保护本机服务', () => {
-  assert.match(main, /HOST: '127\.0\.0\.1'/);
-  assert.match(main, /QUOTE_DATA_DIR/);
+test('渲染进程保持隔离且没有本地服务启动路径', () => {
   assert.match(main, /nodeIntegration: false/);
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /sandbox: true/);
-  assert.match(main, /QUOTE_REGISTRATION_OPEN: '0'/);
+  assert.doesNotMatch(main, /utilityProcess|QUOTE_DATA_DIR|QUOTE_REGISTRATION_OPEN|startServerWithPort/);
+  assert.doesNotMatch(main, /runAdminCli|本地管理员服务|本机模式/);
   assert.match(main, /autoHideMenuBar: false/);
   assert.match(main, /setMenuBarVisibility\(true\)/);
 });
 
-test('桌面端不在本地保存管理员明文密码', () => {
-  assert.doesNotMatch(main, /safeStorage/);
-  assert.doesNotMatch(main, /settings\.password/);
-  assert.doesNotMatch(main, /encryptedPassword = safeStorage/);
-  assert.match(main, /adminSetupVersion = 1/);
+test('首次启动和后续设置只允许连接中央服务器', () => {
+  assert.match(main, /function ensureCentralConnection/);
+  assert.match(main, /此客户端只允许连接中央服务器/);
+  assert.match(main, /payload\?\.mode !== 'remote'/);
+  assert.match(main, /中央服务器必须使用 HTTPS 地址/);
+  assert.doesNotMatch(main, /pending\.resolve\(\{ mode: 'local'/);
+  assert.match(main, /DEFAULT_SERVER = 'https:\/\/quote\.byberg\.store'/);
+  assert.match(main, /serverUrl: settings\.saved\.serverUrl \|\| DEFAULT_SERVER/);
+  assert.match(main, /verifyRemoteServer/);
+  assert.match(main, /connection:retry/);
+  assert.match(main, /服务器设置/);
+  assert.match(setupHtml, /强制服务器模式/);
+  assert.match(setupHtml, /id="serverUrl"/);
+  assert.doesNotMatch(setupHtml, /id="username"|本机独立|高级：本机/);
+  assert.match(setupJs, /mode: 'remote'/);
+  assert.doesNotMatch(setupJs, /mode: 'local'|localReady|username|password/);
+  assert.match(preload, /submit\(payload\)/);
 });
 
-test('首次启动支持本机管理员和中央服务器两种模式', () => {
-  assert.match(main, /showAdminSetup/);
-  assert.match(main, /\['add', value\.username, value\.password\]/);
-  assert.match(main, /pending\.resolve\(null\)/);
-  assert.match(main, /if \(!connection\) return/);
-  assert.match(main, /verifyRemoteServer/);
-  assert.match(main, /connectionMode = 'remote'/);
-  assert.match(main, /body\.apiVersion/);
-  assert.match(main, /apiVersion\) < 3/);
-  assert.match(main, /function isAppUrl/);
-  assert.match(main, /loadConnectionError/);
-  assert.match(main, /connection:retry/);
-  assert.match(main, /await waitForServer\(\);\s+if \(!connection\.existing\)/);
-  assert.match(main, /设置登录方式/);
-  assert.ok(fs.existsSync(path.join(desktop, 'setup.html')));
-  const setupHtml = fs.readFileSync(path.join(desktop, 'setup.html'), 'utf8');
-  const setupJs = fs.readFileSync(path.join(desktop, 'setup.js'), 'utf8');
-  const preload = fs.readFileSync(path.join(desktop, 'preload.js'), 'utf8');
-  assert.match(setupHtml, /id="username"/);
-  assert.match(setupHtml, /id="serverUrl"/);
-  assert.match(setupHtml, /data-mode="remote"/);
-  assert.match(setupJs, /mode: 'remote'/);
-  assert.match(setupJs, /quote\.byberg\.store/);
-  assert.match(preload, /submit\(payload\)/);
+test('客户端不在本地保存管理员凭据', () => {
+  assert.doesNotMatch(main, /safeStorage/);
+  assert.doesNotMatch(main, /settings\.password/);
+  assert.doesNotMatch(main, /adminSetupVersion/);
+  assert.match(main, /delete settings\.saved\.encryptedPassword/);
 });
 
 test('后台和桌面菜单都提供前台报价入口', () => {
@@ -83,22 +79,6 @@ test('客户端安全检查更新且不静默安装未签名包', () => {
   assert.match(main, /shell\.openExternal/);
   assert.doesNotMatch(main, /electron-updater|autoUpdater\.quitAndInstall/);
   assert.match(main, /检查更新/);
-  assert.equal(pkg.version, '1.4.0');
   assert.match(pkg.scripts.dist, /config\.electronDist=node_modules\/electron\/dist/);
   assert.ok(fs.existsSync(path.join(root, '.github', 'workflows', 'desktop.yml')));
-});
-
-test('桌面 Python 运行时和依赖都做完整性校验', () => {
-  const prepare = fs.readFileSync(path.join(desktop, 'scripts', 'prepare-python.ps1'), 'utf8');
-  const requirements = fs.readFileSync(path.join(root, 'deploy', 'python-requirements.txt'), 'utf8');
-  assert.match(prepare, /SHA256\]::Create/);
-  assert.match(prepare, /PythonZipSha256/);
-  assert.match(prepare, /--require-hashes/);
-  assert.match(prepare, /--only-binary=:all:/);
-  assert.match(prepare, /ZipFile\]::ExtractToDirectory/);
-  assert.doesNotMatch(prepare, /Expand-Archive/);
-  assert.match(requirements, /openpyxl==3\.1\.5/);
-  assert.match(requirements, /et_xmlfile==2\.0\.0/);
-  assert.match(requirements, /defusedxml==0\.7\.1/);
-  assert.match(requirements, /--hash=sha256:/);
 });
