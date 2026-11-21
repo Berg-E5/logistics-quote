@@ -57,14 +57,13 @@ cd logistics-quote && docker compose up -d
 
 ### Windows 桌面客户端
 
-`desktop/` 下是 Electron + Node + Python 的桌面版。首次运行可选择：
-
-- **本机独立模式**：在本机创建管理员，数据保存在本机；
-- **中央服务器模式（默认推荐）**：预填 `https://quote.byberg.store`，不创建本机管理员，
-  直接登录中央服务器。连接失败时显示重试、检查设置和复制服务器地址。
+`desktop/` 下是 Electron 强制中央服务器版。首次运行只允许填写并验证中央服务器地址，
+默认 `https://quote.byberg.store`。客户端不启动本地 Node 服务、不创建本机管理员，
+也不携带 Python、openpyxl 或商业价格数据；没有服务端账户就无法登录。
 
 中央服务器保存总管理员、多个独立管理员、各自普通用户和价格表。管理员 A 的普通用户
-只能读取 A 的价格表，管理员 B 的普通用户只能读取 B 的价格表。窗口不会打开浏览器。
+只能读取 A 的价格表，管理员 B 的普通用户只能读取 B 的价格表。连接失败时显示重试、
+服务器设置和地址复制入口。窗口不会打开浏览器。
 
 后台顶部固定显示当前工作区和价格表版本。用户管理分为“管理员账号”和“普通用户”：
 管理员只能管理自己名下成员，总管理员可以创建管理员。新建或重置的临时密码首次登录
@@ -91,8 +90,8 @@ cd desktop
 npm run dist
 ```
 
-安装包输出到 `desktop/dist/LogisticsQuote-Setup-*.exe`。随包携带 Python 3.12
-和 openpyxl，客户电脑不需要另外安装 Node、Python 或 nginx。
+安装包输出到 `desktop/dist/LogisticsQuote-Setup-*.exe`。安装包只包含 Electron 客户端，
+不再携带 Node 服务端、公共网页、Python 或 openpyxl。
 客户端会检查 GitHub 最新 Release 并给出下载入口，不会静默安装未签名更新。
 安装包未做代码签名，Windows 可能显示“未知发布者”；下载后请核对 Release 页公布的
 SHA-256。

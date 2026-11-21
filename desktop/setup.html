@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>设置登录方式</title>
+  <title>连接中央服务器</title>
   <style>
     :root { color-scheme: light dark; font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
@@ -62,49 +62,23 @@
   <main class="card">
     <div class="brand">
       <img src="assets/icon.png" alt="">
-      <div><small>LOGISTICS QUOTE</small><h1 id="title">设置登录方式</h1></div>
+      <div><small>LOGISTICS QUOTE</small><h1 id="title">连接中央服务器</h1></div>
     </div>
-      <p class="lead" id="lead">推荐连接中央服务器，与管理员和其他电脑共用同一套账号和价格表。</p>
+      <p class="lead" id="lead">客户端统一使用中央服务器账号和价格表。没有服务端账户时无法登录或进入报价系统。</p>
     <form id="form">
-      <div class="modes" id="modes">
-        <button type="button" class="modebtn" data-mode="remote">
-          <b>中央服务器（推荐）</b>
-          <span>连接已有服务器，直接使用服务器上的账号和价格表。</span>
-        </button>
-        <button type="button" class="modebtn" data-mode="local">
-          <b>高级：本机独立</b>
-          <span>仅在这台电脑保存数据。</span>
-        </button>
-      </div>
-
-      <section class="section" id="localPanel">
-        <div class="existing" id="localExisting" hidden>
-          本机已有管理员账户。切换回本机模式后会保留现有账号和数据。
-        </div>
-        <div id="localFields">
-          <label for="username">本机管理员用户名</label>
-          <input id="username" type="text" autocomplete="username" minlength="2" maxlength="32" value="admin">
-          <label for="password">管理员密码</label>
-          <input id="password" type="password" autocomplete="new-password" minlength="8" maxlength="128">
-          <label for="confirm">确认密码</label>
-          <input id="confirm" type="password" autocomplete="new-password" minlength="8" maxlength="128">
-          <div class="hint">至少 8 位，建议包含字母、数字和符号。</div>
-        </div>
-      </section>
-
-      <section class="section" id="remotePanel">
+      <section class="section on" id="remotePanel">
         <label for="serverUrl">中央服务器地址</label>
         <input id="serverUrl" type="url" autocomplete="url" placeholder="https://quote.example.com">
-        <div class="hint">必须使用 HTTPS。客户端会先验证该地址是否为可用的物流报价服务器。</div>
+        <div class="hint">必须使用 HTTPS。客户端会验证服务器 API；本机离线模式已禁用。</div>
       </section>
 
       <div class="err" id="error"></div>
       <div class="actions">
         <button type="button" id="cancel">取消</button>
-        <button class="primary" id="submit" type="submit">继续</button>
+        <button class="primary" id="submit" type="submit">连接并进入登录页</button>
       </div>
     </form>
-    <div class="foot">中央模式不会在本机创建管理员。普通用户只能查看所属管理员的价格表。</div>
+    <div class="foot">强制服务器模式：客户端不会在本机创建管理员、启动离线服务或保存价格表。账号由服务端管理员添加。</div>
   </main>
   <script src="setup.js"></script>
 </body>
